@@ -88,12 +88,13 @@ class Puppet {
 		System.out.println("unsup puppet ready");
 		
 		Map<String, ScheduledFuture<?>> orders = new HashMap<>();
+		Map<String, Runnable> orderRunnables = new HashMap<>();
 		
 		BufferedReader br = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
 		try {
 			while (true) {
 				String line = br.readLine();
-				if (line == null) return;
+				if (line == null) break;
 				String name;
 				if (line.startsWith("[")) {
 					int close = line.indexOf(']');
@@ -131,8 +132,27 @@ class Puppet {
 							synchronized (orders) {
 								if (orders.containsKey(arg)) {
 									orders.remove(arg).cancel(false);
+									orderRunnables.remove(arg);
 								}
 							}
+						};
+						break;
+					}
+					case "expedite": {
+						r = () -> {
+							Runnable inner = null;
+							synchronized (orders) {
+								if (orders.containsKey(arg)) {
+									if (orders.remove(arg).cancel(false)) {
+										// we don't want to be holding the orders mutex while we run
+										// the original order
+										inner = orderRunnables.remove(arg);
+									} else {
+										orderRunnables.remove(arg);
+									}
+								}
+							}
+							if (inner != null) inner.run();
 						};
 						break;
 					}
@@ -197,6 +217,58 @@ class Puppet {
 						};
 						break;
 					}
+					case "alert": {
+						r = () -> {
+							String[] split = arg.split(":");
+							String title = split[0];
+							String body = "<html><center>"+split[1]+"</center></html>";
+							String messageTypeStr = split[2];
+							String optionTypeStr = split[3];
+							int messageType;
+							switch (messageTypeStr) {
+								case "question":
+									messageType = JOptionPane.QUESTION_MESSAGE;
+									break;
+								case "info":
+									messageType = JOptionPane.INFORMATION_MESSAGE;
+									break;
+								case "warn":
+									messageType = JOptionPane.WARNING_MESSAGE;
+									break;
+								case "error":
+									messageType = JOptionPane.ERROR_MESSAGE;
+									break;
+								default:
+									log("WARN", "Unknown dialog type "+messageTypeStr+", defaulting to none");
+									// fallthru
+								case "none":
+									messageType = JOptionPane.PLAIN_MESSAGE;
+									break;
+							}
+							int optionType;
+							switch (optionTypeStr) {
+								case "yesno":
+									optionType = JOptionPane.YES_NO_OPTION;
+									break;
+								case "yesnocancel":
+									optionType = JOptionPane.YES_NO_CANCEL_OPTION;
+									break;
+								case "okcancel":
+									optionType = JOptionPane.OK_CANCEL_OPTION;
+									break;
+								default:
+									log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
+									// fallthru
+								case "ok":
+									optionType = JOptionPane.DEFAULT_OPTION;
+									break;
+							}
+							SwingUtilities.invokeLater(() -> {
+								openMessageDialog(name, title, body, messageType, optionType);
+							});
+						};
+						break;
+					}
 					default: {
 						log("WARN", "Unknown order "+order);
 						continue;
@@ -208,14 +280,20 @@ class Puppet {
 						r.run();
 						synchronized (orders) {
 							orders.remove(name);
+							orderRunnables.remove(name);
 						}
 					};
 				}
-				ScheduledFuture<?> future = sched.schedule(fr, delay, TimeUnit.MILLISECONDS);
-				if (name != null) {
-					synchronized (orders) {
-						orders.put(name, future);
+				if (delay > 0) {
+					ScheduledFuture<?> future = sched.schedule(fr, delay, TimeUnit.MILLISECONDS);
+					if (name != null) {
+						synchronized (orders) {
+							orders.put(name, future);
+							orderRunnables.put(name, fr);
+						}
 					}
+				} else {
+					sched.execute(fr);
 				}
 			}
 		} catch (IOException e) {
@@ -241,45 +319,9 @@ class Puppet {
 			@Override
 			public void windowClosing(WindowEvent e) {
 				if (closeAlreadyAttempted) {
-					JOptionPane pane = new JOptionPane("<html><center><b>The updater is busy and can't exit right now.</b><br/>Please wait a moment.</center></html>", JOptionPane.INFORMATION_MESSAGE);
-					List<JComponent> queue = new ArrayList<>();
-					queue.add(pane);
-					List<JComponent> queueQueue = new ArrayList<>();
-					while (!queue.isEmpty()) {
-						for (JComponent jc : queue) {
-							if (jc instanceof JLabel) {
-								((JLabel)jc).setIcon(null);
-							}
-							if (jc.getFont() != null) {
-								jc.setFont(jc.getFont().deriveFont(Font.PLAIN).deriveFont(14f));
-							}
-							if (jc instanceof JButton) {
-								jc.setBackground(colorButton);
-								jc.setForeground(colorButtonText);
-								jc.setBorder(new EmptyBorder(4, 12, 4, 12));
-							} else {
-								jc.setBackground(colorBackground);
-								jc.setForeground(colorDialog);
-							}
-							for (Component child : jc.getComponents()) {
-								if (child instanceof JComponent) {
-									queueQueue.add((JComponent)child);
-								}
-							}
-						}
-						queue.clear();
-						queue.addAll(queueQueue);
-						queueQueue.clear();
-					}
-					pane.setBackground(colorBackground);
-					pane.setForeground(colorDialog);
-					JDialog dialog = pane.createDialog(frame, "unsup is busy");
-					dialog.setBackground(colorBackground);
-					dialog.setForeground(colorDialog);
-					dialog.setContentPane(pane);
-					dialog.pack();
-					dialog.setLocationRelativeTo(frame);
-					dialog.setVisible(true);
+					openMessageDialog(null, "unsup is busy",
+							"<html><center><b>The updater is busy and can't exit right now.</b><br/>Please wait a moment.</center></html>",
+							JOptionPane.WARNING_MESSAGE, JOptionPane.DEFAULT_OPTION);
 				} else {
 					closeAlreadyAttempted = true;
 					System.out.println("closeRequested");
@@ -337,6 +379,71 @@ class Puppet {
 		outer.add(inner);
 		
 		frame.setContentPane(outer);
+	}
+
+	private static void openMessageDialog(String name, String title, String body, int messageType, int optionType) {
+		JOptionPane pane = new JOptionPane(body, messageType, optionType);
+		List<JComponent> queue = new ArrayList<>();
+		queue.add(pane);
+		List<JComponent> queueQueue = new ArrayList<>();
+		while (!queue.isEmpty()) {
+			for (JComponent jc : queue) {
+				if (jc instanceof JLabel) {
+					((JLabel)jc).setIcon(null);
+				}
+				if (jc.getFont() != null) {
+					jc.setFont(jc.getFont().deriveFont(Font.PLAIN).deriveFont(14f));
+				}
+				if (jc instanceof JButton) {
+					jc.setBackground(colorButton);
+					jc.setForeground(colorButtonText);
+					jc.setBorder(new EmptyBorder(4, 12, 4, 12));
+				} else {
+					jc.setBackground(colorBackground);
+					jc.setForeground(colorDialog);
+				}
+				for (Component child : jc.getComponents()) {
+					if (child instanceof JComponent) {
+						queueQueue.add((JComponent)child);
+					}
+				}
+			}
+			queue.clear();
+			queue.addAll(queueQueue);
+			queueQueue.clear();
+		}
+		pane.setBackground(colorBackground);
+		pane.setForeground(colorDialog);
+		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+		dialog.setModal(true);
+		dialog.setBackground(colorBackground);
+		dialog.setForeground(colorDialog);
+		dialog.setContentPane(pane);
+		dialog.pack();
+		dialog.setLocationRelativeTo(frame);
+		dialog.setVisible(true);
+		if (name != null) {
+			Object sel = pane.getValue();
+			String opt;
+			if (sel == null) {
+				opt = "closed";
+			} else {
+				int selI = (int)sel;
+				switch (selI) {
+					case JOptionPane.OK_OPTION:
+						opt = (optionType == JOptionPane.OK_CANCEL_OPTION || optionType == JOptionPane.DEFAULT_OPTION) ? "ok" : "yes";
+						break;
+					case JOptionPane.NO_OPTION:
+						opt = "no";
+						break;
+					default:
+					case JOptionPane.CANCEL_OPTION:
+						opt = "cancel";
+						break;
+				}
+			}
+			System.out.println("alert:"+name+":"+opt);
+		}
 	}
 	
 }

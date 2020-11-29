@@ -17,6 +17,10 @@ repositories {
 dependencies {
 	compile 'com.grack:nanojson:1.6'
 	shadow  'com.grack:nanojson:1.6'
+	
+	compile 'net.i2p.crypto:eddsa:0.3.0'
+	shadow  'net.i2p.crypto:eddsa:0.3.0'
+	
 }
 
 jar {
@@ -29,6 +33,7 @@ jar {
 
 shadowJar {
 	relocate 'com.grack.nanojson', 'com.unascribed.sup.repackage.nanojson'
+	relocate 'net.i2p.crypto.eddsa', 'com.unascribed.sup.repackage.eddsa'
 }
 
 publishing {

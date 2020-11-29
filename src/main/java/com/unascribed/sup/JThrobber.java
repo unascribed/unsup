@@ -8,7 +8,7 @@ import java.util.concurrent.TimeUnit;
 
 import javax.swing.JComponent;
 
-public class JThrobber extends JComponent {
+class JThrobber extends JComponent {
 	private long lastTimeAnimated = System.nanoTime();
 	
 	private final float spinSpeed = 230f;
