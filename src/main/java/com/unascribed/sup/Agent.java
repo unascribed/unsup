@@ -63,11 +63,13 @@ class Agent {
 	private static final int K = 1024;
 	private static final int M = K*1024;
 	
-	private static final long TENTH_SECOND_IN_NANOS = TimeUnit.MILLISECONDS.toNanos(100);
+	private static final long ONE_SECOND_IN_NANOS = TimeUnit.SECONDS.toNanos(1);
 	
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
 	private static final Object dangerMutex = new Object();
 	private static final SimpleDateFormat logDateFormat = new SimpleDateFormat("HH:mm:ss");
+	
+	private static final Latch doneAnimatingLatch = new Latch();
 	
 	public static void main(String[] args) throws UnsupportedEncodingException {
 		standalone = true;
@@ -87,7 +89,7 @@ class Agent {
 			int version = config.getInt("version", -1);
 			if (version != 1) {
 				log("ERROR", "Config file error: Unknown version "+version+" at "+config.getBlame("version")+"! Exiting.");
-				System.exit(EXIT_CONFIG_ERROR);
+				exit(EXIT_CONFIG_ERROR);
 				return;
 			}
 			config = mergePreset(config, "__global__");
@@ -106,7 +108,7 @@ class Agent {
 				src = new URL(config.get("source"));
 			} catch (MalformedURLException e) {
 				log("ERROR", "Config error: source URL is malformed! "+e.getMessage()+". Exiting.");
-				System.exit(EXIT_CONFIG_ERROR);
+				exit(EXIT_CONFIG_ERROR);
 				return;
 			}
 			
@@ -118,10 +120,11 @@ class Agent {
 			if (config.containsKey("public_key")) {
 				try {
 					publicKey = new EdDSAPublicKey(new X509EncodedKeySpec(Base64.getDecoder().decode(config.get("public_key"))));
+					cleanup.add(() -> publicKey = null);
 				} catch (Throwable t) {
 					t.printStackTrace();
 					log("ERROR", "Config file error: public_key is not valid! Exiting.");
-					System.exit(EXIT_CONFIG_ERROR);
+					exit(EXIT_CONFIG_ERROR);
 					return;
 				}
 			}
@@ -134,7 +137,7 @@ class Agent {
 				} catch (Exception e) {
 					e.printStackTrace();
 					log("ERROR", "Couldn't load state file! Exiting.");
-					System.exit(EXIT_CONSISTENCY_ERROR);
+					exit(EXIT_CONSISTENCY_ERROR);
 					return;
 				}
 			} else {
@@ -162,6 +165,7 @@ class Agent {
 			
 			updateTitle(puppetOut, "Checking for updates...", false);
 			try {
+				Thread.sleep(4000);
 				if (fmt == SourceFormat.UNSUP) {
 					log("INFO", "Loading unsup-format manifest from "+src);
 					JsonObject manifest = loadJson(src, 32*K, null);
@@ -180,7 +184,14 @@ class Agent {
 							if (bootstrapVersion.code < theirVersion.code) {
 								log("WARN", "Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
 							}
-							HashFunction func = HashFunction.valueOf(manifest.getString("hash_function", "sha256").toUpperCase(Locale.ROOT));
+							HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", "SHA-2 512/256").toUpperCase(Locale.ROOT));
+							if (func.insecure) {
+								if (publicKey != null) {
+									log("WARN", "Using insecure hash function "+func+" for a signed manifest! This is a very bad idea!");
+								} else {
+									log("WARN", "Using insecure hash function "+func);
+								}
+							}
 							updateTitle(puppetOut, "Bootstrapping...", false);
 							long progressDenom = 0;
 							class FileToDownload { String path; String hash; long size; String url; DownloadedFile df; File dest; }
@@ -228,23 +239,34 @@ class Agent {
 							updateTitle(puppetOut, "Bootstrapping...", true);
 							final long progressDenomf = progressDenom;
 							AtomicLong progress = new AtomicLong();
+							Runnable updateProgress = () -> updateProgress(puppetOut, (int)((progress.get()*1000)/progressDenomf));
 							File wd = new File("");
 							for (FileToDownload ftd : todo) {
 								puppetOut.println(":subtitle=Downloading "+ftd.path);
+								URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
 								URL u;
 								if (ftd.url != null) {
 									u = new URL(ftd.url);
 								} else {
-									u = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
-								}
-								DownloadedFile df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, () -> updateProgress(puppetOut, (int)((progress.get()*1000)/progressDenomf)), func);
-								if (!df.hash.equals(ftd.hash)) {
-									throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
+									u = blobUrl;
 								}
 								File dest = new File(ftd.path);
 								if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+"/"))
 									throw new IOException("Refusing to download to a file outside of working directory");
 								if (dest.exists()) {
+									if (dest.length() == ftd.size) {
+										String hash = hash(func, dest);
+										if (ftd.hash.equals(hash)) {
+											log("INFO", ftd.path+" already exists and the hash matches, keeping it and skipping download");
+											progress.addAndGet(ftd.size);
+											updateProgress.run();
+											continue;
+										} else {
+											log("INFO", ftd.path+" already exists but the hash doesn't match, redownloading it ("+hash+" != "+ftd.hash+")");
+										}
+									} else {
+										log("INFO", ftd.path+" already exists but the length doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
+									}
 									AlertOption resp = openAlert(puppetOut, "File conflict",
 											"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
 											AlertMessageType.QUESTION, AlertOptionType.YES_NO_CANCEL, AlertOption.YES);
@@ -252,15 +274,36 @@ class Agent {
 										continue;
 									} else if (resp == AlertOption.CANCEL) {
 										log("INFO", "User cancelled error dialog! Exiting.");
-										System.exit(EXIT_USER_REQUEST);
+										exit(EXIT_USER_REQUEST);
 										return;
+									}
+								}
+								DownloadedFile df;
+								try {
+									log("INFO", "Downloading "+ftd.path+" from "+u);
+									df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, updateProgress, func);
+									if (!df.hash.equals(ftd.hash)) {
+										throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
+									}
+								} catch (Throwable t) {
+									if (ftd.url != null) {
+										t.printStackTrace();
+										log("WARN", "Failed to download "+ftd.path+" from specified URL, trying again from "+blobUrl);
+										df = downloadToFile(blobUrl, tmp, ftd.size, progress::addAndGet, updateProgress, func);
+										if (!df.hash.equals(ftd.hash)) {
+											throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
+										}
+									} else {
+										throw t;
 									}
 								}
 								ftd.df = df;
 								ftd.dest = dest;
 							}
 							synchronized (dangerMutex) {
+								puppetOut.println(":subtitle=Applying changes");
 								for (FileToDownload ftd : todo) {
+									if (ftd.dest == null) continue;
 									Files.createDirectories(ftd.dest.getParentFile().toPath());
 									Files.move(ftd.df.file.toPath(), ftd.dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 								}
@@ -279,7 +322,7 @@ class Agent {
 					} else if (ourVersion.code > theirVersion.code) {
 						log("INFO", "Remote version is older than local version, doing nothing.");
 					} else {
-						log("INFO", "We appear to be up-to-date.");
+						log("INFO", "We appear to be up-to-date. Nothing to do.");
 					}
 					sourceVersion = ourVersion.name;
 				}
@@ -291,7 +334,7 @@ class Agent {
 						"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
 						AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
 					log("INFO", "User cancelled error dialog! Exiting.");
-					System.exit(EXIT_USER_REQUEST);
+					exit(EXIT_USER_REQUEST);
 					return;
 				}
 			} finally {
@@ -299,14 +342,26 @@ class Agent {
 			}
 			
 			if (awaitingExit) blockForever();
-			
+
 			puppetOut.println(":belay=openTimeout");
+			if (puppetOut != NullPrintStream.INSTANCE) {
+				log("INFO", "Waiting for puppet to complete done animation...");
+				puppetOut.println(":title=All done");
+				puppetOut.println(":mode=done");
+				doneAnimatingLatch.awaitUninterruptibly();
+				try {
+					Thread.sleep(4000);
+				} catch (InterruptedException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			}
 			puppetOut.println(":exit");
 			if (puppet != null) {
 				log("INFO", "Waiting for puppet to exit...");
 				try {
 					if (!puppet.waitFor(2, TimeUnit.SECONDS)) {
-						log("INFO", "Tired of waiting, killing the puppet.");
+						log("WARN", "Tired of waiting, killing the puppet.");
 						puppet.destroyForcibly();
 					}
 				} catch (InterruptedException e) {
@@ -330,15 +385,10 @@ class Agent {
 			}
 		} catch (QDIniException e) {
 			log("ERROR", "Config file error: "+e.getMessage()+"! Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return;
 		} finally {
-			for (ExceptableRunnable er : cleanup) {
-				try {
-					er.run();
-				} catch (Throwable t) {}
-			}
-			cleanup = null;
+			cleanup();
 		}
 	}
 	
@@ -403,7 +453,7 @@ class Agent {
 			} catch (Exception e) {
 				e.printStackTrace();
 				log("ERROR", "Found unsup.ini, but couldn't parse it! Exiting.");
-				System.exit(EXIT_CONFIG_ERROR);
+				exit(EXIT_CONFIG_ERROR);
 			}
 			return true;
 		} else {
@@ -416,7 +466,7 @@ class Agent {
 		for (String req : requiredKeys) {
 			if (!config.containsKey(req)) {
 				log("ERROR", "Config file error: "+req+" is required, but was not defined! Exiting.");
-				System.exit(EXIT_CONFIG_ERROR);
+				exit(EXIT_CONFIG_ERROR);
 				return;
 			}
 		}
@@ -437,7 +487,7 @@ class Agent {
 	private static void detectEnv(String forcedEnv) {
 		if (standalone && forcedEnv == null) {
 			log("ERROR", "Cannot sync an env-based config in standalone mode unless an argument is given specifying the env! Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		Set<String> foundEnvs = new HashSet<>();
@@ -466,7 +516,7 @@ class Agent {
 		}
 		if (foundEnvs.isEmpty()) {
 			log("ERROR", "use_envs is true, but found no env declarations! Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		if (ourEnv == null) {
@@ -475,7 +525,7 @@ class Agent {
 				log("ERROR", "- "+s);
 			}
 			log("ERROR", "Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		if (!foundEnvs.contains(ourEnv)) {
@@ -484,7 +534,7 @@ class Agent {
 				log("ERROR", "- "+s);
 			}
 			log("ERROR", "Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		if (standalone) {
@@ -607,7 +657,7 @@ class Agent {
 									if (!puppet.waitFor(1, TimeUnit.SECONDS)) {
 										puppet.destroyForcibly();
 									}
-									System.exit(EXIT_USER_REQUEST);
+									exit(EXIT_USER_REQUEST);
 								}
 							} else if (line.startsWith("alert:")) {
 								String[] split = line.split(":");
@@ -620,6 +670,8 @@ class Agent {
 										latch.release();
 									}
 								}
+							} else if (line.equals("doneAnimating")) {
+								doneAnimatingLatch.release();
 							} else {
 								log("WARN", "Unknown line from puppet: "+line);
 							}
@@ -666,7 +718,7 @@ class Agent {
 		URL u = Agent.class.getClassLoader().getResource("presets/"+presetName+".ini");
 		if (u == null) {
 			log("ERROR", "Config file error: Preset "+presetName+" not found at "+config.getBlame("preset")+"! Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return null;
 		}
 		try (InputStream in = u.openStream()) {
@@ -675,7 +727,7 @@ class Agent {
 		} catch (IOException e) {
 			e.printStackTrace();
 			log("ERROR", "Failed to load preset "+presetName+"! Exiting.");
-			System.exit(EXIT_CONFIG_ERROR);
+			exit(EXIT_CONFIG_ERROR);
 			return null;
 		}
 		return config;
@@ -808,16 +860,14 @@ class Agent {
 				out.write(buf, 0, read);
 				if (digest != null) digest.update(buf, 0, read);
 				if (addProgress != null) addProgress.accept(read);
-				if (updateProgress != null && System.nanoTime()-lastProgressUpdate > TENTH_SECOND_IN_NANOS) {
+				if (updateProgress != null && System.nanoTime()-lastProgressUpdate > ONE_SECOND_IN_NANOS/30) {
 					lastProgressUpdate = System.nanoTime();
 					updateProgress.run();
 				}
-				try {
-					// TODO remove
-					Thread.sleep(10);
-				} catch (InterruptedException e) {
-				}
 			}
+		}
+		if (readTotal != size) {
+			throw new IOException("Underread; expected "+size+" bytes, but only got "+readTotal);
 		}
 		if (updateProgress != null) {
 			updateProgress.run();
@@ -827,6 +877,19 @@ class Agent {
 			hash = toHexString(digest.digest());
 		}
 		return new DownloadedFile(hash, file);
+	}
+	
+	private static String hash(HashFunction func, File f) throws IOException {
+		MessageDigest digest = func.createMessageDigest();
+		byte[] buf = new byte[16384];
+		try (FileInputStream in = new FileInputStream(f)) {
+			while (true) {
+				int read = in.read(buf);
+				if (read == -1) break;
+				digest.update(buf, 0, read);
+			}
+		}
+		return toHexString(digest.digest());
 	}
 	
 	private static final String[] hex = {
@@ -887,6 +950,20 @@ class Agent {
 		}
 	}
 	
+	private static void cleanup() {
+		for (ExceptableRunnable er : cleanup) {
+			try {
+				er.run();
+			} catch (Throwable t) {}
+		}
+		cleanup = null;
+	}
+	
+	private static void exit(int code) {
+		cleanup();
+		System.exit(code);
+	}
+	
 	private static synchronized void log(String flavor, String msg) {
 		log(standalone ? "sync" : "agent", flavor, msg);
 	}
@@ -897,7 +974,7 @@ class Agent {
 		logStream.println(line);
 	}
 	
-	private static boolean awaitingExit = false;
+	private static volatile boolean awaitingExit = false;
 	
 	private static PrintStream logStream;
 	

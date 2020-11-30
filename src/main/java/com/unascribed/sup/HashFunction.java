@@ -2,23 +2,34 @@ package com.unascribed.sup;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
+import java.util.Map;
 
 enum HashFunction {
-	SHA256("SHA-256", 256),
-	SHA384("SHA-384", 384),
-	SHA512("SHA-512", 512),
+	@Deprecated MD5("MD5", "MD5", 128, true),
+	@Deprecated SHA1("SHA-1", "SHA-1", 160, true),
+	SHA256("SHA-2 256", "SHA-256", 256, false),
+	SHA384("SHA-2 384", "SHA-384", 384, false),
+	SHA512("SHA-2 512", "SHA-512", 512, false),
+	SHA512_256("SHA-2 512/256", "SHA-512/256", 256, false),
 	;
 	
+	private static final Map<String, HashFunction> BY_NAME = new HashMap<>();
+	
+	public final String name;
 	private final String alg;
 	public final int sizeInBits;
 	public final int sizeInBytes;
 	public final int sizeInHexChars;
+	public final boolean insecure;
 	
-	private HashFunction(String alg, int sizeInBits) {
+	private HashFunction(String name, String alg, int sizeInBits, boolean insecure) {
+		this.name = name;
 		this.alg = alg;
 		this.sizeInBits = sizeInBits;
 		this.sizeInBytes = (sizeInBits+7)/8;
 		this.sizeInHexChars = sizeInBytes*2;
+		this.insecure = insecure;
 	}
 	
 	public MessageDigest createMessageDigest() {
@@ -26,6 +37,22 @@ enum HashFunction {
 			return MessageDigest.getInstance(alg);
 		} catch (NoSuchAlgorithmException e) {
 			throw new AssertionError(e);
+		}
+	}
+	
+	@Override
+	public String toString() {
+		return name;
+	}
+	
+	public static HashFunction byName(String name) {
+		if (!BY_NAME.containsKey(name)) throw new IllegalArgumentException("No hash function with name "+name);
+		return BY_NAME.get(name);
+	}
+	
+	static {
+		for (HashFunction func : values()) {
+			BY_NAME.put(func.name, func);
 		}
 	}
 }

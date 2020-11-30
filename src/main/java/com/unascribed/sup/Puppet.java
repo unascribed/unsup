@@ -52,6 +52,7 @@ class Puppet {
 	private static JFrame frame;
 	private static JLabel title, subtitle;
 	private static JProgressBar prog;
+	private static JThrobber throbber;
 	
 	private static Color colorBackground = Color.BLACK;
 	private static Color colorTitle = Color.WHITE;
@@ -182,6 +183,18 @@ class Puppet {
 								SwingUtilities.invokeLater(() -> {
 									prog.setVisible(true);
 									prog.setValue(0);
+									prog.invalidate();
+								});
+							};
+						} else if ("done".equals(arg)) {
+							r = () -> {
+								if (!frame.isVisible()) {
+									System.out.println("doneAnimating");
+									return;
+								}
+								SwingUtilities.invokeLater(() -> {
+									prog.setVisible(false);
+									throbber.animateDone();
 									prog.invalidate();
 								});
 							};
@@ -332,7 +345,7 @@ class Puppet {
 		outer.setOpaque(true);
 		outer.setBackground(colorBackground);
 		
-		JThrobber throbber = new JThrobber();
+		throbber = new JThrobber();
 		throbber.setForeground(colorProgress);
 		throbber.setMinimumSize(new Dimension(64, 64));
 		throbber.setPreferredSize(throbber.getMinimumSize());
