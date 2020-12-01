@@ -8,10 +8,10 @@ import java.util.Map;
 enum HashFunction {
 	@Deprecated MD5("MD5", "MD5", 128, true),
 	@Deprecated SHA1("SHA-1", "SHA-1", 160, true),
-	SHA256("SHA-2 256", "SHA-256", 256, false),
-	SHA384("SHA-2 384", "SHA-384", 384, false),
-	SHA512("SHA-2 512", "SHA-512", 512, false),
-	SHA512_256("SHA-2 512/256", "SHA-512/256", 256, false),
+	SHA2_256("SHA-2 256", "SHA-256", 256, false),
+	SHA2_384("SHA-2 384", "SHA-384", 384, false),
+	SHA2_512("SHA-2 512", "SHA-512", 512, false),
+	SHA2_512_256("SHA-2 512/256", "SHA-512/256", 256, false),
 	;
 	
 	private static final Map<String, HashFunction> BY_NAME = new HashMap<>();
@@ -22,6 +22,7 @@ enum HashFunction {
 	public final int sizeInBytes;
 	public final int sizeInHexChars;
 	public final boolean insecure;
+	public final String emptyHash;
 	
 	private HashFunction(String name, String alg, int sizeInBits, boolean insecure) {
 		this.name = name;
@@ -30,6 +31,7 @@ enum HashFunction {
 		this.sizeInBytes = (sizeInBits+7)/8;
 		this.sizeInHexChars = sizeInBytes*2;
 		this.insecure = insecure;
+		this.emptyHash = Util.toHexString(createMessageDigest().digest());
 	}
 	
 	public MessageDigest createMessageDigest() {

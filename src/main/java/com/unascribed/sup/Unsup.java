@@ -8,7 +8,7 @@ public class Unsup {
 	/**
 	 * The version of unsup responsible for updating on this launch.
 	 */
-	public static final String UNSUP_VERSION = Agent.VERSION;
+	public static final String UNSUP_VERSION = Util.VERSION;
 	
 	/**
 	 * The last version of the source to be synced to the working directory by unsup.

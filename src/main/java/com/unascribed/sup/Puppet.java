@@ -11,9 +11,9 @@ import java.awt.RenderingHints;
 import java.awt.Toolkit;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.BufferedReader;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -53,6 +53,7 @@ class Puppet {
 	private static JLabel title, subtitle;
 	private static JProgressBar prog;
 	private static JThrobber throbber;
+	private static Image logo;
 	
 	private static Color colorBackground = Color.BLACK;
 	private static Color colorTitle = Color.WHITE;
@@ -86,16 +87,27 @@ class Puppet {
 			return;
 		}
 		
+		logo = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup.png"));
+		
 		System.out.println("unsup puppet ready");
 		
 		Map<String, ScheduledFuture<?>> orders = new HashMap<>();
 		Map<String, Runnable> orderRunnables = new HashMap<>();
 		
-		BufferedReader br = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+		BufferedInputStream in = new BufferedInputStream(System.in, 512);
+		ByteArrayOutputStream buffer = new ByteArrayOutputStream();
 		try {
 			while (true) {
-				String line = br.readLine();
-				if (line == null) break;
+				int by = in.read();
+				if (by == -1) break;
+				String line;
+				if (by == 0) {
+					line = new String(buffer.toByteArray(), StandardCharsets.UTF_8);
+					buffer.reset();
+				} else {
+					buffer.write(by);
+					continue;
+				}
 				String name;
 				if (line.startsWith("[")) {
 					int close = line.indexOf(']');
@@ -320,8 +332,7 @@ class Puppet {
 	}
 	
 	private static void buildUi() {
-		frame = new JFrame("unsup v"+Agent.VERSION);
-		Image logo = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup.png"));
+		frame = new JFrame("unsup v"+Util.VERSION);
 		frame.setIconImage(logo);
 		frame.setSize(384, 128);
 		frame.setLocationRelativeTo(null);
@@ -428,6 +439,7 @@ class Puppet {
 		pane.setBackground(colorBackground);
 		pane.setForeground(colorDialog);
 		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+		dialog.setIconImage(logo);
 		dialog.setModal(true);
 		dialog.setBackground(colorBackground);
 		dialog.setForeground(colorDialog);
