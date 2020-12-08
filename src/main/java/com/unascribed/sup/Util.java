@@ -4,16 +4,19 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-class Util {
+import javax.imageio.ImageIO;
+import javax.swing.JPopupMenu;
 
-	static final String VERSION = "0.0.1";
+public class Util {
 
-	static boolean containsWholeWord(String haystack, String needle) {
+	public static final String VERSION = "0.0.1";
+
+	public static boolean containsWholeWord(String haystack, String needle) {
 		if (haystack == null || needle == null) return false;
 		return haystack.equals(needle) || haystack.endsWith(" "+needle) || haystack.startsWith(needle+" ") || haystack.contains(" "+needle+" ");
 	}
 
-	static void blockForever() {
+	public static void blockForever() {
 		while (true) {
 			try {
 				Thread.sleep(Integer.MAX_VALUE);
@@ -24,7 +27,7 @@ class Util {
 	/**
 	 * Closes the stream when done.
 	 */
-	static byte[] collectLimited(InputStream in, int limit) throws IOException {
+	public static byte[] collectLimited(InputStream in, int limit) throws IOException {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			int totalRead = 0;
@@ -63,12 +66,31 @@ class Util {
 		"f0", "f1", "f2", "f3", "f4", "f5", "f6", "f7", "f8", "f9", "fa", "fb", "fc", "fd", "fe", "ff"
 	};
 	
-	static String toHexString(byte[] bys) {
+	public static String toHexString(byte[] bys) {
 		StringBuilder sb = new StringBuilder(bys.length*2);
 		for (int i = 0; i < bys.length; i++) {
 			sb.append(hex[bys[i]&0xFF]);
 		}
 		return sb.toString();
+	}
+
+	public static void fixSwing() {
+		// enable a bunch of nice things that are off by default for legacy compat
+		// use OpenGL or Direct3D where supported
+		System.setProperty("sun.java2d.opengl", "true");
+		System.setProperty("sun.java2d.d3d", "true");
+		// force font antialiasing
+		System.setProperty("awt.useSystemAAFontSettings", "on");
+		System.setProperty("swing.aatext", "true");
+		System.setProperty("swing.useSystemFontSettings", "true");
+		// only call invalidate as needed
+		System.setProperty("java.awt.smartInvalidate", "true");
+		// disable Metal's abuse of bold fonts
+		System.setProperty("swing.boldMetal", "false");
+		// always create native windows for popup menus (allows animations to play, etc)
+		JPopupMenu.setDefaultLightWeightPopupEnabled(false);
+		// no ImageIO, I don't want you to write tons of tiny files to the disk, to be quite honest
+		ImageIO.setUseCache(false);
 	}
 
 }

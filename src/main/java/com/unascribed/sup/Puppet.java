@@ -70,14 +70,7 @@ class Puppet {
 	public static void main(String[] args) {
 		log("INFO", "Iä! Iä! Cthulhu fhtagn!");
 		
-		// enable a bunch of nice things that are off by default for legacy compat
-		// use OpenGL or Direct3D where supported
-		System.setProperty("sun.java2d.opengl", "true");
-		System.setProperty("sun.java2d.d3d", "true");
-		// force font antialiasing
-		System.setProperty("awt.useSystemAAFontSettings", "on");
-		System.setProperty("swing.aatext", "true");
-		System.setProperty("swing.useSystemFontSettings", "true");
+		Util.fixSwing();
 		
 		MetalLookAndFeel.setCurrentTheme(new OceanTheme());
 		try {

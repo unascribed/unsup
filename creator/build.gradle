@@ -1,0 +1,41 @@
+plugins {
+	id 'com.github.johnrengelman.shadow' version '6.1.0'
+	id 'java'
+}
+
+group = 'com.unascribed'
+archivesBaseName = 'unsup-creator'
+version = '0.0.1'
+
+sourceCompatibility = targetCompatibility = 8
+
+repositories { 
+	mavenCentral()
+}
+
+configurations.shadow.extendsFrom configurations.compile
+
+if (!file('.gradle/unsup-cache/graal-wasm.jar').exists()) {
+	file('.gradle/unsup-cache').mkdirs()
+	file('.gradle/unsup-cache/graal-wasm.jar').withOutputStream {
+		it << (new URL("jar:https://github.com/graalvm/graalvm-ce-builds/releases/download/vm-20.3.0/wasm-installable-svm-java11-linux-amd64-20.3.0.jar!/languages/wasm/wasm.jar").openStream())
+	}
+}
+
+dependencies {
+	compile 'blue.endless:jankson:1.2.0'
+	compile 'net.i2p.crypto:eddsa:0.3.0'
+	compile 'com.formdev:flatlaf:0.44'
+	compile 'org.graalvm.truffle:truffle-api:20.3.0'
+	compile 'org.graalvm.sdk:graal-sdk:20.3.0'
+	compile files('.gradle/unsup-cache/graal-wasm.jar')
+}
+
+jar {
+	manifest {
+		attributes (
+			'Main-Class': 'com.unascribed.sup.Creator'
+		)
+	}
+}
+

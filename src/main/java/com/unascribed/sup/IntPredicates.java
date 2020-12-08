@@ -3,7 +3,7 @@ package com.unascribed.sup;
 import java.util.Arrays;
 import java.util.function.IntPredicate;
 
-class IntPredicates {
+public class IntPredicates {
 
 	public static IntPredicate none() {
 		return v -> false;
@@ -18,8 +18,12 @@ class IntPredicates {
 		return v -> Arrays.binarySearch(values, v) >= 0;
 	}
 	
-	public static IntPredicate inRange(int min, int max) {
+	public static IntPredicate inRangeExclusive(int min, int max) {
 		return v -> v >= min && v < max;
+	}
+	
+	public static IntPredicate inRangeInclusive(int min, int max) {
+		return v -> v >= min && v <= max;
 	}
 	
 	public static IntPredicate greaterThan(int i) {

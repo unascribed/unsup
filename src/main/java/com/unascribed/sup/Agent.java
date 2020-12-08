@@ -79,12 +79,14 @@ class Agent {
 	}
 	
 	public static void premain(String arg) throws UnsupportedEncodingException {
+		long start = System.nanoTime();
 		try {
 			createLogStream();
 			log("INFO", (standalone ? "Starting in standalone mode" : "Launch hijack successful")+". unsup v"+Util.VERSION);
 			detectFilesystemCaseSensitivity();
 			if (!loadConfig()) {
-				// there is no config file; yield control to the program
+				log("WARN", "Cannot find a config file, giving up.");
+				// by returning but not exiting, we yield control to the program whose launch we hijacked, if any
 				return;
 			}
 			checkRequiredKeys("version", "source_format", "source");
@@ -121,11 +123,16 @@ class Agent {
 			
 			if (config.containsKey("public_key")) {
 				try {
-					publicKey = new EdDSAPublicKey(new X509EncodedKeySpec(Base64.getDecoder().decode(config.get("public_key"))));
+					String line = config.get("public_key");
+					if (line.startsWith("ed25519 ")) {
+						publicKey = new EdDSAPublicKey(new X509EncodedKeySpec(Base64.getDecoder().decode(line.substring(8))));
+					} else {
+						throw new IllegalArgumentException("Unknown key kind, expected ed25519");
+					}
 					cleanup.add(() -> publicKey = null);
 				} catch (Throwable t) {
 					t.printStackTrace();
-					log("ERROR", "Config file error: public_key is not valid! Exiting.");
+					log("ERROR", "Config file error: public_key is not valid at "+config.getBlame("public_key")+"! Exiting.");
 					exit(EXIT_CONFIG_ERROR);
 					return;
 				}
@@ -221,6 +228,7 @@ class Agent {
 		} catch (InterruptedException e) {
 			throw new AssertionError(e);
 		} finally {
+			log("INFO", "Finished after "+TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)+"ms.");
 			cleanup();
 		}
 	}

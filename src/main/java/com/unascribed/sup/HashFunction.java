@@ -5,7 +5,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 
-enum HashFunction {
+public enum HashFunction {
 	@Deprecated MD5("MD5", "MD5", 128, true),
 	@Deprecated SHA1("SHA-1", "SHA-1", 160, true),
 	SHA2_256("SHA-2 256", "SHA-256", 256, false),

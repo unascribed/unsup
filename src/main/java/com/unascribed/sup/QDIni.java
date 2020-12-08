@@ -28,7 +28,7 @@ import java.util.function.Supplier;
 /**
  * A quick-and-dirty INI parser.
  */
-class QDIni {
+public class QDIni {
 	public static class QDIniException extends IllegalArgumentException {
 		public QDIniException() {}
 		public QDIniException(String message, Throwable cause) { super(message, cause); }
