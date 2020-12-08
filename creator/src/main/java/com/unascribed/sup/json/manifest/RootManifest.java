@@ -11,7 +11,6 @@ import com.unascribed.sup.json.OrderedVersion;
 public class RootManifest extends AbstractManifest {
 
 	public String name;
-	public boolean bootstrappable;
 	public Versions versions = new Versions();
 	
 	public static class Versions {

@@ -10,7 +10,6 @@ import java.awt.Toolkit;
 import java.awt.Window;
 import java.awt.event.KeyEvent;
 import java.io.File;
-import java.io.FilenameFilter;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -33,6 +32,7 @@ import javax.swing.JList;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButtonMenuItem;
 import javax.swing.JRootPane;
@@ -58,17 +58,18 @@ import javax.swing.plaf.nimbus.NimbusLookAndFeel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.formdev.flatlaf.util.UIScale;
 import com.unascribed.sup.json.ManifestVersion;
 import com.unascribed.sup.json.OrderedVersion;
+import com.unascribed.sup.json.ReportableException;
 import com.unascribed.sup.json.manifest.BootstrapManifest;
 import com.unascribed.sup.json.manifest.RootManifest;
 import com.unascribed.sup.json.manifest.UpdateManifest;
 
 import blue.endless.jankson.Jankson;
 import blue.endless.jankson.JsonPrimitive;
+import blue.endless.jankson.api.SyntaxError;
 
 public class Creator {
 
@@ -101,16 +102,18 @@ public class Creator {
 
 	private static JPanel hintOrFiles;
 	
+	private static String lastOpenDirectory;
+	
 	public static void main(String[] args) {
 		Util.fixSwing();
 		
-		FlatDarkLaf.install();
+		FlatUnsupDarkLaf.install();
 		
 		logo = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup.png"));
 		logoy2k = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup-y2k.png"));
 		logonostroke = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup-nostroke.png"));
 		
-		frame = new JFrame("unsup Creator");
+		frame = new JFrame("unsup creator");
 		frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
 		int[] sizes = { 16, 24, 32, 64, 128 };
 		List<Image> iconImages = new ArrayList<>();
@@ -134,16 +137,72 @@ public class Creator {
 		pack.addSeparator();
 		pack.add(menuItem("Open…", "icons/open.png", 'o', () -> {
 			FileDialog fd = new FileDialog(frame);
-			fd.setFilenameFilter(new FilenameFilter() {
-				
-				@Override
-				public boolean accept(File dir, String name) {
-					return "manifest.json".equals(name);
-				}
-			});
+			fd.setFilenameFilter((dir, name) -> "manifest.json".equals(name));
 			fd.setTitle("Select an unsup manifest");
-			fd.setLocationByPlatform(true);
+			fd.setLocation(frame.getLocation());
+			fd.setDirectory(lastOpenDirectory);
 			fd.setVisible(true);
+			String filePath = fd.getFile();
+			if (filePath != null) {
+				lastOpenDirectory = fd.getDirectory();
+				File dir;
+				if (lastOpenDirectory != null) {
+					dir = new File(lastOpenDirectory);
+				} else {
+					dir = new File("");
+				}
+				File file = new File(dir, filePath);
+				String fname = file.getName();
+				try {
+					RootManifest root = jkson.fromJson(jkson.load(file), RootManifest.class);
+					root.validate();
+					File bootstrapFile = new File(dir, "bootstrap.json");
+					fname = "bootstrap.json";
+					BootstrapManifest boot = jkson.fromJson(jkson.load(bootstrapFile), BootstrapManifest.class);
+					boot.validate();
+					List<OrderedVersion> versionsToRetrieve = new ArrayList<>();
+					if (root.versions.current != null) {
+						versionsToRetrieve.add(root.versions.current);
+					}
+					versionsToRetrieve.addAll(root.versions.history);
+					List<String> warnings = new ArrayList<>();
+					Map<Integer, UpdateManifest> updates = new HashMap<>();
+					for (OrderedVersion v : versionsToRetrieve) {
+						File updateFile = new File(dir, "versions/"+v.code+".json");
+						if (!updateFile.exists()) {
+							warnings.add("Update manifest for "+v+" does not exist");
+							continue;
+						}
+						fname = "versions/"+v.code+".json";
+						UpdateManifest update = jkson.fromJson(jkson.load(updateFile), UpdateManifest.class);
+						update.validate();
+						updates.put(v.code, update);
+					}
+					rootManifest = root;
+					bootstrapManifest = boot;
+					updateManifests.clear();
+					updateManifests.putAll(updates);
+					initUI();
+					if (!warnings.isEmpty()) {
+						StringBuilder sb = new StringBuilder();
+						for (String w : warnings) {
+							sb.append("<li><plaintext>");
+							sb.append(w);
+							sb.append("</plaintext></li>");
+						}
+						JOptionPane.showMessageDialog(frame, "<html><b>Warnings were encountered during pack load:</b><br/><ul>"+sb+"</ul></html>", "Load warnings", JOptionPane.WARNING_MESSAGE);
+					}
+				} catch (ReportableException e) {
+					JOptionPane.showMessageDialog(frame, "<html><b>An error occurred while loading the pack.</b><br/>"+e.getMessage()+"</html>", "Load error", JOptionPane.ERROR_MESSAGE);
+				} catch (SyntaxError e) {
+					JOptionPane.showMessageDialog(frame, "<html><b>A syntax error was encountered in "+fname+".</b><br/>"
+							+ "<plaintext>"+e.getLineMessage()+"</plaintext><br/>"
+							+ "<plaintext>"+e.getMessage()+"</plaintext>", "Load error", JOptionPane.ERROR_MESSAGE);
+				} catch (Exception e) {
+					e.printStackTrace();
+					JOptionPane.showMessageDialog(frame, "<html><b>An unexpected error occurred while loading the pack.</b><br/>See console output for details.</html>", "Load error", JOptionPane.ERROR_MESSAGE);
+				}
+			}
 		}, "Open an existing pack."));
 		pack.add(menuItem("Import…", "icons/import.png", 'i', () -> {
 			
@@ -172,43 +231,54 @@ public class Creator {
 		try {
 			Class.forName("com.sun.java.swing.plaf.gtk.GTKLookAndFeel");
 			theme.add(radioMenuItem(false, "GTK+ (buggy!)", null, '\0', () -> {
+				FlatAnimatedLafChange.showSnapshot();
 				disableDecor();
 				try {
 					UIManager.setLookAndFeel("com.sun.java.swing.plaf.gtk.GTKLookAndFeel");
 				} catch (Throwable e) {
 				}
 				updateLaf();
+				FlatAnimatedLafChange.hideSnapshotWithAnimation();
 			}));
 		} catch (Throwable t) {
 			theme.add(radioMenuItem(false, "System", null, '\0', () -> {
+				FlatAnimatedLafChange.showSnapshot();
 				disableDecor();
 				try {
 					UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
 				} catch (Throwable e) {
 				}
 				updateLaf();
+				FlatAnimatedLafChange.hideSnapshotWithAnimation();
 			}));
 		}
 		theme.addSeparator();
 		theme.add(radioMenuItem(true, "2020 (Flat Dark)", null, '\0', () -> {
+			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
-			FlatDarkLaf.install();
+			FlatUnsupDarkLaf.install();
 			updateLaf();
+			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
 		theme.add(radioMenuItem(false, "2020 (Flat Light)", null, '\0', () -> {
+			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
-			FlatLightLaf.install();
+			FlatUnsupLightLaf.install();
 			updateLaf();
+			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
 		theme.add(radioMenuItem(false, "2008 (Nimbus)", null, '\0', () -> {
+			FlatAnimatedLafChange.showSnapshot();
 			disableDecor();
 			try {
 				UIManager.setLookAndFeel(new NimbusLookAndFeel());
 			} catch (UnsupportedLookAndFeelException e) {
 			}
 			updateLaf();
+			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
 		theme.add(radioMenuItem(false, "2004 (Ocean)", null, '\0', () -> {
+			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
 			MetalLookAndFeel.setCurrentTheme(new OceanTheme());
 			try {
@@ -216,8 +286,10 @@ public class Creator {
 			} catch (UnsupportedLookAndFeelException e) {
 			}
 			updateLaf();
+			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
 		theme.add(radioMenuItem(false, "1998 (Steel)", null, '\0', () -> {
+			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
 			MetalLookAndFeel.setCurrentTheme(new DefaultMetalTheme());
 			try {
@@ -225,16 +297,19 @@ public class Creator {
 			} catch (UnsupportedLookAndFeelException e) {
 			}
 			updateLaf();
+			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
 		try {
 			Class.forName("com.sun.java.swing.plaf.motif.MotifLookAndFeel");
 			theme.add(radioMenuItem(false, "1996 (Motif)", null, '\0', () -> {
+				FlatAnimatedLafChange.showSnapshot();
 				disableDecor();
 				try {
 					UIManager.setLookAndFeel("com.sun.java.swing.plaf.motif.MotifLookAndFeel");
 				} catch (Throwable e) {
 				}
 				updateLaf();
+				FlatAnimatedLafChange.hideSnapshotWithAnimation();
 			}));
 		} catch (Throwable t) {}
 		options.add(theme);
@@ -368,6 +443,9 @@ public class Creator {
 	}
 	
 	private static void initUI() {
+		System.out.println("rootManifest="+rootManifest);
+		System.out.println("bootstrapManifest="+bootstrapManifest);
+		System.out.println("updateManifests="+updateManifests);
 		if (rootManifest.versions.current != null) {
 			OrderedVersion cur = rootManifest.versions.current;
 			versionNames.put(cur.code, cur.name);
@@ -376,6 +454,7 @@ public class Creator {
 			versionNames.put(v.code, v.name);
 		}
 		cardLayout.show(hintOrFiles, "files");
+		frame.setTitle(rootManifest.name+" - unsup creator");
 	}
 
 	private static void disableDecor() {
