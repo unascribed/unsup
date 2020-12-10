@@ -64,7 +64,7 @@ public class MenuImageIcon implements Icon {
 				rgb[i] = (color&0x00FFFFFF) | ((((int)(pa*255))&0xFF)<<24);
 			}
 			scratch.setRGB(0, 0, src.getWidth(), src.getHeight(), rgb, 0, src.getWidth());
-			lastImage = scratch.getScaledInstance(UIScale.scale(18), UIScale.scale(18), Image.SCALE_SMOOTH);
+			lastImage = scratch.getScaledInstance(getIconWidth(), getIconHeight(), Image.SCALE_SMOOTH);
 			lastColor = color;
 		}
 		g.drawImage(lastImage, x, y, null);

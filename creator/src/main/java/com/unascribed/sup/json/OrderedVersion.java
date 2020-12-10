@@ -1,6 +1,6 @@
 package com.unascribed.sup.json;
 
-public class OrderedVersion {
+public class OrderedVersion implements Comparable<OrderedVersion> {
 	
 	public String name;
 	public int code;
@@ -15,6 +15,11 @@ public class OrderedVersion {
 	@Override
 	public String toString() {
 		return name+" ("+code+")";
+	}
+
+	@Override
+	public int compareTo(OrderedVersion that) {
+		return Integer.compare(this.code, that.code);
 	}
 	
 }
