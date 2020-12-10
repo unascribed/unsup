@@ -433,21 +433,13 @@ public class Creator {
 		versions.setCellRenderer(new ListCellRenderer<OrderedVersion>() {
 			
 			private final Box box;
+			private final JComponent border, border2;
 			private final JLabel title, subtitle, alertIcon, bootIcon;
 			private final JComponent[] allComponents;
 			{
 				box = Box.createVerticalBox();
-				JComponent border = new JComponent() {
-					@Override
-					public void paint(Graphics g) {
-						g.clearRect(0, 0, getWidth(), getHeight());
-						g.setColor(new Color(0xAA000000, true));
-						g.fillRect(0, 0, getWidth(), getHeight());
-					}
-				};
-				border.setMinimumSize(new Dimension(1, 1));
-				border.setPreferredSize(new Dimension(20, 1));
-				border.setMaximumSize(new Dimension(32767, 1));
+				border = createBorderComponent();
+				border2 = createBorderComponent();
 				Box inner = Box.createVerticalBox();
 				int four = UIScale.scale(4);
 				inner.setBorder(new EmptyBorder(four,four,four,four));
@@ -507,6 +499,7 @@ public class Creator {
 				bootIcon.setVisible(false);
 				List<String> tooltip = new ArrayList<>();
 				if (v == null) {
+					if (index != 0) return border2;
 					title.setText("(current)");
 				} else if (updateManifests.containsKey(v.code)) {
 					if (bootstrapManifest != null && bootstrapManifest.version != null && v.code == bootstrapManifest.version.code) {
@@ -576,6 +569,21 @@ public class Creator {
 				box.validate();
 				return box;
 			}
+
+			private JComponent createBorderComponent() {
+				JComponent jc = new JComponent() {
+					@Override
+					public void paint(Graphics g) {
+						g.clearRect(0, 0, getWidth(), getHeight());
+						g.setColor(new Color(0xAA000000, true));
+						g.fillRect(0, 0, getWidth(), getHeight());
+					}
+				};
+				jc.setMinimumSize(new Dimension(1, 1));
+				jc.setPreferredSize(new Dimension(20, 1));
+				jc.setMaximumSize(new Dimension(32767, 1));
+				return jc;
+			}
 		});
 		
 		cardLayout = new CardLayout();
@@ -642,6 +650,7 @@ public class Creator {
 		}
 		Collections.sort(verVec, Comparator.reverseOrder());
 		verVec.add(0, null);
+		verVec.add(null);
 		
 		versions.setListData(verVec);
 		versions.setSelectedIndex(0);
