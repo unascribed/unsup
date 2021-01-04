@@ -12,10 +12,15 @@ public class RootManifest extends AbstractManifest {
 
 	public String name;
 	public Versions versions = new Versions();
+	public CreatorOptions creator = new CreatorOptions();
 	
 	public static class Versions {
 		public OrderedVersion current;
 		public List<OrderedVersion> history = new ArrayList<>();
+	}
+	
+	public static class CreatorOptions {
+		public List<String> ignore = new ArrayList<>();
 	}
 	
 	

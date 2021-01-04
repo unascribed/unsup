@@ -1,5 +1,6 @@
 package com.unascribed.sup.json.manifest;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import com.unascribed.sup.HashFunction;
@@ -9,8 +10,11 @@ import com.unascribed.sup.json.ManifestData;
 @ManifestData(flavor="update", currentVersion=1)
 public class UpdateManifest extends AbstractManifest {
 
+	public transient boolean dirty = false;
+	
 	public HashFunction hash_function;
-	public List<Change> changes;
+	public List<Change> changes = new ArrayList<>();
+	public boolean published;
 	
 	public static class Change {
 		public String path;

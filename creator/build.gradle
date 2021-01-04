@@ -29,6 +29,13 @@ dependencies {
 	compile 'org.graalvm.truffle:truffle-api:20.3.0'
 	compile 'org.graalvm.sdk:graal-sdk:20.3.0'
 	compile files('.gradle/unsup-cache/graal-wasm.jar')
+	
+	compile 'org.lwjgl:lwjgl:3.2.3'
+	compile 'org.lwjgl:lwjgl-nfd:3.2.3'
+	['linux', 'macos', 'windows'].each {
+		compile 'org.lwjgl:lwjgl:3.2.3:natives-'+it
+		compile 'org.lwjgl:lwjgl-nfd:3.2.3:natives-'+it
+	}
 }
 
 jar {

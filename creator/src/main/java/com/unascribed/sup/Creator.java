@@ -1,60 +1,30 @@
 package com.unascribed.sup;
 
-import java.awt.CardLayout;
-import java.awt.Color;
-import java.awt.Component;
-import java.awt.Container;
-import java.awt.Desktop;
-import java.awt.Dimension;
-import java.awt.FileDialog;
-import java.awt.Font;
-import java.awt.Graphics;
-import java.awt.Image;
-import java.awt.Toolkit;
-import java.awt.Window;
+import java.awt.*;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
 
-import javax.swing.Box;
-import javax.swing.DefaultListSelectionModel;
-import javax.swing.ImageIcon;
-import javax.swing.JCheckBoxMenuItem;
-import javax.swing.JComponent;
-import javax.swing.JDialog;
-import javax.swing.JEditorPane;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JList;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JRadioButtonMenuItem;
-import javax.swing.JRootPane;
-import javax.swing.JScrollPane;
-import javax.swing.JSplitPane;
-import javax.swing.JTree;
-import javax.swing.KeyStroke;
-import javax.swing.ListCellRenderer;
-import javax.swing.SwingConstants;
-import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
-import javax.swing.UnsupportedLookAndFeelException;
-import javax.swing.WindowConstants;
+import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.event.HyperlinkEvent.EventType;
 import javax.swing.event.ListSelectionEvent;
@@ -67,6 +37,8 @@ import javax.swing.plaf.metal.OceanTheme;
 import javax.swing.plaf.nimbus.NimbusLookAndFeel;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
+import org.lwjgl.PointerBuffer;
+import org.lwjgl.system.MemoryStack;
 
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.formdev.flatlaf.util.UIScale;
@@ -78,11 +50,47 @@ import com.unascribed.sup.json.manifest.RootManifest;
 import com.unascribed.sup.json.manifest.UpdateManifest;
 
 import blue.endless.jankson.Jankson;
+import blue.endless.jankson.JsonElement;
+import blue.endless.jankson.JsonGrammar;
+import blue.endless.jankson.JsonObject;
 import blue.endless.jankson.JsonPrimitive;
 import blue.endless.jankson.api.SyntaxError;
 
+import static org.lwjgl.util.nfd.NativeFileDialog.*;
+
 public class Creator {
 
+	public static class State {
+		public RootManifest rootManifest;
+		public BootstrapManifest bootstrapManifest;
+		public final SortedMap<Integer, UpdateManifest> updateManifests = new TreeMap<>();
+		public final Map<Integer, String> versionNames = new HashMap<>();
+		public boolean dirty;
+		public long firstChangeSinceLastSave = -1;
+		
+		// values only used upon undo/redo
+		public int selectedVersionIdx;
+		
+		public State copy() {
+			// TODO optimize; copyViaJson is a quick hack and inefficient
+			State nw = new State();
+			nw.rootManifest = copyViaJson(rootManifest);
+			nw.bootstrapManifest = copyViaJson(bootstrapManifest);
+			for (Map.Entry<Integer, UpdateManifest> en : updateManifests.entrySet()) {
+				nw.updateManifests.put(en.getKey(), copyViaJson(en.getValue()));
+			}
+			nw.versionNames.putAll(versionNames);
+			nw.dirty = dirty;
+			nw.firstChangeSinceLastSave = firstChangeSinceLastSave;
+			nw.selectedVersionIdx = selectedVersionIdx;
+			return nw;
+		}
+
+		private static <T> T copyViaJson(T obj) {
+			return (T) jkson.fromJson((JsonObject)jkson.toJson(obj), obj.getClass());
+		}
+	}
+	
 	public static final String VERSION = "0.0.1";
 	
 	private static final HashFunction DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256;
@@ -94,15 +102,15 @@ public class Creator {
 			.registerSerializer(HashFunction.class, (hf, m) -> new JsonPrimitive(hf.name))
 			.build();
 	
-	private static JFrame frame;
+	public static JFrame frame;
 	private static Image logo, logoy2k, logonostroke;
 	private static ImageIcon logoIcon;
 	private static JCheckBoxMenuItem decoration;
 	
-	private static RootManifest rootManifest;
-	private static BootstrapManifest bootstrapManifest;
-	private static final SortedMap<Integer, UpdateManifest> updateManifests = new TreeMap<>();
-	private static final Map<Integer, String> versionNames = new HashMap<>();
+	private static File origin;
+	private static final List<State> undo = new ArrayList<>();
+	public static State state = new State();
+	private static final List<State> redo = new ArrayList<>();
 
 	private static CardLayout cardLayout;
 
@@ -112,7 +120,7 @@ public class Creator {
 
 	private static JPanel hintOrFiles;
 	
-	private static String lastOpenDirectory;
+	public static String lastOpenDirectory;
 	
 	public static void main(String[] args) {
 		Util.fixSwing();
@@ -124,7 +132,7 @@ public class Creator {
 		logonostroke = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup-nostroke.png"));
 		
 		frame = new JFrame("unsup creator");
-		frame.setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
+		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		int[] sizes = { 16, 24, 32, 64, 128 };
 		List<Image> iconImages = new ArrayList<>();
 		for (int s : sizes) {
@@ -133,35 +141,46 @@ public class Creator {
 		iconImages.add(logo);
 		frame.setIconImages(iconImages);
 		
-		BooleanSupplier packOpen = () -> rootManifest != null;
+		BooleanSupplier packOpen = () -> state.rootManifest != null;
 		
 		JMenuBar jmb = new JMenuBar();
-		JMenu pack = new JMenu("Pack");
-		pack.add(menuItem("New", "icons/new.png", 'n', () -> {
-			rootManifest = RootManifest.create();
-			rootManifest.name = "New Pack";
-			bootstrapManifest = BootstrapManifest.create();
-			bootstrapManifest.hash_function = DEFAULT_HASH_FUNCTION;
+		JMenu packMenu = new JMenu("Pack");
+		packMenu.add(menuItem("New", "icons/new-pack.png", 'n', () -> {
+			if (!promptDestructiveIfDirty()) return;
+			createDefaultManifests("New Untitled Pack");
 			initUI();
 		}, "Create an empty pack with no versions."));
-		pack.addSeparator();
-		pack.add(menuItem("Open…", "icons/open.png", 'o', () -> {
-			FileDialog fd = new FileDialog(frame);
-			fd.setFilenameFilter((dir, name) -> "manifest.json".equals(name));
-			fd.setTitle("Select an unsup manifest");
-			fd.setLocation(frame.getLocation());
-			fd.setDirectory(lastOpenDirectory);
-			fd.setVisible(true);
-			String filePath = fd.getFile();
-			if (filePath != null) {
-				lastOpenDirectory = fd.getDirectory();
-				File dir;
-				if (lastOpenDirectory != null) {
-					dir = new File(lastOpenDirectory);
+		addWithEnableCheck(packMenu, menuItem("Close", "icons/pack-close.png", 'w', () -> {
+			if (!promptDestructiveIfDirty()) return;
+			origin = null;
+			markClean();
+			deinitUI();
+		}, "Close the currently open pack."), packOpen);
+		packMenu.addSeparator();
+		packMenu.add(menuItem("Open…", "icons/open-pack.png", 'o', () -> {
+			if (!promptDestructiveIfDirty()) return;
+			String filePath;
+			try (MemoryStack stack = MemoryStack.stackPush()) {
+				PointerBuffer pb = stack.mallocPointer(1);
+				int res = NFD_OpenDialog("json", lastOpenDirectory, pb);
+				if (res == NFD_OKAY) {
+					filePath = pb.getStringUTF8(0);
+				} else if (res == NFD_CANCEL) {
+					return;
 				} else {
-					dir = new File("");
+					JOptionPane.showMessageDialog(frame, "NFD internal error: "+NFD_GetError(), "Unexpected error", JOptionPane.ERROR_MESSAGE);
+					return;
 				}
-				File file = new File(dir, filePath);
+				nNFD_Free(pb.get());
+			}
+			if (filePath != null) {
+				File file = new File(filePath);
+				if (!file.getName().equals("manifest.json")) {
+					JOptionPane.showMessageDialog(frame, "This file doesn't look like an unsup manifest; it's not named manifest.json.", "Load error", JOptionPane.WARNING_MESSAGE);
+					return;
+				}
+				File dir = file.getParentFile();
+				lastOpenDirectory = dir.getAbsolutePath();
 				String fname = file.getName();
 				try {
 					RootManifest root = jkson.fromJson(jkson.load(file), RootManifest.class);
@@ -187,10 +206,14 @@ public class Creator {
 						update.validate();
 						updates.put(v.code, update);
 					}
-					rootManifest = root;
-					bootstrapManifest = boot;
-					updateManifests.clear();
-					updateManifests.putAll(updates);
+					undo.clear();
+					redo.clear();
+					origin = file;
+					state.rootManifest = root;
+					state.bootstrapManifest = boot;
+					state.updateManifests.clear();
+					state.updateManifests.putAll(updates);
+					markClean();
 					initUI();
 					if (!warnings.isEmpty()) {
 						StringBuilder sb = new StringBuilder();
@@ -213,25 +236,104 @@ public class Creator {
 				}
 			}
 		}, "Open an existing pack."));
-		pack.add(menuItem("Import…", "icons/import.png", 'i', () -> {
-			
+		packMenu.add(menuItem("Import…", "icons/import-pack.png", 'i', () -> {
+			PackImportHandler.invoke();
 		}, "Import an arbitrary directory into a pack, creating a new pack if necessary."));
-		pack.addSeparator();
-		addWithEnableCheck(pack, menuItem("Save", "icons/save.png", 's', () -> {
-			
+		packMenu.addSeparator();
+		addWithEnableCheck(packMenu, menuItem("Save", "icons/save.png", 's', () -> {
+			save(false);
 		}, "Save changes to the currently open pack."), packOpen);
-		addWithEnableCheck(pack, menuItem("Export…", "icons/export.png", 'e', () -> {
+		addWithEnableCheck(packMenu, menuItem("Save As…", "icons/save-as.png", 'S', () -> {
+			File origOrigin = origin;
+			origin = null;
+			if (!save(true)) {
+				origin = origOrigin;
+			}
+		}, "Save a copy of the currently open pack somewhere else."), packOpen);
+		addWithEnableCheck(packMenu, menuItem("Export…", "icons/export-pack.png", 'e', () -> {
 			
 		}, "Export a resolved copy of the contents of this pack to a directory."), packOpen);
-		pack.addSeparator();
-		addWithEnableCheck(pack, menuItem("Publish…", "icons/publish.png", 'p', () -> {
+		packMenu.addSeparator();
+		addWithEnableCheck(packMenu, menuItem("Publish…", "icons/publish.png", 'p', () -> {
 			
 		}, "Upload this pack to a server."), packOpen);
-		jmb.add(pack);
-		JMenu options = new JMenu("Meta");
-		JMenu theme = new JMenu("Theme");
-		theme.setIcon(new MenuImageIcon("icons/bucket.png"));
-		theme.add(decoration = checkMenuItem(true, "System Decorations", null, '\0', () -> {
+		addWithEnableCheck(packMenu, menuItem("Options…", "icons/pack-options.png", 'O', () -> {
+			JDialog d = new JDialog(frame, "Pack options");
+			Box box = Box.createVerticalBox();
+			int four = UIScale.scale(4);
+			box.setBorder(new EmptyBorder(four,four,four,four));
+			Box title = Box.createHorizontalBox();
+			JLabel label = new JLabel("Pack name");
+			title.add(label);
+			title.add(Box.createHorizontalGlue());
+			box.add(title);
+			JButton done = new JButton("Save");
+			JTextField field = new JTextField(state.rootManifest.name);
+			field.getDocument().addDocumentListener((SimpleDocumentListener)(e) -> {
+				done.setEnabled(!field.getText().isEmpty());
+			});
+			field.setMaximumSize(new Dimension(32767, field.getPreferredSize().height));
+			box.add(field);
+			box.add(Box.createVerticalGlue());
+			box.add(Box.createVerticalStrut(UIScale.scale(8)));
+			Box bottom = Box.createHorizontalBox();
+			box.add(bottom);
+			bottom.add(Box.createHorizontalGlue());
+			JButton cancel = new JButton("Cancel");
+			cancel.addActionListener((a) -> {
+				d.dispose();
+			});
+			bottom.add(cancel);
+			bottom.add(Box.createHorizontalStrut(UIScale.scale(8)));
+			done.addActionListener((a) -> {
+				if (state.rootManifest.name.equals(field.getText().trim())) {
+					d.dispose();
+					return;
+				}
+				saveState();
+				state.rootManifest.name = field.getText().trim();
+				updateTitle();
+				markDirty();
+				d.dispose();
+			});
+			bottom.add(done);
+			d.setContentPane(box);
+			d.setSize(UIScale.scale(240), UIScale.scale(120));
+			d.getRootPane().setDefaultButton(done);
+			d.setLocationRelativeTo(frame);
+			d.setVisible(true);
+		}, "Change basic information and options for the pack."), packOpen);
+		jmb.add(packMenu);
+		JMenu versionsMenu = new JMenu("Versions");
+		addWithEnableCheck(versionsMenu, menuItem("New…", "icons/new-version.png", 't', () -> {
+			saveState();
+			int nextCode = state.updateManifests.isEmpty() ? 1 : state.updateManifests.lastKey()+1;
+			OrderedVersion ov = new OrderedVersion("Unnamed", nextCode);
+			if (state.rootManifest.versions.current != null) {
+				state.rootManifest.versions.history.add(0, state.rootManifest.versions.current);
+			}
+			state.rootManifest.versions.current = ov;
+			state.versionNames.put(ov.code, ov.name);
+			UpdateManifest um = UpdateManifest.create();
+			um.dirty = true;
+			um.hash_function = DEFAULT_HASH_FUNCTION;
+			state.updateManifests.put(ov.code, um);
+			rebuildVersionsList(true);
+			markDirty();
+		}, "Create a new pack version to track file changes."), packOpen);
+		jmb.add(versionsMenu);
+		JMenu historyMenu = new JMenu("History");
+		addWithEnableCheck(historyMenu, menuItem("Undo", "icons/undo.png", 'z', () -> {
+			undo();
+		}, "Undo the last change made."), () -> !undo.isEmpty());
+		addWithEnableCheck(historyMenu, menuItem("Redo", "icons/redo.png", 'Z', () -> {
+			redo();
+		}, "Redo the last change undone."), () -> !redo.isEmpty());
+		jmb.add(historyMenu);
+		JMenu metaMenu = new JMenu("Meta");
+		JMenu themeMenu = new JMenu("Theme");
+		themeMenu.setIcon(new MenuImageIcon("icons/bucket.png"));
+		themeMenu.add(decoration = checkMenuItem(true, "System Decorations", null, '\0', () -> {
 			JFrame.setDefaultLookAndFeelDecorated(!decoration.isSelected());
 			JDialog.setDefaultLookAndFeelDecorated(!decoration.isSelected());
 			updateDecor();
@@ -239,7 +341,7 @@ public class Creator {
 		}));
 		try {
 			Class.forName("com.sun.java.swing.plaf.gtk.GTKLookAndFeel");
-			theme.add(radioMenuItem(false, "GTK+ (buggy!)", null, '\0', () -> {
+			themeMenu.add(radioMenuItem(false, "GTK+ (buggy!)", null, '\0', () -> {
 				FlatAnimatedLafChange.showSnapshot();
 				disableDecor();
 				try {
@@ -250,7 +352,7 @@ public class Creator {
 				FlatAnimatedLafChange.hideSnapshotWithAnimation();
 			}));
 		} catch (Throwable t) {
-			theme.add(radioMenuItem(false, "System", null, '\0', () -> {
+			themeMenu.add(radioMenuItem(false, "System", null, '\0', () -> {
 				FlatAnimatedLafChange.showSnapshot();
 				disableDecor();
 				try {
@@ -261,22 +363,22 @@ public class Creator {
 				FlatAnimatedLafChange.hideSnapshotWithAnimation();
 			}));
 		}
-		theme.addSeparator();
-		theme.add(radioMenuItem(true, "2020 (Flat Dark)", null, '\0', () -> {
+		themeMenu.addSeparator();
+		themeMenu.add(radioMenuItem(true, "2020 (Flat Dark)", null, '\0', () -> {
 			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
 			FlatUnsupDarkLaf.install();
 			updateLaf();
 			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
-		theme.add(radioMenuItem(false, "2020 (Flat Light)", null, '\0', () -> {
+		themeMenu.add(radioMenuItem(false, "2020 (Flat Light)", null, '\0', () -> {
 			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
 			FlatUnsupLightLaf.install();
 			updateLaf();
 			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
-		theme.add(radioMenuItem(false, "2008 (Nimbus)", null, '\0', () -> {
+		themeMenu.add(radioMenuItem(false, "2008 (Nimbus)", null, '\0', () -> {
 			FlatAnimatedLafChange.showSnapshot();
 			disableDecor();
 			try {
@@ -286,7 +388,7 @@ public class Creator {
 			updateLaf();
 			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
-		theme.add(radioMenuItem(false, "2004 (Ocean)", null, '\0', () -> {
+		themeMenu.add(radioMenuItem(false, "2004 (Ocean)", null, '\0', () -> {
 			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
 			MetalLookAndFeel.setCurrentTheme(new OceanTheme());
@@ -297,7 +399,7 @@ public class Creator {
 			updateLaf();
 			FlatAnimatedLafChange.hideSnapshotWithAnimation();
 		}));
-		theme.add(radioMenuItem(false, "1998 (Steel)", null, '\0', () -> {
+		themeMenu.add(radioMenuItem(false, "1998 (Steel)", null, '\0', () -> {
 			FlatAnimatedLafChange.showSnapshot();
 			enableDecor();
 			MetalLookAndFeel.setCurrentTheme(new DefaultMetalTheme());
@@ -310,7 +412,7 @@ public class Creator {
 		}));
 		try {
 			Class.forName("com.sun.java.swing.plaf.motif.MotifLookAndFeel");
-			theme.add(radioMenuItem(false, "1996 (Motif)", null, '\0', () -> {
+			themeMenu.add(radioMenuItem(false, "1996 (Motif)", null, '\0', () -> {
 				FlatAnimatedLafChange.showSnapshot();
 				disableDecor();
 				try {
@@ -321,8 +423,8 @@ public class Creator {
 				FlatAnimatedLafChange.hideSnapshotWithAnimation();
 			}));
 		} catch (Throwable t) {}
-		options.add(theme);
-		options.add(menuItem("About", "icons/about.png", '\0', () -> {
+		metaMenu.add(themeMenu);
+		metaMenu.add(menuItem("About", "icons/about.png", '\0', () -> {
 			JDialog dialog = new JDialog(frame, "About");
 			if (!decoration.isSelected()) {
 				dialog.setUndecorated(true);
@@ -348,7 +450,8 @@ public class Creator {
 					+ "<a href='https://github.com/str4d/ed25519-java/'>EdDSA</a>, "
 					+ "<a href='https://github.com/JFormDesigner/FlatLaf'>FlatLaF</a>, "
 					+ "and <a href='https://github.com/rclone/rclone'>rclone</a>.<br/>"
-					+ "Powered by Java and Swing. Some icons from <a href='https://icons8.com'>Icons8</a>.<br/><br/>"
+					+ "Icons from <a href='https://materialdesignicons.com'>Material Design Icons</a> and <a href='https://icons8.com'>Icons8</a>.<br/>"
+					+ "Powered by Java and Swing.<br/><br/>"
 					+ "This program comes with ABSOLUTELY NO WARRANTY.<br/>"
 					+ "See the GNU GPLv3 Section 15 for details."
 					+ "</font></center></html>");
@@ -401,15 +504,36 @@ public class Creator {
 				}
 			});
 			box.add(about);
+			Box foot = Box.createHorizontalBox();
+			foot.add(Box.createHorizontalGlue());
+			JButton close = new JButton("Close");
+			close.addActionListener((a) -> {
+				dialog.dispose();
+			});
+			foot.add(close);
+			foot.add(Box.createHorizontalGlue());
+			box.add(Box.createVerticalStrut(UIScale.scale(8)));
+			box.add(foot);
+			box.add(Box.createVerticalStrut(UIScale.scale(8)));
 			dialog.setContentPane(box);
-			dialog.setSize(UIScale.scale(400), UIScale.scale(280));
+			dialog.getRootPane().setDefaultButton(close);
+			dialog.setSize(UIScale.scale(400), UIScale.scale(330));
 			dialog.setLocationRelativeTo(frame);
 			dialog.setVisible(true);
 		}, "Display an About dialog."));
-		options.add(menuItem("Quit", "icons/close.png", 'q', () -> {
+		metaMenu.add(menuItem("Quit", "icons/close.png", 'q', () -> {
+			if (!promptDestructiveIfDirty()) return;
 			System.exit(0);
 		}, "Exit the Creator."));
-		jmb.add(options);
+		jmb.add(metaMenu);
+		
+		frame.addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				if (!promptDestructiveIfDirty()) return;
+				System.exit(0);
+			}
+		});
 		
 		versions = new JList<>();
 		DefaultListSelectionModel sm = new DefaultListSelectionModel();
@@ -421,11 +545,12 @@ public class Creator {
 			@Override
 			public void valueChanged(ListSelectionEvent e) {
 				int sel = versions.getSelectedIndex();
-				if (!versions.getCellRenderer().getListCellRendererComponent(versions, versions.getModel().getElementAt(sel), sel,
+				if (sel == -1 || !versions.getCellRenderer().getListCellRendererComponent(versions, versions.getModel().getElementAt(sel), sel,
 						false, false).isEnabled()) {
 					versions.setSelectedIndex(lastSelection);
 				} else {
 					lastSelection = sel;
+					
 				}
 			}
 		});
@@ -501,13 +626,13 @@ public class Creator {
 				if (v == null) {
 					if (index != 0) return border2;
 					title.setText("(current)");
-				} else if (updateManifests.containsKey(v.code)) {
-					if (bootstrapManifest != null && bootstrapManifest.version != null && v.code == bootstrapManifest.version.code) {
+				} else if (state.updateManifests.containsKey(v.code)) {
+					if (state.bootstrapManifest != null && state.bootstrapManifest.version != null && v.code == state.bootstrapManifest.version.code) {
 						bootIcon.setVisible(true);
 						tooltip.add("Bootstrap version; new installs will use this version.");
 					}
 					title.setText(v.toString());
-					UpdateManifest um = updateManifests.get(v.code);
+					UpdateManifest um = state.updateManifests.get(v.code);
 					int additions = 0;
 					int changes = 0;
 					int removals = 0;
@@ -632,31 +757,266 @@ public class Creator {
 		frame.setVisible(true);
 	}
 	
+	private static void saveState() {
+		redo.clear();
+		State cpy = state.copy();
+		cpy.selectedVersionIdx = versions.getSelectedIndex();
+		undo.add(cpy);
+		if (undo.size() > 1000) {
+			undo.remove(0);
+		}
+	}
+	
+	private static void undo() {
+		if (undo.isEmpty()) return;
+		State s = undo.remove(undo.size()-1);
+		redo.add(0, state);
+		state = s;
+		updateUiForHistoryWalk();
+	}
+	
+	private static void redo() {
+		if (redo.isEmpty()) return;
+		State s = redo.remove(0);
+		undo.add(state);
+		state = s;
+		updateUiForHistoryWalk();
+	}
+	
+	private static void updateUiForHistoryWalk() {
+		updateTitle();
+		rebuildVersionsList(false);
+		versions.setSelectedIndex(state.selectedVersionIdx);
+	}
+
+	private static void updateTitle() {
+		if (state.rootManifest == null) {
+			frame.setTitle("unsup creator");
+		} else {
+			frame.setTitle((state.dirty ? "*" : "")+state.rootManifest.name+" - unsup creator");
+		}
+	}
+
+	private static void markDirty() {
+		state.dirty = true;
+		if (state.firstChangeSinceLastSave == -1) {
+			state.firstChangeSinceLastSave = System.currentTimeMillis();
+		}
+		updateTitle();
+	}
+	
+	private static void markClean() {
+		state.dirty = false;
+		state.firstChangeSinceLastSave = -1;
+		updateTitle();
+	}
+	
+	private static boolean save(boolean forceSelect) {
+		boolean implicit = !forceSelect && origin != null;
+		if (!implicit) {
+			boolean retry = false;
+			File selected = null;
+			String defaultDir = lastOpenDirectory;
+			do {
+				retry = false;
+				try (MemoryStack stack = MemoryStack.stackPush()) {
+					PointerBuffer pb = stack.mallocPointer(1);
+					int res = NFD_PickFolder(defaultDir, pb);
+					if (res == NFD_OKAY) {
+						File dir = new File(pb.getStringUTF8(0));
+						File manifest = new File(dir, "manifest.json");
+						if (!manifest.exists()) {
+							String[] list = dir.list();
+							if (list != null && list.length > 2) {
+								int resp = JOptionPane.showConfirmDialog(frame, "<html><b>Are you sure you want to use this folder?</b><br/>"
+										+ "There are already files in this folder and no manifest.json.<br/>"
+										+ "Multiple files and folders will be created in this folder if you continue.<br/>"
+										+ "</html>", "Confirm tarbomb", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+								if (resp == JOptionPane.YES_OPTION) {
+									selected = manifest;
+								} else if (resp == JOptionPane.NO_OPTION) {
+									defaultDir = dir.getAbsolutePath();
+									retry = true;
+								} else {
+									nNFD_Free(pb.get());
+									return false;
+								}
+							} else {
+								defaultDir = dir.getAbsolutePath();
+								selected = manifest;
+							}
+						} else {
+							defaultDir = dir.getAbsolutePath();
+							selected = manifest;
+						}
+					} else if (res == NFD_CANCEL) {
+						return false;
+					} else {
+						JOptionPane.showMessageDialog(frame, "NFD internal error: "+NFD_GetError(), "Unexpected error", JOptionPane.ERROR_MESSAGE);
+						return false;
+					}
+					nNFD_Free(pb.get());
+				}
+			} while (retry);
+			if (selected == null) return false;
+			lastOpenDirectory = defaultDir;
+			origin = selected;
+		}
+		// check implicit so we don't warn the user when they Ctrl-S after renaming their pack
+		if (!implicit && origin.exists()) {
+			try {
+				RootManifest rm = jkson.fromJson(jkson.load(origin), RootManifest.class);
+				rm.validate();
+				if (!Objects.equals(rm.name, state.rootManifest.name)) {
+					int resp = JOptionPane.showConfirmDialog(frame, "<html><b>Really overwrite this pack?</b><br/>"
+							+ "The selected folder contains a pack named \"<i>"+rm.name+"</i>\",<br/>"
+							+ "but you are saving a pack named \"<i>"+state.rootManifest.name+"</i>\".<br/>"
+							+ "Continuing will overwrite the existing pack. This cannot be undone."
+							+ "</html>", "Confirm overwrite", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+					if (resp == JOptionPane.YES_OPTION) {
+						// continue
+					} else if (resp == JOptionPane.NO_OPTION) {
+						return save(true);
+					} else {
+						return false;
+					}
+				}
+			} catch (Throwable t) {}
+		}
+		File dir = origin.getParentFile();
+		// TODO atomicity
+		try {
+			writeJson(jkson.toJson(state.rootManifest), origin);
+			writeJson(jkson.toJson(state.bootstrapManifest), new File(dir, "bootstrap.json"));
+			new File(dir, "versions").mkdirs();
+			for (Map.Entry<Integer, UpdateManifest> en : state.updateManifests.entrySet()) {
+				if (en.getValue().dirty) {
+					writeJson(jkson.toJson(state.bootstrapManifest), new File(dir, "versions/"+en.getKey()+".json"));
+					en.getValue().dirty = false;
+				}
+			}
+			markClean();
+		} catch (Exception e) {
+			e.printStackTrace();
+			JOptionPane.showMessageDialog(frame, "<html><b>An unexpected error occurred while saving the pack.</b><br/>See console output for details.</html>", "Load error", JOptionPane.ERROR_MESSAGE);
+		}
+		return true;
+	}
+	
+	private static void writeJson(JsonElement json, File f) throws IOException {
+		String str = json.toJson(JsonGrammar.STRICT);
+		try (FileOutputStream fos = new FileOutputStream(f)) {
+			fos.write(str.getBytes(StandardCharsets.UTF_8));
+		}
+	}
+
+	private static boolean promptDestructiveIfDirty() {
+		if (state.dirty) {
+			long diff = System.currentTimeMillis()-state.firstChangeSinceLastSave;
+			String time = "???";
+			TimeUnit lastUnit = null;
+			for (TimeUnit unit : TimeUnit.values()) {
+				if (diff < unit.toMillis(1)) {
+					long amt = (diff/lastUnit.toMillis(1));
+					String name = lastUnit.name().toLowerCase(Locale.ROOT);
+					if (name.endsWith("s") && amt == 1) {
+						time = name.substring(0, name.length()-1);
+					} else {
+						time = amt+" "+name;
+					}
+					break;
+				}
+				lastUnit = unit;
+			}
+			int resp = JOptionPane.showConfirmDialog(frame, "<html><b>You have unsaved changes from the past "+time+".</b><br/>"
+					+ "Do you want to save them first?</html>", "Confirm destructive operation", JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.WARNING_MESSAGE);
+			if (resp == JOptionPane.YES_OPTION) {
+				save(false);
+				return true;
+			} else if (resp == JOptionPane.NO_OPTION) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	private static void createDefaultManifests(String name) {
+		markClean();
+		origin = null;
+		state.rootManifest = RootManifest.create();
+		state.rootManifest.name = name;
+		state.bootstrapManifest = BootstrapManifest.create();
+		state.bootstrapManifest.hash_function = DEFAULT_HASH_FUNCTION;
+		state.updateManifests.clear();
+		state.versionNames.clear();
+	}
+
 	private static String s(int i) {
 		return i == 1 ? "" : "s";
 	}
 
+	private static void deinitUI() {
+		state = new State();
+		undo.clear();
+		redo.clear();
+		versions.clearSelection();
+		versions.setListData(new Vector<>());
+		cardLayout.show(hintOrFiles, "hint");
+		updateTitle();
+	}
+	
 	private static void initUI() {
-		System.out.println("rootManifest="+rootManifest);
-		System.out.println("bootstrapManifest="+bootstrapManifest);
-		System.out.println("updateManifests="+updateManifests);
-		Vector<OrderedVersion> verVec = new Vector<>(rootManifest.versions.history.size()+1);
-		if (rootManifest.versions.current != null) {
-			verVec.add(rootManifest.versions.current);
+		System.out.println("rootManifest="+state.rootManifest);
+		System.out.println("bootstrapManifest="+state.bootstrapManifest);
+		System.out.println("updateManifests="+state.updateManifests);
+		state.versionNames.clear();
+		if (state.rootManifest.versions.current != null) {
+			state.versionNames.put(state.rootManifest.versions.current.code, state.rootManifest.versions.current.name);
 		}
-		verVec.addAll(rootManifest.versions.history);
-		for (OrderedVersion v : verVec) {
-			versionNames.put(v.code, v.name);
+		for (OrderedVersion v : state.rootManifest.versions.history) {
+			state.versionNames.put(v.code, v.name);
 		}
+		rebuildVersionsList(false);
+		
+		cardLayout.show(hintOrFiles, "files");
+		updateTitle();
+	}
+
+	private static void rebuildVersionsList(boolean retainSelection) {
+		Vector<OrderedVersion> verVec = new Vector<>(state.rootManifest.versions.history.size()+1);
+		if (state.rootManifest.versions.current != null) {
+			verVec.add(state.rootManifest.versions.current);
+		}
+		verVec.addAll(state.rootManifest.versions.history);
 		Collections.sort(verVec, Comparator.reverseOrder());
 		verVec.add(0, null);
 		verVec.add(null);
 		
-		versions.setListData(verVec);
-		versions.setSelectedIndex(0);
+		int idx;
+		if (retainSelection) {
+			if (versions.getSelectedValue() == null) {
+				idx = 0;
+			} else {
+				int selectedCode = versions.getSelectedValue().code;
+				out: {
+					for (int i = 0; i < verVec.size(); i++) {
+						OrderedVersion v = verVec.get(i);
+						if (v != null && v.code == selectedCode) {
+							idx = i;
+							break out;
+						}
+					}
+					idx = 0;
+				}
+			}
+		} else {
+			idx = 0;
+		}
 		
-		cardLayout.show(hintOrFiles, "files");
-		frame.setTitle(rootManifest.name+" - unsup creator");
+		versions.setListData(verVec);
+		versions.setSelectedIndex(idx);
 	}
 
 	private static void disableDecor() {
@@ -768,7 +1128,7 @@ public class Creator {
 		if (c != '\0') {
 			int ev = KeyEvent.getExtendedKeyCodeForChar(c);
 			item.setMnemonic(ev);
-			int mask = tk.getMenuShortcutKeyMaskEx();
+			int mask = tk.getMenuShortcutKeyMask();
 			if (Character.isUpperCase(c)) {
 				mask |= KeyEvent.SHIFT_DOWN_MASK;
 			}

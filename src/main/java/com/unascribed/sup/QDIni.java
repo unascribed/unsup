@@ -168,7 +168,7 @@ public class QDIni {
 	
 	public <E extends Enum<E>> E getEnum(String key, Class<E> clazz, E def) throws BadValueException {
 		return getParsed(key, s -> Enum.valueOf(clazz, s.toUpperCase(Locale.ROOT)), () -> {
-			StringBuilder sb = new StringBuilder();
+			StringBuilder sb = new StringBuilder("one of ");
 			boolean first = true;
 			for (E e : clazz.getEnumConstants()) {
 				if (first) {
