@@ -4,11 +4,19 @@ import java.awt.BasicStroke;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import javax.swing.JComponent;
 
-class JThrobber extends JComponent {
+public class JThrobber extends JComponent {
+	
+	private final ScheduledExecutorService sched;
+	
+	public JThrobber(ScheduledExecutorService sched) {
+		this.sched = sched;
+	}
+	
 	private long lastTimeAnimated = System.nanoTime();
 	
 	private final float spinSpeed = 230f;
@@ -135,7 +143,7 @@ class JThrobber extends JComponent {
 		g2d.setColor(getForeground());
 		g2d.drawArc(((getWidth()-dia)/2)+2, ((getHeight()-dia)/2)+2, dia-4, dia-4, (int)from, (int)length);
 		if (isDisplayable()) {
-			Puppet.sched.schedule(() -> repaint(), 15, TimeUnit.MILLISECONDS);
+			sched.schedule(() -> repaint(), 15, TimeUnit.MILLISECONDS);
 		}
 	}
 }

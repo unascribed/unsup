@@ -12,7 +12,8 @@ public class DefaultExcludes {
 			"schematics", "screenshots", "server-resource-packs", ".unsup-tmp",
 			".unsup-state.json", "WailaErrorOutput.txt", "realms_persistence.json",
 			"usercache.json", "usernamecache.json", "not-enough-crashes",
-			"texturepacks-mp-cache", "stats", "ModLoader.txt", "LiteLoader.txt", "cache"
+			"texturepacks-mp-cache", "stats", "ModLoader.txt", "LiteLoader.txt", "cache",
+			"servers.dat_old"
 		));
 	private static final Set<String> defExclExts = new HashSet<>(Arrays.asList(
 			"log", "nps", "dmp", "heapdump", "lck", "lock"

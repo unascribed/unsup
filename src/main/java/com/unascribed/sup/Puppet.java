@@ -349,7 +349,7 @@ class Puppet {
 		outer.setOpaque(true);
 		outer.setBackground(colorBackground);
 		
-		throbber = new JThrobber();
+		throbber = new JThrobber(sched);
 		throbber.setForeground(colorProgress);
 		throbber.setMinimumSize(new Dimension(64, 64));
 		throbber.setPreferredSize(throbber.getMinimumSize());

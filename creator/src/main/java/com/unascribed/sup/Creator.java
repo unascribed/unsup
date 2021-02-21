@@ -20,6 +20,8 @@ import java.util.Objects;
 import java.util.SortedMap;
 import java.util.TreeMap;
 import java.util.Vector;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 import java.util.function.Function;
@@ -93,7 +95,9 @@ public class Creator {
 	
 	public static final String VERSION = "0.0.1";
 	
-	private static final HashFunction DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256;
+	public static final HashFunction DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256;
+	
+	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
 	
 	public static final Jankson jkson = Jankson.builder()
 			.registerDeserializer(String.class, ManifestVersion.class, (s, m) -> ManifestVersion.parse(s))

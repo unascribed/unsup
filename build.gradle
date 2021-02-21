@@ -1,8 +1,19 @@
-plugins {
-	id 'com.github.johnrengelman.shadow' version '6.1.0'
-	id 'java-library'
-	id 'maven-publish'
+buildscript {
+	repositories {
+		jcenter()
+	}
+	dependencies {
+		classpath 'com.github.jengelman.gradle.plugins:shadow:6.1.0'
+		classpath 'org.ow2.asm:asm:9.0'
+		classpath 'org.ow2.asm:asm-tree:9.0'
+		classpath 'org.ow2.asm:asm-commons:9.0'
+	}
 }
+
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'java-library'
+apply plugin: 'maven-publish'
+
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup'
@@ -20,21 +31,88 @@ dependencies {
 	
 	compile 'net.i2p.crypto:eddsa:0.3.0'
 	shadow  'net.i2p.crypto:eddsa:0.3.0'
-	
 }
 
 jar {
 	manifest {
 		attributes (
+			'Main-Class': 'com.unascribed.sup.Agent',
 			'Premain-Class': 'com.unascribed.sup.Agent'
 		)
 	}
 }
 
+// collapse to one package so everything can be made package-private
 shadowJar {
-	relocate 'com.grack.nanojson', 'com.unascribed.sup.repackage.nanojson'
-	relocate 'net.i2p.crypto.eddsa', 'com.unascribed.sup.repackage.eddsa'
+	relocate 'com.grack.nanojson', 'com.unascribed.sup'
+	relocate 'net.i2p.crypto.eddsa.math.bigint', 'com.unascribed.sup'
+	relocate 'net.i2p.crypto.eddsa.math.ed25519', 'com.unascribed.sup'
+	relocate 'net.i2p.crypto.eddsa.math', 'com.unascribed.sup'
+	relocate 'net.i2p.crypto.eddsa.spec', 'com.unascribed.sup'
+	relocate 'net.i2p.crypto.eddsa', 'com.unascribed.sup'
 }
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipOutputStream;
+
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.AnnotationNode;
+import org.objectweb.asm.tree.ClassNode;
+
+task amendClassPrivacy {
+	doFirst {
+		File tmp = new File("build/tmp/amended.jar");
+		ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tmp));
+		ZipFile zf = new ZipFile(shadowJar.archivePath);
+		for (ZipEntry ze : Collections.list(zf.entries())) {
+			if (ze.getName().equals("com/unascribed/sup/PublicInAgent.class")) continue;
+			ZipEntry copy = new ZipEntry(ze.getName());
+			copy.setMethod(ze.getMethod());
+			zos.putNextEntry(copy);
+			if (ze.getName().endsWith(".class")) {
+				ClassReader cr = new ClassReader(zf.getInputStream(ze));
+				ClassNode clazz = new ClassNode();
+				cr.accept(clazz, 0);
+				boolean amend = true;
+				if (clazz.invisibleAnnotations != null) {
+					Iterator<AnnotationNode> iter = clazz.invisibleAnnotations.iterator();
+					while (iter.hasNext()) {
+						if (iter.next().desc.equals("Lcom/unascribed/sup/PublicInAgent;")) {
+							amend = false;
+							iter.remove();
+							break;
+						}
+					}
+				}
+				if (amend) {
+					clazz.access &= ~Opcodes.ACC_PUBLIC;
+					clazz.access &= ~Opcodes.ACC_PROTECTED;
+					ClassWriter cw = new ClassWriter(0);
+					clazz.accept(cw);
+					zos.write(cw.toByteArray());
+				} else {
+					zf.getInputStream(ze).transferTo(zos);
+				}
+			} else {
+				zf.getInputStream(ze).transferTo(zos);
+			}
+		}
+		zf.close();
+		zos.close();
+		tmp.renameTo(shadowJar.archivePath);
+	}
+}
+
+shadowJar.finalizedBy amendClassPrivacy
 
 publishing {
 	publications {

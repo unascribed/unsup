@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Locale;
 
-class NullPrintStream extends PrintStream {
+public class NullPrintStream extends PrintStream {
 
 	public static final NullPrintStream INSTANCE = new NullPrintStream();
 	

@@ -18,7 +18,7 @@ import java.util.concurrent.locks.AbstractQueuedSynchronizer;
  * {@code wait}/{@code notify}, which are only really sufficient for single-unit
  * latches with only two threads, which is what this class is designed for.
  */
-class Latch {
+public class Latch {
 
 	// we synchronize on this mutex rather than `this` to prevent users of this
 	// class from accidentally using `wait()` and having almost-correct behavior

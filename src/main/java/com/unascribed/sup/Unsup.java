@@ -3,6 +3,7 @@ package com.unascribed.sup;
 /**
  * Post-load API for accessing unsup data from within the launched program.
  */
+@PublicInAgent
 public class Unsup {
 
 	/**

@@ -3,7 +3,7 @@ package com.unascribed.sup;
 import java.io.IOException;
 import java.io.OutputStream;
 
-class NullOutputStream extends OutputStream {
+public class NullOutputStream extends OutputStream {
 
 	public static final NullOutputStream INSTANCE = new NullOutputStream();
 	

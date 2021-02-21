@@ -1,7 +1,14 @@
-plugins {
-	id 'com.github.johnrengelman.shadow' version '6.1.0'
-	id 'java'
+buildscript {
+	repositories {
+		jcenter()
+	}
+	dependencies {
+		classpath 'com.github.jengelman.gradle.plugins:shadow:6.1.0'
+	}
 }
+
+apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'java'
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup-creator'
@@ -23,6 +30,8 @@ if (!file('.gradle/unsup-cache/graal-wasm.jar').exists()) {
 }
 
 dependencies {
+	compile project(':unsup')
+
 	compile 'blue.endless:jankson:1.2.0'
 	compile 'net.i2p.crypto:eddsa:0.3.0'
 	compile 'com.formdev:flatlaf:0.44'

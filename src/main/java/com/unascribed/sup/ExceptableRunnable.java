@@ -1,5 +1,5 @@
 package com.unascribed.sup;
 
-interface ExceptableRunnable {
+public interface ExceptableRunnable {
 	void run() throws Exception;
 }

@@ -6,12 +6,23 @@ import static org.lwjgl.util.nfd.NativeFileDialog.NFD_OKAY;
 import static org.lwjgl.util.nfd.NativeFileDialog.NFD_PickFolder;
 import static org.lwjgl.util.nfd.NativeFileDialog.nNFD_Free;
 
+import java.awt.Color;
 import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.Graphics2D;
 import java.awt.Rectangle;
+import java.awt.Dialog.ModalityType;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.FileVisitResult;
+import java.nio.file.FileVisitor;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,12 +37,16 @@ import javax.swing.Icon;
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JLabel;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JTree;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
+import javax.swing.WindowConstants;
 import javax.swing.event.TreeModelEvent;
 import javax.swing.event.TreeModelListener;
 import javax.swing.tree.DefaultTreeCellRenderer;
@@ -42,6 +57,7 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 
 import com.formdev.flatlaf.util.UIScale;
+import com.unascribed.sup.json.manifest.UpdateManifest;
 
 public class PackImportHandler {
 
@@ -74,6 +90,7 @@ public class PackImportHandler {
 			File selected = selectedf;
 			File root = selected.getParentFile();
 			Set<File> unchecked = new HashSet<>();
+			Set<File> known = new HashSet<>();
 			Map<File, File[]> sortedChildren = new HashMap<>();
 			List<TreeModelListener> treeModelListeners = new ArrayList<>();
 
@@ -87,6 +104,7 @@ public class PackImportHandler {
 			}
 		}
 		LocalState lstate = new LocalState();
+		lstate.known.add(selectedf);
 		TreeModel treeModel = new TreeModel() {
 
 			@Override
@@ -137,6 +155,7 @@ public class PackImportHandler {
 			private File[] getChildren(File parent) {
 				if (parent == lstate.root) return new File[] {lstate.selected};
 				if (!lstate.sortedChildren.containsKey(parent)) {
+					lstate.known.add(parent);
 					File[] children = parent.listFiles();
 					if (children == null) children = new File[0];
 					Arrays.sort(children, (a, b) -> {
@@ -149,6 +168,7 @@ public class PackImportHandler {
 						if (DefaultExcludes.shouldExclude(f)) {
 							lstate.unchecked.add(f);
 						}
+						lstate.known.add(f);
 					}
 					lstate.sortedChildren.put(parent, children);
 				}
@@ -228,6 +248,7 @@ public class PackImportHandler {
 					setIcon(empty);
 				} else {
 					String n = f.getName();
+					// TODO make this not suck
 					if (n.endsWith(".zip") || n.endsWith(".tar") || n.endsWith(".tgz") || n.endsWith(".rar") || n.endsWith(".7z") || n.endsWith(".gz")) {
 						setIcon(archive);
 					} else if (n.endsWith(".wav") || n.endsWith(".ogg") || n.endsWith(".oga") || n.endsWith(".mp3") || n.endsWith(".opus") || n.endsWith(".m4a") || n.endsWith(".mka")) {
@@ -256,13 +277,19 @@ public class PackImportHandler {
 				}
 				boolean checked = true;
 				boolean disabled = false;
-				File cursor = f;
-				while (cursor != null && !(cursor.equals(lstate.root))) {
-					if (lstate.unchecked.contains(cursor)) {
-						checked = false;
-						if (cursor != f) disabled = true;
+				if (f.isDirectory() && f.list().length == 0) {
+					disabled = true;
+					checked = false;
+					setToolTipText("The unsup manifest format cannot sync empty directories.");
+				} else {
+					File cursor = f;
+					while (cursor != null && !(cursor.equals(lstate.root))) {
+						if (lstate.unchecked.contains(cursor)) {
+							checked = false;
+							if (cursor != f) disabled = true;
+						}
+						cursor = cursor.getParentFile();
 					}
-					cursor = cursor.getParentFile();
 				}
 				setEnabled(!disabled);
 				boolean fchecked = checked;
@@ -372,6 +399,7 @@ public class PackImportHandler {
 						if (c instanceof JComponent) {
 							JPopupMenu menu = ((JComponent) c).getComponentPopupMenu();
 							if (menu != null) {
+								tree.setSelectionPath(path);
 								menu.show(tree, e.getX(), e.getY());
 							}
 						}
@@ -395,7 +423,79 @@ public class PackImportHandler {
 		bottom.add(cancel);
 		bottom.add(Box.createHorizontalStrut(UIScale.scale(8)));
 		done.addActionListener((a) -> {
-			
+			dialog.dispose();
+			JDialog loader = new JDialog(Creator.frame, "Importing");
+			loader.setModalityType(ModalityType.APPLICATION_MODAL);
+			loader.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+			Box loaderBox = Box.createVerticalBox();
+			loaderBox.add(Box.createVerticalGlue());
+			JThrobber jt = new JThrobber(Creator.sched);
+			jt.setMinimumSize(new Dimension(64, 64));
+			jt.setPreferredSize(new Dimension(64, 64));
+			jt.setMaximumSize(new Dimension(32767, 64));
+			jt.setForeground(new Color(0xE91E63));
+			loaderBox.add(jt);
+			loaderBox.add(Box.createVerticalStrut(8));
+			JLabel label = new JLabel("Scanning...");
+			label.setHorizontalAlignment(SwingConstants.CENTER);
+			label.setPreferredSize(new Dimension(256, 24));
+			loaderBox.add(label);
+			loaderBox.add(Box.createVerticalGlue());
+			loader.setContentPane(loaderBox);
+			loader.setSize(UIScale.scale(256), UIScale.scale(128));
+			loader.setLocationRelativeTo(Creator.frame);
+			new Thread(() -> {
+				try {
+					UpdateManifest um = UpdateManifest.create();
+					Path root = lstate.selected.toPath();
+					Files.walkFileTree(root, new FileVisitor<Path>() {
+
+						@Override
+						public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
+							if (lstate.unchecked.contains(dir.toFile())) return FileVisitResult.SKIP_SUBTREE;
+							return FileVisitResult.CONTINUE;
+						}
+
+						@Override
+						public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+							File f = file.toFile();
+							if (!lstate.unchecked.contains(f)) {
+								if (lstate.known.contains(f) || !DefaultExcludes.shouldExclude(f)) {
+									String path = root.relativize(file).toString();
+									SwingUtilities.invokeLater(() -> label.setText(path));
+									MessageDigest md = Creator.DEFAULT_HASH_FUNCTION.createMessageDigest();
+									try (InputStream in = Files.newInputStream(file)) {
+										byte[] buf = new byte[8192];
+										while (true) {
+											int amt = in.read(buf);
+											if (amt == -1) break;
+											md.update(buf, 0, amt);
+										}
+									}
+									byte[] digest = md.digest();
+									System.out.println(path+": "+Util.toHexString(digest));
+								}
+							}
+							return FileVisitResult.CONTINUE;
+						}
+
+						@Override
+						public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
+							return FileVisitResult.CONTINUE;
+						}
+
+						@Override
+						public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
+							return FileVisitResult.CONTINUE;
+						}
+					});
+					SwingUtilities.invokeLater(() -> loader.dispose());
+				} catch (IOException e1) {
+					// TODO
+					e1.printStackTrace();
+				}
+			}, "Importer").start();
+			loader.setVisible(true);
 		});
 		bottom.add(done);
 		bottom.add(Box.createHorizontalStrut(8));
@@ -405,7 +505,6 @@ public class PackImportHandler {
 		dialog.setSize(UIScale.scale(480), UIScale.scale(320));
 		dialog.setLocationRelativeTo(Creator.frame);
 		dialog.setVisible(true);
-	
 	}
 
 }
