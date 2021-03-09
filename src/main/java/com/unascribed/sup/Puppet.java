@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -263,26 +264,29 @@ class Puppet {
 									messageType = JOptionPane.PLAIN_MESSAGE;
 									break;
 							}
-							int optionType;
+							String[] options;
 							switch (optionTypeStr) {
 								case "yesno":
-									optionType = JOptionPane.YES_NO_OPTION;
+									options = new String[]{"Yes", "No"};
 									break;
 								case "yesnocancel":
-									optionType = JOptionPane.YES_NO_CANCEL_OPTION;
+									options = new String[]{"Yes", "No", "Cancel"};
 									break;
 								case "okcancel":
-									optionType = JOptionPane.OK_CANCEL_OPTION;
+									options = new String[]{"OK", "Cancel"};
+									break;
+								case "yesnotoallcancel":
+									options = new String[]{"Yes to All", "Yes", "No to All", "No", "Cancel"};
 									break;
 								default:
 									log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
 									// fallthru
 								case "ok":
-									optionType = JOptionPane.DEFAULT_OPTION;
+									options = new String[]{"Ok"};
 									break;
 							}
 							SwingUtilities.invokeLater(() -> {
-								openMessageDialog(name, title, body, messageType, optionType);
+								openMessageDialog(name, title, body, messageType, options);
 							});
 						};
 						break;
@@ -338,7 +342,7 @@ class Puppet {
 				if (closeAlreadyAttempted) {
 					openMessageDialog(null, "unsup is busy",
 							"<html><center><b>The updater is busy and can't exit right now.</b><br/>Please wait a moment.</center></html>",
-							JOptionPane.WARNING_MESSAGE, JOptionPane.DEFAULT_OPTION);
+							JOptionPane.WARNING_MESSAGE, "OK");
 				} else {
 					closeAlreadyAttempted = true;
 					System.out.println("closeRequested");
@@ -398,8 +402,8 @@ class Puppet {
 		frame.setContentPane(outer);
 	}
 
-	private static void openMessageDialog(String name, String title, String body, int messageType, int optionType) {
-		JOptionPane pane = new JOptionPane(body, messageType, optionType);
+	private static void openMessageDialog(String name, String title, String body, int messageType, String... options) {
+		JOptionPane pane = new JOptionPane(body, messageType, JOptionPane.DEFAULT_OPTION, null, options);
 		List<JComponent> queue = new ArrayList<>();
 		queue.add(pane);
 		List<JComponent> queueQueue = new ArrayList<>();
@@ -443,22 +447,10 @@ class Puppet {
 		if (name != null) {
 			Object sel = pane.getValue();
 			String opt;
-			if (sel == null) {
+			if (sel == null || sel == JOptionPane.UNINITIALIZED_VALUE) {
 				opt = "closed";
 			} else {
-				int selI = (int)sel;
-				switch (selI) {
-					case JOptionPane.OK_OPTION:
-						opt = (optionType == JOptionPane.OK_CANCEL_OPTION || optionType == JOptionPane.DEFAULT_OPTION) ? "ok" : "yes";
-						break;
-					case JOptionPane.NO_OPTION:
-						opt = "no";
-						break;
-					default:
-					case JOptionPane.CANCEL_OPTION:
-						opt = "cancel";
-						break;
-				}
+				opt = ((String)sel).toLowerCase(Locale.ROOT).replace(" ", "");
 			}
 			System.out.println("alert:"+name+":"+opt);
 		}

@@ -29,6 +29,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Date;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -65,7 +66,7 @@ class Agent {
 	
 	private static final long ONE_SECOND_IN_NANOS = TimeUnit.SECONDS.toNanos(1);
 	
-	private static final String DEFAULT_HASH_FUNCTION = HashFunction.SHA2_512_256.name;
+	private static final String DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256.name;
 	
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
 	private static final Object dangerMutex = new Object();
@@ -538,6 +539,19 @@ class Agent {
 		tellPuppet(":colorButtonText="+config.get("colors.button_text", "FFFFFF"));
 	}
 	
+	private enum ConflictType {
+		NO_CONFLICT(null),
+		LOCAL_AND_REMOTE_CREATED("created by you and in this update"),
+		LOCAL_AND_REMOTE_CHANGED("changed by you and in this update"),
+		LOCAL_CHANGED_REMOTE_DELETED("changed by you and deleted in this update"),
+		LOCAL_DELETED_REMOTE_CHANGED("deleted by you and changed in this update"),
+		;
+		public final String msg;
+		ConflictType(String msg) {
+			this.msg = msg;
+		}
+	}
+	
 	private static void doUnsupFormatUpdate(URL src) throws IOException, JsonParserException {
 		log("INFO", "Loading unsup-format manifest from "+src);
 		JsonObject manifest = loadJson(src, 32*K, new URL(src, "manifest.sig"));
@@ -599,6 +613,7 @@ class Agent {
 			AtomicLong progress = new AtomicLong();
 			Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
 			File wd = new File("");
+			AlertOption passOnePreload = null;
 			for (FileToDownload ftd : todo) {
 				tellPuppet(":subtitle=Downloading "+ftd.path);
 				URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
@@ -609,8 +624,8 @@ class Agent {
 					u = blobUrl;
 				}
 				File dest = new File(ftd.path);
-				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+"/"))
-					throw new IOException("Refusing to download to a file outside of working directory");
+				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
+					throw new IOException("Refusing to download to a file outside of working directory: "+dest);
 				if (dest.exists()) {
 					if (dest.length() == ftd.size) {
 						String hash = hash(func, dest);
@@ -625,9 +640,19 @@ class Agent {
 					} else {
 						log("INFO", ftd.path+" already exists but the size doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
 					}
-					AlertOption resp = openAlert("File conflict",
-							"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
-							AlertMessageType.QUESTION, AlertOptionType.YES_NO_CANCEL, AlertOption.YES);
+					AlertOption resp;
+					if (passOnePreload == null) {
+						resp = openAlert("File conflict",
+								"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
+								AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
+						if (resp == AlertOption.NOTOALL) {
+							resp = passOnePreload = AlertOption.NO;
+						} else if (resp == AlertOption.YESTOALL) {
+							resp = passOnePreload = AlertOption.YES;
+						}
+					} else {
+						resp = passOnePreload;
+					}
 					if (resp == AlertOption.NO) {
 						continue;
 					} else if (resp == AlertOption.CANCEL) {
@@ -669,7 +694,9 @@ class Agent {
 				tellPuppet(":subtitle=Applying changes");
 				for (FileToDownload ftd : todo) {
 					if (ftd.dest == null) continue;
-					Files.createDirectories(ftd.dest.getParentFile().toPath());
+					if (ftd.dest.getParentFile() != null) {
+						Files.createDirectories(ftd.dest.getParentFile().toPath());
+					}
 					if (ftd.size == 0) {
 						if (ftd.dest.exists()) {
 							try (FileOutputStream fos = new FileOutputStream(ftd.dest)) {
@@ -778,11 +805,12 @@ class Agent {
 			long progressDenom = 0;
 			File wd = new File("");
 			tellPuppet(":subtitle=Verifying consistency");
+			Map<ConflictType, AlertOption> conflictPreload = new EnumMap<>(ConflictType.class);
 			for (Change c : changesByPath.values()) {
 				File dest = new File(c.path);
-				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+"/"))
+				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
 					throw new IOException("Refusing to download to a file outside of working directory");
-				String conflictStr = null;
+				ConflictType conflictType = ConflictType.NO_CONFLICT;
 				if (dest.exists()) {
 					boolean normalConflict = false;
 					long size = dest.length();
@@ -791,7 +819,7 @@ class Agent {
 							log("INFO", c.path+" was created in this update and locally, but the local version matches the update. Skipping");
 							continue;
 						}
-						conflictStr = "created by you and in this update";
+						conflictType = ConflictType.LOCAL_AND_REMOTE_CREATED;
 					} else if (size == c.fromSize) {
 						String hash = hash(c.fromHashFunc, dest);
 						if (c.fromHash.equals(hash)) {
@@ -812,9 +840,9 @@ class Agent {
 					}
 					if (normalConflict) {
 						if (c.toHash == null) {
-							conflictStr = "changed by you and deleted in this update";
+							conflictType = ConflictType.LOCAL_CHANGED_REMOTE_DELETED;
 						} else {
-							conflictStr = "changed by you and in this update";
+							conflictType = ConflictType.LOCAL_AND_REMOTE_CHANGED;
 						}
 					}
 				} else {
@@ -822,16 +850,28 @@ class Agent {
 						log("INFO", c.path+" was deleted in this update, but it's already missing locally. Skipping");
 						continue;
 					} else if (c.fromHash != null) {
-						conflictStr = "deleted by you and changed in this update";
+						conflictType = ConflictType.LOCAL_DELETED_REMOTE_CHANGED;
 					}
 				}
-				if (conflictStr != null) {
-					AlertOption resp = openAlert("File conflict",
-							"<b>The file "+c.path+" was "+conflictStr+".</b><br/>"
-									+ "Do you want to replace it with the version from the update?<br/>"
-									+ "Choose Cancel to abort. No files have been changed yet."+
-									(dest.exists() ? "<br/><br/>If you choose Yes, a copy of the current file will be created at "+c.path+".orig." : ""),
-							AlertMessageType.QUESTION, AlertOptionType.YES_NO_CANCEL, AlertOption.YES);
+				if (conflictType != ConflictType.NO_CONFLICT) {
+					AlertOption resp;
+					if (conflictPreload.containsKey(conflictType)) {
+						resp = conflictPreload.get(conflictType);
+					} else {
+						resp = openAlert("File conflict",
+								"<b>The file "+c.path+" was "+conflictType.msg+".</b><br/>"
+										+ "Do you want to replace it with the version from the update?<br/>"
+										+ "Choose Cancel to abort. No files have been changed yet."+
+										(dest.exists() ? "<br/><br/>If you choose Yes, a copy of the current file will be created at "+c.path+".orig." : ""),
+								AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
+						if (resp == AlertOption.NOTOALL) {
+							resp = AlertOption.NO;
+							conflictPreload.put(conflictType, AlertOption.NO);
+						} else if (resp == AlertOption.YESTOALL) {
+							resp = AlertOption.YES;
+							conflictPreload.put(conflictType, AlertOption.YES);
+						}
+					}
 					if (resp == AlertOption.NO) {
 						continue;
 					} else if (resp == AlertOption.CANCEL) {
@@ -894,7 +934,7 @@ class Agent {
 			}
 			updateTitle("Updating...", false);
 			synchronized (dangerMutex) {
-				tellPuppet(":subtitle=Applying changes");
+				tellPuppet(":subtitle=Applying changes. Do not force close the updater.");
 				for (Change c : changesByPath.values()) {
 					if (c.dest == null) continue;
 					Path destPath = c.dest.toPath();
@@ -1005,8 +1045,8 @@ class Agent {
 	}
 	
 	private enum AlertMessageType { QUESTION, INFO, WARN, ERROR, NONE }
-	private enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL }
-	private enum AlertOption { CLOSED, OK, YES, NO, CANCEL }
+	private enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
+	private enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
 	
 	private static AlertOption openAlert(String title, String body, AlertMessageType messageType, AlertOptionType optionType, AlertOption def) {
 		if (puppetOut == null) {
