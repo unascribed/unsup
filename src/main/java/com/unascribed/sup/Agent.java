@@ -213,7 +213,7 @@ class Agent {
 			} else {
 				log("INFO", "All done, handing over control.");
 				// poke the Unsup class so it loads and finalizes all of its values
-				Unsup.SOURCE_VERSION.toString();
+				if (Unsup.SOURCE_VERSION != null) Unsup.SOURCE_VERSION.toString();
 				String cmd = System.getProperty("sun.java.command");
 				if ("org.multimc.EntryPoint".equals(cmd)) {
 					// we actually run before MultiMC's Java-side launcher code, so print a
@@ -1225,14 +1225,8 @@ class Agent {
 	}
 	
 	private static void saveJson(File file, JsonObject obj) throws IOException {
-		boolean didExist = file.exists();
 		try (FileOutputStream fos = new FileOutputStream(file)) {
 			JsonWriter.on(fos).object(obj).done();
-		}
-		if (!didExist && file.getName().startsWith(".")) {
-			try {
-				Files.setAttribute(file.toPath(), "dos:hidden", true);
-			} catch (Throwable t) {}
 		}
 	}
 	
