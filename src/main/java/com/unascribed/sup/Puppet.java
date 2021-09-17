@@ -243,51 +243,61 @@ class Puppet {
 							String body = "<html><center>"+split[1]+"</center></html>";
 							String messageTypeStr = split[2];
 							String optionTypeStr = split[3];
-							int messageType;
-							switch (messageTypeStr) {
-								case "question":
-									messageType = JOptionPane.QUESTION_MESSAGE;
-									break;
-								case "info":
-									messageType = JOptionPane.INFORMATION_MESSAGE;
-									break;
-								case "warn":
-									messageType = JOptionPane.WARNING_MESSAGE;
-									break;
-								case "error":
-									messageType = JOptionPane.ERROR_MESSAGE;
-									break;
-								default:
-									log("WARN", "Unknown dialog type "+messageTypeStr+", defaulting to none");
-									// fallthru
-								case "none":
-									messageType = JOptionPane.PLAIN_MESSAGE;
-									break;
+							if (messageTypeStr.startsWith("choice=")) {
+								String[] options = messageTypeStr.substring(7).split("\u001C");
+								for (int i = 0; i < options.length; i++) {
+									options[i] = options[i].replace('\u001B', ':');
+								}
+								SwingUtilities.invokeLater(() -> {
+									openChoiceDialog(name, title, body, optionTypeStr, options);
+								});
+							} else {
+								int messageType;
+								switch (messageTypeStr) {
+									case "question":
+										messageType = JOptionPane.QUESTION_MESSAGE;
+										break;
+									case "info":
+										messageType = JOptionPane.INFORMATION_MESSAGE;
+										break;
+									case "warn":
+										messageType = JOptionPane.WARNING_MESSAGE;
+										break;
+									case "error":
+										messageType = JOptionPane.ERROR_MESSAGE;
+										break;
+									default:
+										log("WARN", "Unknown dialog type "+messageTypeStr+", defaulting to none");
+										// fallthru
+									case "none":
+										messageType = JOptionPane.PLAIN_MESSAGE;
+										break;
+								}
+								String[] options;
+								switch (optionTypeStr) {
+									case "yesno":
+										options = new String[]{"Yes", "No"};
+										break;
+									case "yesnocancel":
+										options = new String[]{"Yes", "No", "Cancel"};
+										break;
+									case "okcancel":
+										options = new String[]{"OK", "Cancel"};
+										break;
+									case "yesnotoallcancel":
+										options = new String[]{"Yes to All", "Yes", "No to All", "No", "Cancel"};
+										break;
+									default:
+										log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
+										// fallthru
+									case "ok":
+										options = new String[]{"Ok"};
+										break;
+								}
+								SwingUtilities.invokeLater(() -> {
+									openMessageDialog(name, title, body, messageType, options);
+								});
 							}
-							String[] options;
-							switch (optionTypeStr) {
-								case "yesno":
-									options = new String[]{"Yes", "No"};
-									break;
-								case "yesnocancel":
-									options = new String[]{"Yes", "No", "Cancel"};
-									break;
-								case "okcancel":
-									options = new String[]{"OK", "Cancel"};
-									break;
-								case "yesnotoallcancel":
-									options = new String[]{"Yes to All", "Yes", "No to All", "No", "Cancel"};
-									break;
-								default:
-									log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
-									// fallthru
-								case "ok":
-									options = new String[]{"Ok"};
-									break;
-							}
-							SwingUtilities.invokeLater(() -> {
-								openMessageDialog(name, title, body, messageType, options);
-							});
 						};
 						break;
 					}
@@ -402,8 +412,7 @@ class Puppet {
 		frame.setContentPane(outer);
 	}
 
-	private static void openMessageDialog(String name, String title, String body, int messageType, String... options) {
-		JOptionPane pane = new JOptionPane(body, messageType, JOptionPane.DEFAULT_OPTION, null, options);
+	private static void configureOptionPane(JOptionPane pane) {
 		List<JComponent> queue = new ArrayList<>();
 		queue.add(pane);
 		List<JComponent> queueQueue = new ArrayList<>();
@@ -435,7 +444,9 @@ class Puppet {
 		}
 		pane.setBackground(colorBackground);
 		pane.setForeground(colorDialog);
-		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+	}
+	
+	private static void configureOptionDialog(JOptionPane pane, JDialog dialog) {
 		dialog.setIconImage(logo);
 		dialog.setModal(true);
 		dialog.setBackground(colorBackground);
@@ -443,6 +454,13 @@ class Puppet {
 		dialog.setContentPane(pane);
 		dialog.pack();
 		dialog.setLocationRelativeTo(frame);
+	}
+	
+	private static void openMessageDialog(String name, String title, String body, int messageType, String... options) {
+		JOptionPane pane = new JOptionPane(body, messageType, JOptionPane.DEFAULT_OPTION, null, options);
+		configureOptionPane(pane);
+		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+		configureOptionDialog(pane, dialog);
 		dialog.setVisible(true);
 		if (name != null) {
 			Object sel = pane.getValue();
@@ -451,6 +469,27 @@ class Puppet {
 				opt = "closed";
 			} else {
 				opt = ((String)sel).toLowerCase(Locale.ROOT).replace(" ", "");
+			}
+			System.out.println("alert:"+name+":"+opt);
+		}
+	}
+
+	private static void openChoiceDialog(String name, String title, String body, String def, String... options) {
+		JOptionPane pane = new JOptionPane(body, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[]{"OK"});
+		pane.setWantsInput(true);
+		pane.setSelectionValues(options);
+		pane.setInitialSelectionValue(def);
+		configureOptionPane(pane);
+		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+		configureOptionDialog(pane, dialog);
+		dialog.setVisible(true);
+		if (name != null) {
+			Object sel = pane.getInputValue();
+			String opt;
+			if (sel == null || !(sel instanceof String)) {
+				opt = "closed";
+			} else {
+				opt = (String)sel;
 			}
 			System.out.println("alert:"+name+":"+opt);
 		}

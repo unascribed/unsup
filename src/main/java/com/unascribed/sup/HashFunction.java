@@ -11,6 +11,7 @@ public enum HashFunction {
 	SHA2_256("SHA-2 256", "SHA-256", 256, false),
 	SHA2_384("SHA-2 384", "SHA-384", 384, false),
 	SHA2_512("SHA-2 512", "SHA-512", 512, false),
+	SHA2_512_256("SHA-2 512/256", "SHA-512/256", 256, false),
 	;
 	
 	private static final Map<String, HashFunction> BY_NAME = new HashMap<>();

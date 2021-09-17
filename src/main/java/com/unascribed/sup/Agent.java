@@ -28,6 +28,7 @@ import java.security.spec.X509EncodedKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Collection;
 import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashMap;
@@ -38,11 +39,14 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.IntPredicate;
 import java.util.function.LongConsumer;
+import java.util.stream.Collectors;
+
 import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
@@ -560,6 +564,45 @@ class Agent {
 		if (!manifest.containsKey("versions")) throw new IOException("Manifest is missing versions field");
 		Version theirVersion = Version.fromJson(manifest.getObject("versions").getObject("current"));
 		if (theirVersion == null) throw new IOException("Manifest is missing current version field");
+		String ourFlavor = state.getString("flavor");
+		JsonArray theirFlavors = manifest.getArray("flavors");
+		if (ourFlavor == null && theirFlavors != null) {
+			List<JsonObject> flavorObjects = theirFlavors.stream()
+					.map(o -> (JsonObject)o)
+					.filter(o -> o.getArray("envs") == null || arrayContains(o.getArray("envs"), detectedEnv))
+					.collect(Collectors.toList());
+			if (flavorObjects.isEmpty()) {
+				// there are no flavors eligible for our environment, so we can continue while ignoring flavors
+			} else if (flavorObjects.size() == 1) {
+				// there is exactly one eligible flavor choice, no sense in bothering the user
+				ourFlavor = flavorObjects.get(0).getString("id");
+			} else {
+				List<String> flavorNames = flavorObjects.stream()
+						.map(o -> o.getString("name"))
+						.collect(Collectors.toList());
+				Map<String, String> namesToIds = flavorObjects.stream()
+						.collect(Collectors.toMap(o -> o.getString("name"), o -> o.getString("id")));
+				Set<String> ids = flavorObjects.stream()
+						.map(o -> o.getString("id"))
+						.collect(Collectors.toSet());
+				String def = config.get("flavor");
+				if (def != null && !ids.contains(def)) {
+					log("WARN", "Default flavor specified in unsup.ini does not exist in the manifest.");
+					def = null;
+				}
+				String flavor = openChoiceAlert("Choose flavor", "<b>There are multiple flavor choices available.</b><br/>Please choose one.", flavorNames, def);
+				if (flavor == null) {
+					log("ERROR", "This is a flavorful manifest, but the unsup.ini doesn't specify a default flavor and we don't have a GUI to ask for a choice! Exiting.");
+					exit(EXIT_CONFIG_ERROR);
+					return;
+				}
+				String id = namesToIds.get(flavor);
+				log("INFO", "Chose flavor "+id);
+				ourFlavor = id;
+			}
+			state.put("flavor", ourFlavor);
+			saveJson(stateFile, state);
+		}
 		boolean bootstrapped = false;
 		if (ourVersion == null) {
 			log("INFO", "Update available! We have nothing, they have "+theirVersion);
@@ -589,8 +632,13 @@ class Agent {
 				if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
 				String url = checkSchemeMismatch(src, file.getString("url"));
 				JsonArray envs = file.getArray("envs");
-				if (!checkEnvs(envs)) {
+				if (!arrayContains(envs, detectedEnv)) {
 					log("INFO", "Skipping "+path+" as it's not eligible for env "+detectedEnv);
+					continue;
+				}
+				JsonArray flavors = file.getArray("flavors");
+				if (flavors != null && !arrayContains(flavors, ourFlavor)) {
+					log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
 					continue;
 				}
 				FileToDownload ftd = new FileToDownload();
@@ -604,9 +652,6 @@ class Agent {
 			File tmp = new File(".unsup-tmp");
 			if (!tmp.exists()) {
 				tmp.mkdirs();
-				try {
-					Files.setAttribute(tmp.toPath(), "dos:hidden", true);
-				} catch (Throwable t) {}
 			}
 			updateTitle("Bootstrapping...", true);
 			final long progressDenomf = progressDenom;
@@ -767,8 +812,13 @@ class Agent {
 					}
 					String url = checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!checkEnvs(envs)) {
+					if (!arrayContains(envs, detectedEnv)) {
 						log("INFO", "Skipping "+path+" as it's not eligible for env "+detectedEnv);
+						continue;
+					}
+					JsonArray flavors = file.getArray("flavors");
+					if (flavors != null && !arrayContains(flavors, ourFlavor)) {
+						log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
 						continue;
 					}
 					if (changesByPath.containsKey(path)) {
@@ -1061,6 +1111,21 @@ class Agent {
 		}
 	}
 	
+	private static String openChoiceAlert(String title, String body, Collection<String> choices, String def) {
+		if (puppetOut == null) {
+			return def;
+		} else {
+			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
+			Latch latch = new Latch();
+			alertWaiters.put(name, latch);
+			StringJoiner joiner = new StringJoiner("\u001C");
+			choices.forEach(c -> joiner.add(c.replace(':', '\u001B')));
+			tellPuppet("["+name+"]:alert="+title+":"+body+":choice="+joiner+":"+def);
+			latch.awaitUninterruptibly();
+			return alertResults.remove(name);
+		}
+	}
+	
 	private static String checkSchemeMismatch(URL src, String url) throws MalformedURLException {
 		if (url == null) return null;
 		URL parsed = new URL(url);
@@ -1189,11 +1254,11 @@ class Agent {
 		return Util.toHexString(digest.digest());
 	}
 	
-	private static boolean checkEnvs(JsonArray envs) {
-		if (envs != null) {
+	private static boolean arrayContains(JsonArray arr, Object obj) {
+		if (arr != null) {
 			boolean anyMatch = false;
-			for (Object env : envs) {
-				if (Objects.equals(env, detectedEnv)) {
+			for (Object en : arr) {
+				if (Objects.equals(en, obj)) {
 					anyMatch = true;
 					break;
 				}
