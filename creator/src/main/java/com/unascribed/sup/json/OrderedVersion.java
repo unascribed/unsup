@@ -1,6 +1,12 @@
 package com.unascribed.sup.json;
 
-public class OrderedVersion implements Comparable<OrderedVersion> {
+import com.unascribed.sup.Creator;
+
+import blue.endless.jankson.JsonElement;
+import blue.endless.jankson.api.Marshaller;
+import blue.endless.jankson.impl.MarshallerImpl;
+
+public class OrderedVersion implements Comparable<OrderedVersion>, Marshallable {
 	
 	public String name;
 	public int code;
@@ -20,6 +26,11 @@ public class OrderedVersion implements Comparable<OrderedVersion> {
 	@Override
 	public int compareTo(OrderedVersion that) {
 		return Integer.compare(this.code, that.code);
+	}
+
+	@Override
+	public JsonElement serialize(Marshaller m) {
+		return Creator.copyInto(new OneLineJsonObject(), MarshallerImpl.getFallback().serialize(this));
 	}
 	
 }

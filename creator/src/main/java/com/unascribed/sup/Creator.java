@@ -45,6 +45,7 @@ import org.lwjgl.system.MemoryStack;
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.formdev.flatlaf.util.UIScale;
 import com.unascribed.sup.json.ManifestVersion;
+import com.unascribed.sup.json.Marshallable;
 import com.unascribed.sup.json.OrderedVersion;
 import com.unascribed.sup.json.ReportableException;
 import com.unascribed.sup.json.manifest.BootstrapManifest;
@@ -52,12 +53,13 @@ import com.unascribed.sup.json.manifest.RootManifest;
 import com.unascribed.sup.json.manifest.UpdateManifest;
 
 import blue.endless.jankson.Jankson;
+import blue.endless.jankson.JsonArray;
 import blue.endless.jankson.JsonElement;
 import blue.endless.jankson.JsonGrammar;
+import blue.endless.jankson.JsonNull;
 import blue.endless.jankson.JsonObject;
 import blue.endless.jankson.JsonPrimitive;
 import blue.endless.jankson.api.SyntaxError;
-
 import static org.lwjgl.util.nfd.NativeFileDialog.*;
 
 public class Creator {
@@ -72,6 +74,7 @@ public class Creator {
 		
 		// values only used upon undo/redo
 		public int selectedVersionIdx;
+		public String changeTitle;
 		
 		public State copy() {
 			// TODO optimize; copyViaJson is a quick hack and inefficient
@@ -89,6 +92,7 @@ public class Creator {
 		}
 
 		private static <T> T copyViaJson(T obj) {
+			if (obj == null || obj == JsonNull.INSTANCE) return obj;
 			return (T) jkson.fromJson((JsonObject)jkson.toJson(obj), obj.getClass());
 		}
 	}
@@ -104,6 +108,7 @@ public class Creator {
 			.registerSerializer(ManifestVersion.class, (v, m) -> new JsonPrimitive(v.toString()))
 			.registerDeserializer(String.class, HashFunction.class, (s, m) -> HashFunction.byName(s))
 			.registerSerializer(HashFunction.class, (hf, m) -> new JsonPrimitive(hf.name))
+			.registerSerializer(Marshallable.class, (o, m) -> o.serialize(m))
 			.build();
 	
 	public static JFrame frame;
@@ -125,6 +130,9 @@ public class Creator {
 	private static JPanel hintOrFiles;
 	
 	public static String lastOpenDirectory;
+	
+	private static JMenuItem undoItem;
+	private static JMenuItem redoItem;
 	
 	public static void main(String[] args) {
 		Util.fixSwing();
@@ -190,9 +198,12 @@ public class Creator {
 					RootManifest root = jkson.fromJson(jkson.load(file), RootManifest.class);
 					root.validate();
 					File bootstrapFile = new File(dir, "bootstrap.json");
-					fname = "bootstrap.json";
-					BootstrapManifest boot = jkson.fromJson(jkson.load(bootstrapFile), BootstrapManifest.class);
-					boot.validate();
+					BootstrapManifest boot = null;
+					if (bootstrapFile.exists()) {
+						fname = "bootstrap.json";
+						boot = jkson.fromJson(jkson.load(bootstrapFile), BootstrapManifest.class);
+						boot.validate();
+					}
 					List<OrderedVersion> versionsToRetrieve = new ArrayList<>();
 					if (root.versions.current != null) {
 						versionsToRetrieve.add(root.versions.current);
@@ -294,7 +305,7 @@ public class Creator {
 					d.dispose();
 					return;
 				}
-				saveState();
+				saveState("Change Options");
 				state.rootManifest.name = field.getText().trim();
 				updateTitle();
 				markDirty();
@@ -310,7 +321,7 @@ public class Creator {
 		jmb.add(packMenu);
 		JMenu versionsMenu = new JMenu("Versions");
 		addWithEnableCheck(versionsMenu, menuItem("New…", "icons/new-version.png", 't', () -> {
-			saveState();
+			saveState("New Version");
 			int nextCode = state.updateManifests.isEmpty() ? 1 : state.updateManifests.lastKey()+1;
 			OrderedVersion ov = new OrderedVersion("Unnamed", nextCode);
 			if (state.rootManifest.versions.current != null) {
@@ -327,10 +338,10 @@ public class Creator {
 		}, "Create a new pack version to track file changes."), packOpen);
 		jmb.add(versionsMenu);
 		JMenu historyMenu = new JMenu("History");
-		addWithEnableCheck(historyMenu, menuItem("Undo", "icons/undo.png", 'z', () -> {
+		addWithEnableCheck(historyMenu, undoItem = menuItem("Undo", "icons/undo.png", 'z', () -> {
 			undo();
 		}, "Undo the last change made."), () -> !undo.isEmpty());
-		addWithEnableCheck(historyMenu, menuItem("Redo", "icons/redo.png", 'Z', () -> {
+		addWithEnableCheck(historyMenu, redoItem = menuItem("Redo", "icons/redo.png", 'Z', () -> {
 			redo();
 		}, "Redo the last change undone."), () -> !redo.isEmpty());
 		jmb.add(historyMenu);
@@ -448,7 +459,7 @@ public class Creator {
 			about.setContentType("text/html");
 			about.setText("<html><center><font face='Dialog'>"
 					+ "<b>unsup creator v"+VERSION+"</b><br/>"
-					+ "Copyright &copy; 2020 Una Thompson<br/>"
+					+ "Copyright &copy; 2020 — 2021 Una Thompson<br/>"
 					+ "Released under the <a href='#gplv3'>GNU GPLv3</a> or later.<br/><br/>"
 					+ "Uses <a href='https://github.com/falkreon/Jankson'>Jankson</a>, "
 					+ "<a href='https://github.com/str4d/ed25519-java/'>EdDSA</a>, "
@@ -749,7 +760,7 @@ public class Creator {
 		cardLayout.show(hintOrFiles, "hint");
 		
 		
-		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true, versions, hintOrFiles);
+		JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, true, new JScrollPane(versions, JScrollPane.VERTICAL_SCROLLBAR_ALWAYS, JScrollPane.HORIZONTAL_SCROLLBAR_NEVER), hintOrFiles);
 		
 		split.setDividerLocation(UIScale.scale(192));
 		
@@ -761,29 +772,55 @@ public class Creator {
 		frame.setVisible(true);
 	}
 	
-	private static void saveState() {
+	public static JsonObject copyInto(JsonObject dst, JsonElement _src) {
+		if (!(_src instanceof JsonObject)) throw new IllegalArgumentException("Expected object, got "+_src);
+		JsonObject src = (JsonObject)_src;
+		for (Map.Entry<String, JsonElement> en : src.entrySet()) {
+			dst.put(en.getKey(), en.getValue());
+			dst.setComment(en.getKey(), src.getComment(en.getKey()));
+		}
+		return dst;
+	}
+	
+	public static JsonArray copyInto(JsonArray dst, JsonElement _src) {
+		if (!(_src instanceof JsonArray)) throw new IllegalArgumentException("Expected array, got "+_src);
+		JsonArray src = (JsonArray)_src;
+		for (int i = 0; i < src.size(); i++) {
+			dst.add(src.get(i));
+			dst.setComment(i, src.getComment(i));
+		}
+		return dst;
+	}
+
+	public static void saveState(String change) {
 		redo.clear();
 		State cpy = state.copy();
 		cpy.selectedVersionIdx = versions.getSelectedIndex();
+		cpy.changeTitle = change;
 		undo.add(cpy);
 		if (undo.size() > 1000) {
 			undo.remove(0);
 		}
+		updateUndoRedo();
 	}
 	
 	private static void undo() {
 		if (undo.isEmpty()) return;
 		State s = undo.remove(undo.size()-1);
 		redo.add(0, state);
+		state.changeTitle = s.changeTitle;
 		state = s;
+		s.changeTitle = null;
 		updateUiForHistoryWalk();
 	}
 	
 	private static void redo() {
 		if (redo.isEmpty()) return;
 		State s = redo.remove(0);
+		state.changeTitle = s.changeTitle;
 		undo.add(state);
 		state = s;
+		state.changeTitle = null;
 		updateUiForHistoryWalk();
 	}
 	
@@ -791,9 +828,27 @@ public class Creator {
 		updateTitle();
 		rebuildVersionsList(false);
 		versions.setSelectedIndex(state.selectedVersionIdx);
+		updateUndoRedo();
 	}
 
-	private static void updateTitle() {
+	private static void updateUndoRedo() {
+		if (undo.isEmpty()) {
+			undoItem.setEnabled(false);
+			undoItem.setText("Undo");
+		} else {
+			undoItem.setEnabled(true);
+			undoItem.setText("Undo "+undo.get(undo.size()-1).changeTitle);
+		}
+		if (redo.isEmpty()) {
+			redoItem.setEnabled(false);
+			redoItem.setText("Redo");
+		} else {
+			redoItem.setEnabled(true);
+			redoItem.setText("Redo "+redo.get(0).changeTitle);
+		}
+	}
+
+	public static void updateTitle() {
 		if (state.rootManifest == null) {
 			frame.setTitle("unsup creator");
 		} else {
@@ -801,7 +856,7 @@ public class Creator {
 		}
 	}
 
-	private static void markDirty() {
+	public static void markDirty() {
 		state.dirty = true;
 		if (state.firstChangeSinceLastSave == -1) {
 			state.firstChangeSinceLastSave = System.currentTimeMillis();
@@ -809,7 +864,7 @@ public class Creator {
 		updateTitle();
 	}
 	
-	private static void markClean() {
+	public static void markClean() {
 		state.dirty = false;
 		state.firstChangeSinceLastSave = -1;
 		updateTitle();
@@ -891,11 +946,13 @@ public class Creator {
 		// TODO atomicity
 		try {
 			writeJson(jkson.toJson(state.rootManifest), origin);
-			writeJson(jkson.toJson(state.bootstrapManifest), new File(dir, "bootstrap.json"));
+			if (state.bootstrapManifest != null) {
+				writeJson(jkson.toJson(state.bootstrapManifest), new File(dir, "bootstrap.json"));
+			}
 			new File(dir, "versions").mkdirs();
 			for (Map.Entry<Integer, UpdateManifest> en : state.updateManifests.entrySet()) {
-				if (en.getValue().dirty) {
-					writeJson(jkson.toJson(state.bootstrapManifest), new File(dir, "versions/"+en.getKey()+".json"));
+				if (true || en.getValue().dirty) {
+					writeJson(jkson.toJson(en.getValue()), new File(dir, "versions/"+en.getKey()+".json"));
 					en.getValue().dirty = false;
 				}
 			}
@@ -965,6 +1022,7 @@ public class Creator {
 		state = new State();
 		undo.clear();
 		redo.clear();
+		updateUndoRedo();
 		versions.clearSelection();
 		versions.setListData(new Vector<>());
 		cardLayout.show(hintOrFiles, "hint");
@@ -972,6 +1030,9 @@ public class Creator {
 	}
 	
 	private static void initUI() {
+		undo.clear();
+		redo.clear();
+		updateUndoRedo();
 		System.out.println("rootManifest="+state.rootManifest);
 		System.out.println("bootstrapManifest="+state.bootstrapManifest);
 		System.out.println("updateManifests="+state.updateManifests);
@@ -988,7 +1049,7 @@ public class Creator {
 		updateTitle();
 	}
 
-	private static void rebuildVersionsList(boolean retainSelection) {
+	public static void rebuildVersionsList(boolean retainSelection) {
 		Vector<OrderedVersion> verVec = new Vector<>(state.rootManifest.versions.history.size()+1);
 		if (state.rootManifest.versions.current != null) {
 			verVec.add(state.rootManifest.versions.current);

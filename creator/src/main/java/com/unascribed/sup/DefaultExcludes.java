@@ -13,10 +13,10 @@ public class DefaultExcludes {
 			".unsup-state.json", "WailaErrorOutput.txt", "realms_persistence.json",
 			"usercache.json", "usernamecache.json", "not-enough-crashes",
 			"texturepacks-mp-cache", "stats", "ModLoader.txt", "LiteLoader.txt", "cache",
-			"servers.dat_old"
+			"servers.dat_old", "backups"
 		));
 	private static final Set<String> defExclExts = new HashSet<>(Arrays.asList(
-			"log", "nps", "dmp", "heapdump", "lck", "lock"
+			"log", "nps", "dmp", "heapdump", "lck", "lock", "bak"
 		));
 	
 	public static boolean shouldExclude(File file) {

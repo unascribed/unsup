@@ -26,9 +26,11 @@ import java.security.MessageDigest;
 import java.text.Collator;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -57,6 +59,8 @@ import org.lwjgl.PointerBuffer;
 import org.lwjgl.system.MemoryStack;
 
 import com.formdev.flatlaf.util.UIScale;
+import com.unascribed.sup.json.OrderedVersion;
+import com.unascribed.sup.json.manifest.RootManifest;
 import com.unascribed.sup.json.manifest.UpdateManifest;
 
 public class PackImportHandler {
@@ -89,12 +93,17 @@ public class PackImportHandler {
 		class LocalState {
 			File selected = selectedf;
 			File root = selected.getParentFile();
+			Set<String> curIgnore = new HashSet<>();
 			Set<File> unchecked = new HashSet<>();
 			Set<File> known = new HashSet<>();
 			Map<File, File[]> sortedChildren = new HashMap<>();
 			List<TreeModelListener> treeModelListeners = new ArrayList<>();
 
 			public void pivotSelected(File newSelected) {
+				for (String s : curIgnore) {
+					unchecked.remove(new File(selected, s));
+					unchecked.add(new File(newSelected, s));
+				}
 				File oldRoot = root;
 				root = newSelected.getParentFile();
 				selected = newSelected;
@@ -105,6 +114,12 @@ public class PackImportHandler {
 		}
 		LocalState lstate = new LocalState();
 		lstate.known.add(selectedf);
+		if (Creator.state.rootManifest != null && Creator.state.rootManifest.creator != null && Creator.state.rootManifest.creator.ignore != null) {
+			for (String s : Creator.state.rootManifest.creator.ignore) {
+				lstate.curIgnore.add(s);
+				lstate.unchecked.add(new File(lstate.selected, s));
+			}
+		}
 		TreeModel treeModel = new TreeModel() {
 
 			@Override
@@ -396,7 +411,7 @@ public class PackImportHandler {
 						Object o = path.getLastPathComponent();
 						Component c = tree.getCellRenderer().getTreeCellRendererComponent(tree, o, row == tree.getMinSelectionRow(),
 								tree.isExpanded(row), tree.getModel().isLeaf(o), row, true);
-						if (c instanceof JComponent) {
+						if (c instanceof JComponent && c.isEnabled()) {
 							JPopupMenu menu = ((JComponent) c).getComponentPopupMenu();
 							if (menu != null) {
 								tree.setSelectionPath(path);
@@ -447,6 +462,8 @@ public class PackImportHandler {
 			new Thread(() -> {
 				try {
 					UpdateManifest um = UpdateManifest.create();
+					um.hash_function = Creator.DEFAULT_HASH_FUNCTION;
+					um.dirty = true;
 					Path root = lstate.selected.toPath();
 					Files.walkFileTree(root, new FileVisitor<Path>() {
 
@@ -459,21 +476,47 @@ public class PackImportHandler {
 						@Override
 						public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 							File f = file.toFile();
+							if (f.isDirectory()) {
+								// ????
+								return FileVisitResult.CONTINUE;
+							}
 							if (!lstate.unchecked.contains(f)) {
 								if (lstate.known.contains(f) || !DefaultExcludes.shouldExclude(f)) {
 									String path = root.relativize(file).toString();
 									SwingUtilities.invokeLater(() -> label.setText(path));
 									MessageDigest md = Creator.DEFAULT_HASH_FUNCTION.createMessageDigest();
+									long length = 0;
 									try (InputStream in = Files.newInputStream(file)) {
 										byte[] buf = new byte[8192];
 										while (true) {
 											int amt = in.read(buf);
 											if (amt == -1) break;
+											length += amt;
 											md.update(buf, 0, amt);
 										}
 									}
 									byte[] digest = md.digest();
-									System.out.println(path+": "+Util.toHexString(digest));
+									String hexDigest = Util.toHexString(digest);
+									UpdateManifest.Change change = new UpdateManifest.Change();
+									change.path = path;
+									change.from_hash = null;
+									change.from_size = 0;
+									List<UpdateManifest> li = new ArrayList<>(Creator.state.updateManifests.values());
+									Collections.reverse(li);
+									out: for (UpdateManifest past : li) {
+										for (UpdateManifest.Change pastChange : past.changes) {
+											if (pastChange.path.equals(path)) {
+												change.from_hash = pastChange.to_hash;
+												change.from_size = pastChange.to_size;
+												break out;
+											}
+										}
+									}
+									change.to_hash = hexDigest;
+									change.to_size = length;
+									if (!change.isUseless()) {
+										um.changes.add(change);
+									}
 								}
 							}
 							return FileVisitResult.CONTINUE;
@@ -489,7 +532,70 @@ public class PackImportHandler {
 							return FileVisitResult.CONTINUE;
 						}
 					});
-					SwingUtilities.invokeLater(() -> loader.dispose());
+					if (um.changes.isEmpty()) {
+						SwingUtilities.invokeLater(() -> loader.dispose());
+						JOptionPane.showMessageDialog(Creator.frame, "<html><b>Found no changes during import.</b><br/>Cowardly refusing to create an empty version.</html>", "No changes found", JOptionPane.WARNING_MESSAGE);
+					} else {
+						if (Creator.state.rootManifest != null) {
+							Creator.saveState("Pack Import");
+						}
+						boolean newManifest = false;
+						RootManifest rootM = Creator.state.rootManifest;
+						if (rootM == null) {
+							newManifest = true;
+							rootM = RootManifest.create();
+							Set<String> namesToSkip = new HashSet<>(Arrays.asList(".minecraft", "minecraft", "game", "instance", "instances"));
+							Path cursor = root;
+							while (cursor != null && namesToSkip.contains(cursor.getFileName().toString().toLowerCase(Locale.ROOT))) {
+								cursor = cursor.getParent();
+							}
+							if (cursor == null) {
+								rootM.name = "Untitled Pack";
+							} else {
+								rootM.name = cursor.getFileName().toString();
+							}
+							Creator.state.rootManifest = rootM;
+						}
+						lstate.unchecked.stream()
+							.map(File::toPath)
+							.map(root::relativize)
+							.map(Path::toString)
+							.forEach(rootM.creator.ignore::add);
+						OrderedVersion v;
+						if (newManifest) {
+							v = new OrderedVersion("1.0", 1);
+						} else {
+							v = new OrderedVersion("Unnamed", rootM.versions.current.code+1);
+						}
+						if (rootM.versions.current != null) {
+							rootM.versions.history.add(0, rootM.versions.current);
+						}
+						rootM.versions.current = v;
+						Creator.state.updateManifests.put(v.code, um);
+						Creator.state.versionNames.put(v.code, v.name);
+						SwingUtilities.invokeLater(() -> {
+							loader.dispose();
+							Creator.rebuildVersionsList(false);
+							Creator.markDirty();
+						});
+						int created = 0;
+						int changed = 0;
+						int deleted = 0;
+						for (UpdateManifest.Change c : um.changes) {
+							if (c.from_hash == null && c.to_hash != null) {
+								created++;
+							} else if (c.from_hash != null && c.to_hash == null) {
+								deleted++;
+							} else {
+								changed++;
+							}
+						}
+						JOptionPane.showMessageDialog(Creator.frame, "<html><b>Import successful.</b><br/>"+
+								created+" creation"+(created == 1 ? "" : "s")+"<br/>"+
+								changed+" change"+(changed == 1 ? "" : "s")+"<br/>"+
+								deleted+" deletion"+(deleted == 1 ? "" : "s")
+							+ "</html>", "Import success", JOptionPane.INFORMATION_MESSAGE);
+					}
 				} catch (IOException e1) {
 					// TODO
 					e1.printStackTrace();
