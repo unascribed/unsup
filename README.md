@@ -52,3 +52,7 @@ branding. It ships with a dark theme with teal accents.
 ![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/update.png)
 
 ![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/done.png)
+
+## License
+The unsup agent is released under the LGPLv3. The unsup creator is released
+under the GPLv3.
