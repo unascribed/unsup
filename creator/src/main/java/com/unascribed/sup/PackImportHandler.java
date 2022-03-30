@@ -565,7 +565,7 @@ public class PackImportHandler {
 						if (newManifest) {
 							v = new OrderedVersion("1.0", 1);
 						} else {
-							v = new OrderedVersion("Unnamed", rootM.versions.current.code+1);
+							v = new OrderedVersion("Unnamed", rootM.versions.current != null ? rootM.versions.current.code+1 : 1);
 						}
 						if (rootM.versions.current != null) {
 							rootM.versions.history.add(0, rootM.versions.current);

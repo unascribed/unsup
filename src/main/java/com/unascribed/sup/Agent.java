@@ -988,7 +988,7 @@ class Agent {
 				for (Change c : changesByPath.values()) {
 					if (c.dest == null) continue;
 					Path destPath = c.dest.toPath();
-					Files.createDirectories(c.dest.getParentFile().toPath());
+					if (c.dest.getParentFile() != null) Files.createDirectories(c.dest.getParentFile().toPath());
 					if (c.moveAside) {
 						Files.move(destPath, destPath.resolveSibling(destPath.getFileName().toString()+".orig"), StandardCopyOption.REPLACE_EXISTING);
 					}
