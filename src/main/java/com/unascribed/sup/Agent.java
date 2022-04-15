@@ -1207,7 +1207,7 @@ class Agent {
 	
 	private static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc) throws IOException {
 		URLConnection conn = openConnection(url);
-		byte[] buf = new byte[4096];
+		byte[] buf = new byte[16384];
 		File file = File.createTempFile("download", "", dir);
 		cleanup.add(file::delete);
 		long readTotal = 0;

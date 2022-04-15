@@ -223,7 +223,7 @@ class Puppet {
 					case "title": {
 						r = () -> {
 							SwingUtilities.invokeLater(() -> {
-								title.setText("<html>"+arg+"</html>");
+								title.setText("<html><nobr>"+arg+"</nobr></html>");
 							});
 						};
 						break;
@@ -231,7 +231,7 @@ class Puppet {
 					case "subtitle": {
 						r = () -> {
 							SwingUtilities.invokeLater(() -> {
-								subtitle.setText("<html>"+arg+"</html>");
+								subtitle.setText("<html><nobr>"+arg+"</nobr></html>");
 							});
 						};
 						break;
@@ -341,7 +341,7 @@ class Puppet {
 	private static void buildUi() {
 		frame = new JFrame("unsup v"+Util.VERSION);
 		frame.setIconImage(logo);
-		frame.setSize(384, 128);
+		frame.setSize(512, 128);
 		frame.setLocationRelativeTo(null);
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		frame.addWindowListener(new WindowAdapter() {
@@ -379,6 +379,8 @@ class Puppet {
 		subtitle = new JLabel("");
 		subtitle.setForeground(colorSubtitle);
 		subtitle.setFont(subtitle.getFont().deriveFont(14f).deriveFont(Font.PLAIN));
+		subtitle.setPreferredSize(new Dimension(448, 18));
+		subtitle.setMaximumSize(new Dimension(448, 18));
 		inner.add(subtitle);
 		inner.add(Box.createVerticalGlue());
 		Box inset = Box.createVerticalBox();
