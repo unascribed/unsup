@@ -318,7 +318,7 @@ public class PackImportHandler {
 							super.paintIcon(c, g2);
 							g2.translate(-x, -y);
 						}
-
+						
 						@Override
 						protected boolean isIndeterminate(Component c) {
 							return false;
@@ -344,7 +344,7 @@ public class PackImportHandler {
 						super.paintIcon(c, g2);
 						g2.translate(-x, -y);
 					}
-
+					
 					@Override
 					protected boolean isIndeterminate(Component c) {
 						return f == lstate.root;
@@ -368,12 +368,12 @@ public class PackImportHandler {
 			public void mousePressed(MouseEvent e) {
 				mouseHappens(e);
 			}
-
+			
 			@Override
 			public void mouseReleased(MouseEvent e) {
 				mouseHappens(e);
 			}
-
+			
 			@Override
 			public void mouseClicked(MouseEvent e) {
 				if (e.getButton() == MouseEvent.BUTTON1) {
@@ -398,11 +398,11 @@ public class PackImportHandler {
 							}
 							tree.repaint();
 						}
-
+						
 					}
 				}
 			}
-
+			
 			private void mouseHappens(MouseEvent e) {
 				if (e.isPopupTrigger()) {
 					int row = tree.getRowForLocation(e.getX(), e.getY());
@@ -465,14 +465,15 @@ public class PackImportHandler {
 					um.hash_function = Creator.DEFAULT_HASH_FUNCTION;
 					um.dirty = true;
 					Path root = lstate.selected.toPath();
+					Set<String> newPaths = new HashSet<>();
 					Files.walkFileTree(root, new FileVisitor<Path>() {
-
+						
 						@Override
 						public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
 							if (lstate.unchecked.contains(dir.toFile())) return FileVisitResult.SKIP_SUBTREE;
 							return FileVisitResult.CONTINUE;
 						}
-
+						
 						@Override
 						public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
 							File f = file.toFile();
@@ -498,6 +499,7 @@ public class PackImportHandler {
 									byte[] digest = md.digest();
 									String hexDigest = Util.toHexString(digest);
 									UpdateManifest.Change change = new UpdateManifest.Change();
+									newPaths.add(path);
 									change.path = path;
 									change.from_hash = null;
 									change.from_size = 0;
@@ -521,17 +523,39 @@ public class PackImportHandler {
 							}
 							return FileVisitResult.CONTINUE;
 						}
-
+						
 						@Override
 						public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
 							return FileVisitResult.CONTINUE;
 						}
-
+						
 						@Override
 						public FileVisitResult postVisitDirectory(Path dir, IOException exc) throws IOException {
 							return FileVisitResult.CONTINUE;
 						}
 					});
+					Map<String, UpdateManifest.Change> currentState = new HashMap<>();
+					for (UpdateManifest past : Creator.state.updateManifests.values()) {
+						for (UpdateManifest.Change ch : past.changes) {
+							if (ch.to_hash == null) {
+								currentState.remove(ch.path);
+							} else {
+								currentState.put(ch.path, ch);
+							}
+						}
+					}
+					for (Map.Entry<String, UpdateManifest.Change> en : currentState.entrySet()) {
+						if (!newPaths.contains(en.getKey())) {
+							UpdateManifest.Change prev = en.getValue();
+							UpdateManifest.Change ch = new UpdateManifest.Change();
+							ch.path = en.getKey();
+							ch.from_hash = en.getValue().to_hash;
+							ch.from_size = en.getValue().to_size;
+							ch.to_hash = null;
+							ch.to_size = 0;
+							um.changes.add(ch);
+						}
+					}
 					if (um.changes.isEmpty()) {
 						SwingUtilities.invokeLater(() -> loader.dispose());
 						JOptionPane.showMessageDialog(Creator.frame, "<html><b>Found no changes during import.</b><br/>Cowardly refusing to create an empty version.</html>", "No changes found", JOptionPane.WARNING_MESSAGE);
