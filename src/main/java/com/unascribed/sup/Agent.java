@@ -5,6 +5,7 @@ import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -167,10 +168,10 @@ class Agent {
 			
 			tellPuppet(":subtitle="+config.get("subtitle", ""));
 			// we don't want to flash a window on the screen if things aren't going slow, so we tell
-			// the puppet to wait 250ms before actually making the window visible, and assign an
+			// the puppet to wait 750ms before actually making the window visible, and assign an
 			// identifier to our order so we can belay it later if we finished before the timer
 			// expired
-			tellPuppet("[openTimeout]250:visible=true");
+			tellPuppet("[openTimeout]750:visible=true");
 
 			
 			updateTitle("Checking for updates...", false);
@@ -603,166 +604,176 @@ class Agent {
 			state.put("flavor", ourFlavor);
 			saveJson(stateFile, state);
 		}
-		boolean bootstrapped = false;
+		boolean bootstrapping = false;
 		if (ourVersion == null) {
+			bootstrapping = true;
 			log("INFO", "Update available! We have nothing, they have "+theirVersion);
-			JsonObject bootstrap = loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
-			checkManifestFlavor(bootstrap, "bootstrap", IntPredicates.equals(1));
-			Version bootstrapVersion = Version.fromJson(bootstrap.getObject("version"));
-			if (bootstrapVersion == null) throw new IOException("Bootstrap manifest is missing version field");
-			if (bootstrapVersion.code < theirVersion.code) {
-				log("WARN", "Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
+			JsonObject bootstrap = null;
+			try {
+				bootstrap = loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
+			} catch (FileNotFoundException e) {
+				log("INFO", "Bootstrap manifest missing, will have to retrieve and collapse every update");
 			}
-			HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
-			warnIfInsecure(func);
-			updateTitle("Bootstrapping...", false);
-			long progressDenom = 0;
-			class FileToDownload { String path; String hash; long size; String url; DownloadedFile df; File dest; }
-			List<FileToDownload> todo = new ArrayList<>();
-			for (Object o : bootstrap.getArray("files")) {
-				if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in files array is not an object");
-				JsonObject file = (JsonObject)o;
-				String path = file.getString("path");
-				if (path == null) throw new IOException("Entry in files array is missing path");
-				String hash = file.getString("hash");
-				if (hash == null) throw new IOException(path+" in files array is missing hash");
-				if (hash.length() != func.sizeInHexChars)  throw new IOException(path+" in files array hash "+hash+" is wrong length ("+hash.length()+" != "+func.sizeInHexChars+")");
-				long size = file.getLong("size", -1);
-				if (size < 0) throw new IOException(path+" in files array has invalid or missing size");
-				if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
-				String url = checkSchemeMismatch(src, file.getString("url"));
-				JsonArray envs = file.getArray("envs");
-				if (!arrayContains(envs, detectedEnv)) {
-					log("INFO", "Skipping "+path+" as it's not eligible for env "+detectedEnv);
-					continue;
+			if (bootstrap != null) {
+				checkManifestFlavor(bootstrap, "bootstrap", IntPredicates.equals(1));
+				Version bootstrapVersion = Version.fromJson(bootstrap.getObject("version"));
+				if (bootstrapVersion == null) throw new IOException("Bootstrap manifest is missing version field");
+				if (bootstrapVersion.code < theirVersion.code) {
+					log("WARN", "Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
 				}
-				JsonArray flavors = file.getArray("flavors");
-				if (flavors != null && !arrayContains(flavors, ourFlavor)) {
-					log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
-					continue;
-				}
-				FileToDownload ftd = new FileToDownload();
-				ftd.path = path;
-				ftd.hash = hash;
-				ftd.size = size;
-				ftd.url = url;
-				todo.add(ftd);
-				progressDenom += size;
-			}
-			File tmp = new File(".unsup-tmp");
-			if (!tmp.exists()) {
-				tmp.mkdirs();
-			}
-			updateTitle("Bootstrapping...", true);
-			final long progressDenomf = progressDenom;
-			AtomicLong progress = new AtomicLong();
-			Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
-			File wd = new File("");
-			AlertOption passOnePreload = null;
-			for (FileToDownload ftd : todo) {
-				tellPuppet(":subtitle=Downloading "+ftd.path);
-				URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
-				URL u;
-				if (ftd.url != null) {
-					u = new URL(ftd.url);
-				} else {
-					u = blobUrl;
-				}
-				File dest = new File(ftd.path);
-				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
-					throw new IOException("Refusing to download to a file outside of working directory: "+dest);
-				if (dest.exists()) {
-					if (dest.length() == ftd.size) {
-						String hash = hash(func, dest);
-						if (ftd.hash.equals(hash)) {
-							log("INFO", ftd.path+" already exists and the hash matches, keeping it and skipping download");
-							progress.addAndGet(ftd.size);
-							updateProgress.run();
-							continue;
-						} else {
-							log("INFO", ftd.path+" already exists but the hash doesn't match, redownloading it ("+hash+" != "+ftd.hash+")");
-						}
-					} else {
-						log("INFO", ftd.path+" already exists but the size doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
-					}
-					AlertOption resp;
-					if (passOnePreload == null) {
-						resp = openAlert("File conflict",
-								"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
-								AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
-						if (resp == AlertOption.NOTOALL) {
-							resp = passOnePreload = AlertOption.NO;
-						} else if (resp == AlertOption.YESTOALL) {
-							resp = passOnePreload = AlertOption.YES;
-						}
-					} else {
-						resp = passOnePreload;
-					}
-					if (resp == AlertOption.NO) {
+				HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
+				warnIfInsecure(func);
+				updateTitle("Bootstrapping...", false);
+				long progressDenom = 0;
+				class FileToDownload { String path; String hash; long size; String url; DownloadedFile df; File dest; }
+				List<FileToDownload> todo = new ArrayList<>();
+				for (Object o : bootstrap.getArray("files")) {
+					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in files array is not an object");
+					JsonObject file = (JsonObject)o;
+					String path = file.getString("path");
+					if (path == null) throw new IOException("Entry in files array is missing path");
+					String hash = file.getString("hash");
+					if (hash == null) throw new IOException(path+" in files array is missing hash");
+					if (hash.length() != func.sizeInHexChars)  throw new IOException(path+" in files array hash "+hash+" is wrong length ("+hash.length()+" != "+func.sizeInHexChars+")");
+					long size = file.getLong("size", -1);
+					if (size < 0) throw new IOException(path+" in files array has invalid or missing size");
+					if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
+					String url = checkSchemeMismatch(src, file.getString("url"));
+					JsonArray envs = file.getArray("envs");
+					if (!arrayContains(envs, detectedEnv)) {
+						log("INFO", "Skipping "+path+" as it's not eligible for env "+detectedEnv);
 						continue;
-					} else if (resp == AlertOption.CANCEL) {
-						log("INFO", "User cancelled error dialog! Exiting.");
-						exit(EXIT_USER_REQUEST);
-						return;
 					}
-				}
-				if (ftd.size == 0) {
-					ftd.dest = dest;
-					continue;
-				}
-				long origProgress = progress.get();
-				DownloadedFile df;
-				try {
-					log("INFO", "Downloading "+ftd.path+" from "+u);
-					df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, updateProgress, func);
-					if (!df.hash.equals(ftd.hash)) {
-						throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
+					JsonArray flavors = file.getArray("flavors");
+					if (flavors != null && !arrayContains(flavors, ourFlavor)) {
+						log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
+						continue;
 					}
-				} catch (Throwable t) {
+					FileToDownload ftd = new FileToDownload();
+					ftd.path = path;
+					ftd.hash = hash;
+					ftd.size = size;
+					ftd.url = url;
+					todo.add(ftd);
+					progressDenom += size;
+				}
+				File tmp = new File(".unsup-tmp");
+				if (!tmp.exists()) {
+					tmp.mkdirs();
+				}
+				updateTitle("Bootstrapping...", true);
+				final long progressDenomf = progressDenom;
+				AtomicLong progress = new AtomicLong();
+				Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
+				File wd = new File("");
+				AlertOption passOnePreload = null;
+				for (FileToDownload ftd : todo) {
+					tellPuppet(":subtitle=Downloading "+ftd.path);
+					URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
+					URL u;
 					if (ftd.url != null) {
-						t.printStackTrace();
-						progress.set(origProgress);
-						log("WARN", "Failed to download "+ftd.path+" from specified URL, trying again from "+blobUrl);
-						df = downloadToFile(blobUrl, tmp, ftd.size, progress::addAndGet, updateProgress, func);
+						u = new URL(ftd.url);
+					} else {
+						u = blobUrl;
+					}
+					File dest = new File(ftd.path);
+					if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
+						throw new IOException("Refusing to download to a file outside of working directory: "+dest);
+					if (dest.exists()) {
+						if (dest.length() == ftd.size) {
+							String hash = hash(func, dest);
+							if (ftd.hash.equals(hash)) {
+								log("INFO", ftd.path+" already exists and the hash matches, keeping it and skipping download");
+								progress.addAndGet(ftd.size);
+								updateProgress.run();
+								continue;
+							} else {
+								log("INFO", ftd.path+" already exists but the hash doesn't match, redownloading it ("+hash+" != "+ftd.hash+")");
+							}
+						} else {
+							log("INFO", ftd.path+" already exists but the size doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
+						}
+						AlertOption resp;
+						if (passOnePreload == null) {
+							resp = openAlert("File conflict",
+									"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
+									AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
+							if (resp == AlertOption.NOTOALL) {
+								resp = passOnePreload = AlertOption.NO;
+							} else if (resp == AlertOption.YESTOALL) {
+								resp = passOnePreload = AlertOption.YES;
+							}
+						} else {
+							resp = passOnePreload;
+						}
+						if (resp == AlertOption.NO) {
+							continue;
+						} else if (resp == AlertOption.CANCEL) {
+							log("INFO", "User cancelled error dialog! Exiting.");
+							exit(EXIT_USER_REQUEST);
+							return;
+						}
+					}
+					if (ftd.size == 0) {
+						ftd.dest = dest;
+						continue;
+					}
+					long origProgress = progress.get();
+					DownloadedFile df;
+					try {
+						log("INFO", "Downloading "+ftd.path+" from "+u);
+						df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, updateProgress, func);
 						if (!df.hash.equals(ftd.hash)) {
 							throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
 						}
-					} else {
-						throw t;
-					}
-				}
-				ftd.df = df;
-				ftd.dest = dest;
-			}
-			updateTitle("Bootstrapping...", false);
-			synchronized (dangerMutex) {
-				tellPuppet(":subtitle=Applying changes");
-				for (FileToDownload ftd : todo) {
-					if (ftd.dest == null) continue;
-					if (ftd.dest.getParentFile() != null) {
-						Files.createDirectories(ftd.dest.getParentFile().toPath());
-					}
-					if (ftd.size == 0) {
-						if (ftd.dest.exists()) {
-							try (FileOutputStream fos = new FileOutputStream(ftd.dest)) {
-								// open and then immediately close the file to overwrite it with nothing
+					} catch (Throwable t) {
+						if (ftd.url != null) {
+							t.printStackTrace();
+							progress.set(origProgress);
+							log("WARN", "Failed to download "+ftd.path+" from specified URL, trying again from "+blobUrl);
+							df = downloadToFile(blobUrl, tmp, ftd.size, progress::addAndGet, updateProgress, func);
+							if (!df.hash.equals(ftd.hash)) {
+								throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
 							}
 						} else {
-							ftd.dest.createNewFile();
+							throw t;
 						}
-					} else {
-						Files.move(ftd.df.file.toPath(), ftd.dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
 					}
+					ftd.df = df;
+					ftd.dest = dest;
 				}
-				state.put("current_version", bootstrapVersion.toJson());
-				saveJson(stateFile, state);
+				updateTitle("Bootstrapping...", false);
+				synchronized (dangerMutex) {
+					tellPuppet(":subtitle=Applying changes");
+					for (FileToDownload ftd : todo) {
+						if (ftd.dest == null) continue;
+						if (ftd.dest.getParentFile() != null) {
+							Files.createDirectories(ftd.dest.getParentFile().toPath());
+						}
+						if (ftd.size == 0) {
+							if (ftd.dest.exists()) {
+								try (FileOutputStream fos = new FileOutputStream(ftd.dest)) {
+									// open and then immediately close the file to overwrite it with nothing
+								}
+							} else {
+								ftd.dest.createNewFile();
+							}
+						} else {
+							Files.move(ftd.df.file.toPath(), ftd.dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
+						}
+					}
+					state.put("current_version", bootstrapVersion.toJson());
+					saveJson(stateFile, state);
+				}
+				ourVersion = bootstrapVersion;
+				log("INFO", "Bootstrap successful!");
+				updated = true;
+			} else {
+				ourVersion = new Version("null", 0);
 			}
-			ourVersion = bootstrapVersion;
-			log("INFO", "Bootstrap successful!");
-			updated = true;
 		}
 		if (theirVersion.code > ourVersion.code) {
-			if (!bootstrapped) {
+			if (!bootstrapping) {
 				log("INFO", "Update available! We have "+ourVersion+", they have "+theirVersion);
 				AlertOption updateResp = openAlert("Update available",
 						"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
@@ -780,7 +791,7 @@ class Agent {
 				DownloadedFile df; File dest;
 				boolean moveAside;
 			}
-			updateTitle("Updating...", false);
+			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 			tellPuppet(":subtitle=Calculating update");
 			Map<String, Change> changesByPath = new LinkedHashMap<>();
 			boolean yappedAboutConsistency = false;
@@ -946,7 +957,7 @@ class Agent {
 			final long progressDenomf = progressDenom;
 			AtomicLong progress = new AtomicLong();
 			Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
-			updateTitle("Updating...", true);
+			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", true);
 			for (Change c : changesByPath.values()) {
 				if (c.toSize == 0 || c.dest == null) {
 					continue;
@@ -982,7 +993,7 @@ class Agent {
 				}
 				c.df = df;
 			}
-			updateTitle("Updating...", false);
+			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 			synchronized (dangerMutex) {
 				tellPuppet(":subtitle=Applying changes. Do not force close the updater.");
 				for (Change c : changesByPath.values()) {
@@ -1187,6 +1198,7 @@ class Agent {
 		if (conn instanceof HttpURLConnection) {
 			HttpURLConnection http = (HttpURLConnection)conn;
 			if (http.getResponseCode() != 200) {
+				if (http.getResponseCode() == 404 || http.getResponseCode() == 410) throw new FileNotFoundException();
 				byte[] b = Util.collectLimited(http.getErrorStream(), 512);
 				String s = b == null ? "(response too long)" : new String(b, StandardCharsets.UTF_8);
 				throw new IOException("Received non-200 response from server for "+url+": "+http.getResponseCode()+"\n"+s);
