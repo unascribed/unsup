@@ -1,12 +1,15 @@
 buildscript {
 	repositories {
-		jcenter()
+		mavenCentral()
+		gradlePluginPortal()
 	}
 	dependencies {
 		classpath 'com.github.jengelman.gradle.plugins:shadow:6.1.0'
 		classpath 'org.ow2.asm:asm:9.0'
 		classpath 'org.ow2.asm:asm-tree:9.0'
 		classpath 'org.ow2.asm:asm-commons:9.0'
+		// just used for shrinking. i've used proguard a lot and trust it
+		classpath 'com.guardsquare:proguard-gradle:7.2.2'
 	}
 }
 
@@ -17,7 +20,7 @@ apply plugin: 'maven-publish'
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup'
-version = '0.0.7'
+version = '0.1.0'
 
 sourceCompatibility = targetCompatibility = 8
 
@@ -25,31 +28,69 @@ repositories {
 	mavenCentral()
 }
 
+configurations {
+	shade
+	compile.extendsFrom shade
+}
+
 dependencies {
-	compile 'com.grack:nanojson:1.6'
-	shadow  'com.grack:nanojson:1.6'
-	
-	compile 'net.i2p.crypto:eddsa:0.3.0'
-	shadow  'net.i2p.crypto:eddsa:0.3.0'
+	shade 'com.grack:nanojson:1.6'
+	shade 'net.i2p.crypto:eddsa:0.3.0'
+	shade('com.squareup.okhttp3:okhttp:4.9.3') {
+		exclude group: 'org.jetbrains'
+		exclude module: 'kotlin-stdlib-common'
+	}
 }
 
 jar {
+	classifier 'slim'
+}
+
+shadowJar {
+	classifier 'fat'
+	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson"].each {
+		relocate it, 'com.unascribed.sup.lib.'+it
+	}
+}
+
+task proguard(type: proguard.gradle.ProGuardTask) {
+	dependsOn shadowJar
+	injars shadowJar.archivePath
+	libraryjars files(
+		System.properties["java.home"]+"/jmods/java.base.jmod", // everyone needs java base
+		System.properties["java.home"]+"/jmods/java.desktop.jmod", // used by the puppet
+		System.properties["java.home"]+"/jmods/java.management.jmod", // for the agent
+	)
+	outjars 'build/tmp/proguard.jar'
+	
+	// releasing open source programs as obfuscated jars is bad praxis
+	// (yes, pg's optimization is a form of obfuscation! let the JIT handle that)
+	dontoptimize
+	dontobfuscate
+	
+	keep 'class com.unascribed.sup.Agent { *; }'
+	keep 'class com.unascribed.sup.Puppet { *; }'
+	keep 'class com.unascribed.sup.Unsup { *; }'
+	
+	keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
+
+	dontwarn 'com.unascribed.sup.lib.**'
+	
+	verbose
+}
+
+task proguardJar(type: Jar) {
+	dependsOn proguard
+	from(zipTree('build/tmp/proguard.jar'))
+	exclude 'META-INF/**'
+	exclude '**/*.kotlin_metadata'
+	exclude '**/*.kotlin_builtins'
 	manifest {
 		attributes (
 			'Main-Class': 'com.unascribed.sup.Agent',
 			'Premain-Class': 'com.unascribed.sup.Agent'
 		)
 	}
-}
-
-// collapse to one package so everything can be made package-private
-shadowJar {
-	relocate 'com.grack.nanojson', 'com.unascribed.sup'
-	relocate 'net.i2p.crypto.eddsa.math.bigint', 'com.unascribed.sup'
-	relocate 'net.i2p.crypto.eddsa.math.ed25519', 'com.unascribed.sup'
-	relocate 'net.i2p.crypto.eddsa.math', 'com.unascribed.sup'
-	relocate 'net.i2p.crypto.eddsa.spec', 'com.unascribed.sup'
-	relocate 'net.i2p.crypto.eddsa', 'com.unascribed.sup'
 }
 
 import java.io.File;
@@ -69,16 +110,17 @@ import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
 
 task amendClassPrivacy {
+	dependsOn proguardJar
 	doFirst {
 		File tmp = new File("build/tmp/amended.jar");
 		ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tmp));
-		ZipFile zf = new ZipFile(shadowJar.archivePath);
+		ZipFile zf = new ZipFile(proguardJar.archivePath);
 		for (ZipEntry ze : Collections.list(zf.entries())) {
 			if (ze.getName().equals("com/unascribed/sup/PublicInAgent.class")) continue;
 			ZipEntry copy = new ZipEntry(ze.getName());
 			copy.setMethod(ze.getMethod());
 			zos.putNextEntry(copy);
-			if (ze.getName().endsWith(".class")) {
+			if (ze.getName().endsWith(".class") && ze.getName().startsWith("com/unascribed/sup/") && ze.getName().lastIndexOf('/') == 18) {
 				ClassReader cr = new ClassReader(zf.getInputStream(ze));
 				ClassNode clazz = new ClassNode();
 				cr.accept(clazz, 0);
@@ -108,18 +150,34 @@ task amendClassPrivacy {
 		}
 		zf.close();
 		zos.close();
-		tmp.renameTo(shadowJar.archivePath);
+		tmp.renameTo(proguardJar.archivePath);
 	}
 }
 
-shadowJar.finalizedBy amendClassPrivacy
+build.dependsOn amendClassPrivacy
 
 publishing {
+	repositories {
+		if (project.hasProperty("publish-username")) {
+			maven {
+				url "https://repo-api.sleeping.town/"
+				credentials {
+					username project.hasProperty("publish-username") ? project.getProperty("publish-username") : null
+					password project.hasProperty("publish-password") ? project.getProperty("publish-password") : null
+				}
+			}
+		}
+		maven {
+			url file('build/maven').toURI().toString()
+		}
+	}
 	publications {
 		maven(MavenPublication) {
+			groupId = 'com.unascribed'
 			artifactId = 'unsup'
+			version = project.version
 
-			from components.java
+			artifact shadowJar
 		}
 	}
 }
