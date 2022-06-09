@@ -1358,6 +1358,8 @@ class Agent {
 				er.run();
 			} catch (Throwable t) {}
 		}
+		okhttp.dispatcher().executorService().shutdown();
+		okhttp.connectionPool().evictAll();
 		cleanup = null;
 	}
 	
