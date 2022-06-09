@@ -864,7 +864,7 @@ class Agent {
 					if (changesByPath.containsKey(path)) {
 						Change c = changesByPath.get(path);
 						if (c.toHashFunc == func) {
-							if (!c.toHash.equals(fromHash) || c.toSize != fromSize) {
+							if (!Objects.equals(c.toHash, fromHash) || c.toSize != fromSize) {
 								throw new IOException("Bad update: "+path+" in "+c.toCode+" specified to become "+c.toHash+" size "+c.toSize+", but "+code+" expects it to have been "+fromHash+" size "+fromSize);
 							}
 						} else if (!yappedAboutConsistency) {
