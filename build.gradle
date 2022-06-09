@@ -13,6 +13,22 @@ buildscript {
 	}
 }
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipException;
+import java.util.zip.ZipFile;
+import java.util.zip.ZipOutputStream;
+
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.tree.AnnotationNode;
+import org.objectweb.asm.tree.ClassNode;
+
 apply plugin: 'com.github.johnrengelman.shadow'
 apply plugin: 'java-library'
 apply plugin: 'maven-publish'
@@ -30,7 +46,7 @@ repositories {
 
 configurations {
 	shade
-	compile.extendsFrom shade
+	implementation.extendsFrom shade
 }
 
 dependencies {
@@ -71,17 +87,75 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 	keep 'class com.unascribed.sup.Agent { *; }'
 	keep 'class com.unascribed.sup.Puppet { *; }'
 	keep 'class com.unascribed.sup.Unsup { *; }'
+	keep 'class com.unascribed.sup.PublicInAgent { *; }'
 	
 	keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
 
 	dontwarn 'com.unascribed.sup.lib.**'
 	
+	keepattributes '*'
+	
 	verbose
 }
 
-task proguardJar(type: Jar) {
+// merge everything into one package so it can be package-private
+task proguardAgain(type: proguard.gradle.ProGuardTask) {
+	doFirst {
+		file('build/tmp/mapping.map').withWriter {
+			ZipFile zf = new ZipFile("build/tmp/proguard.jar");
+			for (ZipEntry ze : Collections.list(zf.entries())) {
+				if (ze.getName().startsWith("com/unascribed/sup/lib/") && ze.getName().endsWith(".class")) {
+					def inName = ze.getName().substring(0, ze.getName().length()-6).replace('/', '.')
+					def outName = inName.replace('.', '_').replace("com_unascribed_sup_lib_", 'com.unascribed.sup.$lib$$')
+					it.write("${inName} -> ${outName}:\n")
+				}
+			}
+		}
+	}
+
 	dependsOn proguard
-	from(zipTree('build/tmp/proguard.jar'))
+	injars 'build/tmp/proguard.jar'
+	libraryjars files(
+		System.properties["java.home"]+"/jmods/java.base.jmod", // everyone needs java base
+		System.properties["java.home"]+"/jmods/java.desktop.jmod", // used by the puppet
+		System.properties["java.home"]+"/jmods/java.management.jmod", // for the agent
+	)
+	outjars 'build/tmp/proguard2.jar'
+	
+	dontoptimize
+	
+	// prevent our classes from being renamed
+	keep 'class com.unascribed.sup.* { *; }'
+	
+	// prevent members from being renamed
+	keepclassmembers(allowshrinking:true, allowoptimization:true, 'class * { *; }')
+
+	dontwarn 'com.unascribed.sup.lib.**'
+	
+	flattenpackagehierarchy 'com.unascribed.sup'
+	
+	keepattributes '*'
+	
+	applymapping 'build/tmp/mapping.map'
+	
+}
+
+task proguardJar(type: Jar) {
+	dependsOn proguardAgain
+	from(zipTree('build/tmp/proguard2.jar'))
+	
+	eachFile {
+		if (it.path.equals('com/unascribed/sup/lib/okhttp3/internal/publicsuffix/publicsuffixes.gz')) {
+			it.path = 'com/unascribed/sup/publicsuffixes.gz'
+		}
+		if (it.path.equals('com/unascribed/sup/lib/okhttp3/internal/publicsuffix/NOTICE')) {
+			it.path = 'com/unascribed/sup/publicsuffixes_notice.txt'
+		}
+	}
+	
+	exclude 'com/unascribed/sup/vlib_okhttp3_internal_platform_android*'
+	exclude 'com/unascribed/sup/vlib_okhttp3_internal_platform_Android*'
+	
 	exclude 'META-INF/**'
 	exclude '**/*.kotlin_metadata'
 	exclude '**/*.kotlin_builtins'
@@ -92,22 +166,6 @@ task proguardJar(type: Jar) {
 		)
 	}
 }
-
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.util.Collections;
-import java.util.Iterator;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipException;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
-
-import org.objectweb.asm.ClassReader;
-import org.objectweb.asm.ClassWriter;
-import org.objectweb.asm.Opcodes;
-import org.objectweb.asm.tree.AnnotationNode;
-import org.objectweb.asm.tree.ClassNode;
 
 task amendClassPrivacy {
 	dependsOn proguardJar
@@ -138,12 +196,10 @@ task amendClassPrivacy {
 				if (amend) {
 					clazz.access &= ~Opcodes.ACC_PUBLIC;
 					clazz.access &= ~Opcodes.ACC_PROTECTED;
-					ClassWriter cw = new ClassWriter(0);
-					clazz.accept(cw);
-					zos.write(cw.toByteArray());
-				} else {
-					zf.getInputStream(ze).transferTo(zos);
 				}
+				ClassWriter cw = new ClassWriter(0);
+				clazz.accept(cw);
+				zos.write(cw.toByteArray());
 			} else {
 				zf.getInputStream(ze).transferTo(zos);
 			}
