@@ -116,7 +116,7 @@ class Agent {
 				config = mergePreset(config, config.get("preset"));
 			}
 			if (config.getBoolean("use_envs", false)) {
-				detectEnv(standalone ? arg : null);
+				detectEnv(standalone ? config.get("force_env", arg) : null);
 			}
 			
 			boolean noGui = determineNoGui();
@@ -606,7 +606,7 @@ class Agent {
 					exit(EXIT_CONFIG_ERROR);
 					return;
 				}
-				String id = namesToIds.get(flavor);
+				String id = namesToIds.getOrDefault(flavor, flavor);
 				log("INFO", "Chose flavor "+id);
 				ourFlavor = id;
 			}
