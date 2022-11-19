@@ -116,7 +116,7 @@ class Agent {
 				config = mergePreset(config, config.get("preset"));
 			}
 			if (config.getBoolean("use_envs", false)) {
-				detectEnv(standalone ? config.get("force_env", arg) : null);
+				detectEnv(config.get("force_env", arg));
 			}
 			
 			boolean noGui = determineNoGui();
@@ -677,85 +677,115 @@ class Agent {
 				File wd = new File("");
 				AlertOption[] passOnePreload = new AlertOption[1];
 				ExecutorService svc = Executors.newFixedThreadPool(6);
+				Set<String> files = new HashSet<>();
 				List<Future<?>> futures = new ArrayList<>();
+				Runnable updateSubtitle = () -> {
+					if (files.size() == 0) {
+						tellPuppet(":subtitle=Downloading...");
+					} else if (files.size() == 1) {
+						tellPuppet(":subtitle=Downloading "+files.iterator().next());
+					} else {
+						StringBuilder sb = new StringBuilder();
+						boolean first = true;
+						for (String s : files) {
+							if (first) {
+								first = false;
+							} else {
+								sb.append(", ");
+							}
+							sb.append(s.substring(s.lastIndexOf('/')+1));
+						}
+						tellPuppet(":subtitle=Downloading "+sb);
+					}
+				};
 				for (FileToDownload ftd : todo) {
 					futures.add(svc.submit(() -> {
-						tellPuppet(":subtitle=Downloading "+ftd.path);
-						URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
-						URL u;
-						if (ftd.url != null) {
-							u = new URL(ftd.url);
-						} else {
-							u = blobUrl;
+						synchronized (files) {
+							files.add(ftd.path);
+							updateSubtitle.run();
 						}
-						File dest = new File(ftd.path);
-						if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
-							throw new IOException("Refusing to download to a file outside of working directory: "+dest);
-						if (dest.exists()) {
-							if (dest.length() == ftd.size) {
-								String hash = hash(func, dest);
-								if (ftd.hash.equals(hash)) {
-									log("INFO", ftd.path+" already exists and the hash matches, keeping it and skipping download");
-									progress.addAndGet(ftd.size);
-									updateProgress.run();
-									return null;
-								} else {
-									log("INFO", ftd.path+" already exists but the hash doesn't match, redownloading it ("+hash+" != "+ftd.hash+")");
-								}
+						try {
+							URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
+							URL u;
+							if (ftd.url != null) {
+								u = new URL(ftd.url);
 							} else {
-								log("INFO", ftd.path+" already exists but the size doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
+								u = blobUrl;
 							}
-							AlertOption resp;
-							synchronized (passOnePreload) {
-								if (passOnePreload[0] == null) {
-									resp = openAlert("File conflict",
-											"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
-											AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
-									if (resp == AlertOption.NOTOALL) {
-										passOnePreload[0] = resp = AlertOption.NO;
-									} else if (resp == AlertOption.YESTOALL) {
-										passOnePreload[0] = resp = AlertOption.YES;
+							File dest = new File(ftd.path);
+							if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
+								throw new IOException("Refusing to download to a file outside of working directory: "+dest);
+							if (dest.exists()) {
+								if (dest.length() == ftd.size) {
+									String hash = hash(func, dest);
+									if (ftd.hash.equals(hash)) {
+										log("INFO", ftd.path+" already exists and the hash matches, keeping it and skipping download");
+										progress.addAndGet(ftd.size);
+										updateProgress.run();
+										return null;
+									} else {
+										log("INFO", ftd.path+" already exists but the hash doesn't match, redownloading it ("+hash+" != "+ftd.hash+")");
 									}
 								} else {
-									resp = passOnePreload[0];
+									log("INFO", ftd.path+" already exists but the size doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
+								}
+								AlertOption resp;
+								synchronized (passOnePreload) {
+									if (passOnePreload[0] == null) {
+										resp = openAlert("File conflict",
+												"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
+												AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
+										if (resp == AlertOption.NOTOALL) {
+											passOnePreload[0] = resp = AlertOption.NO;
+										} else if (resp == AlertOption.YESTOALL) {
+											passOnePreload[0] = resp = AlertOption.YES;
+										}
+									} else {
+										resp = passOnePreload[0];
+									}
+								}
+								if (resp == AlertOption.NO) {
+									return null;
+								} else if (resp == AlertOption.CANCEL) {
+									log("INFO", "User cancelled error dialog! Exiting.");
+									exit(EXIT_USER_REQUEST);
+									return null;
 								}
 							}
-							if (resp == AlertOption.NO) {
-								return null;
-							} else if (resp == AlertOption.CANCEL) {
-								log("INFO", "User cancelled error dialog! Exiting.");
-								exit(EXIT_USER_REQUEST);
+							if (ftd.size == 0) {
+								ftd.dest = dest;
 								return null;
 							}
-						}
-						if (ftd.size == 0) {
-							ftd.dest = dest;
-							return null;
-						}
-						long origProgress = progress.get();
-						DownloadedFile df;
-						try {
-							log("INFO", "Downloading "+ftd.path+" from "+u);
-							df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, updateProgress, func);
-							if (!df.hash.equals(ftd.hash)) {
-								throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
-							}
-						} catch (Throwable t) {
-							if (ftd.url != null) {
-								t.printStackTrace();
-								progress.set(origProgress);
-								log("WARN", "Failed to download "+ftd.path+" from specified URL, trying again from "+blobUrl);
-								df = downloadToFile(blobUrl, tmp, ftd.size, progress::addAndGet, updateProgress, func);
+							long origProgress = progress.get();
+							DownloadedFile df;
+							try {
+								log("INFO", "Downloading "+ftd.path+" from "+u);
+								df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, updateProgress, func);
 								if (!df.hash.equals(ftd.hash)) {
 									throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
 								}
-							} else {
-								throw t;
+							} catch (Throwable t) {
+								if (ftd.url != null) {
+									t.printStackTrace();
+									progress.set(origProgress);
+									log("WARN", "Failed to download "+ftd.path+" from specified URL, trying again from "+blobUrl);
+									df = downloadToFile(blobUrl, tmp, ftd.size, progress::addAndGet, updateProgress, func);
+									if (!df.hash.equals(ftd.hash)) {
+										throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
+									}
+								} else {
+									throw t;
+								}
+							}
+							ftd.df = df;
+							ftd.dest = dest;
+							return null;
+						} finally {
+							synchronized (files) {
+								files.remove(ftd.path);
+								updateSubtitle.run();
 							}
 						}
-						ftd.df = df;
-						ftd.dest = dest;
-						return null;
 					}));
 				}
 				svc.shutdown();
@@ -988,43 +1018,73 @@ class Agent {
 			Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
 			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", true);
 			ExecutorService svc = Executors.newFixedThreadPool(6);
+			Set<String> files = new HashSet<>();
 			List<Future<?>> futures = new ArrayList<>();
+			Runnable updateSubtitle = () -> {
+				if (files.size() == 0) {
+					tellPuppet(":subtitle=Downloading...");
+				} else if (files.size() == 1) {
+					tellPuppet(":subtitle=Downloading "+files.iterator().next());
+				} else {
+					StringBuilder sb = new StringBuilder();
+					boolean first = true;
+					for (String s : files) {
+						if (first) {
+							first = false;
+						} else {
+							sb.append(", ");
+						}
+						sb.append(s.substring(s.lastIndexOf('/')+1));
+					}
+					tellPuppet(":subtitle=Downloading "+sb);
+				}
+			};
 			for (Change c : changesByPath.values()) {
 				if (c.toSize == 0 || c.dest == null) {
 					continue;
 				}
 				futures.add(svc.submit(() -> {
-					tellPuppet(":subtitle=Downloading "+c.path);
-					URL blobUrl = new URL(src, "blobs/"+c.toHash.substring(0, 2)+"/"+c.toHash);
-					URL u;
-					if (c.url != null) {
-						u = new URL(c.url);
-					} else {
-						u = blobUrl;
+					synchronized (files) {
+						files.add(c.path);
+						updateSubtitle.run();
 					}
-					long origProgress = progress.get();
-					DownloadedFile df;
 					try {
-						log("INFO", "Downloading "+c.path+" from "+u);
-						df = downloadToFile(u, tmp, c.toSize, progress::addAndGet, updateProgress, c.toHashFunc);
-						if (!df.hash.equals(c.toHash)) {
-							throw new IOException("Hash mismatch on downloaded file for "+c.path+" from "+u+" - expected "+c.toHash+", got "+df.hash);
-						}
-					} catch (Throwable t) {
+						URL blobUrl = new URL(src, "blobs/"+c.toHash.substring(0, 2)+"/"+c.toHash);
+						URL u;
 						if (c.url != null) {
-							t.printStackTrace();
-							progress.set(origProgress);
-							log("WARN", "Failed to download "+c.path+" from specified URL, trying again from "+blobUrl);
-							df = downloadToFile(blobUrl, tmp, c.toSize, progress::addAndGet, updateProgress, c.toHashFunc);
+							u = new URL(c.url);
+						} else {
+							u = blobUrl;
+						}
+						long origProgress = progress.get();
+						DownloadedFile df;
+						try {
+							log("INFO", "Downloading "+c.path+" from "+u);
+							df = downloadToFile(u, tmp, c.toSize, progress::addAndGet, updateProgress, c.toHashFunc);
 							if (!df.hash.equals(c.toHash)) {
 								throw new IOException("Hash mismatch on downloaded file for "+c.path+" from "+u+" - expected "+c.toHash+", got "+df.hash);
 							}
-						} else {
-							throw t;
+						} catch (Throwable t) {
+							if (c.url != null) {
+								t.printStackTrace();
+								progress.set(origProgress);
+								log("WARN", "Failed to download "+c.path+" from specified URL, trying again from "+blobUrl);
+								df = downloadToFile(blobUrl, tmp, c.toSize, progress::addAndGet, updateProgress, c.toHashFunc);
+								if (!df.hash.equals(c.toHash)) {
+									throw new IOException("Hash mismatch on downloaded file for "+c.path+" from "+u+" - expected "+c.toHash+", got "+df.hash);
+								}
+							} else {
+								throw t;
+							}
+						}
+						c.df = df;
+						return null;
+					} finally {
+						synchronized (files) {
+							files.remove(c.path);
+							updateSubtitle.run();
 						}
 					}
-					c.df = df;
-					return null;
 				}));
 			}
 			svc.shutdown();

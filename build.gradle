@@ -36,7 +36,7 @@ apply plugin: 'maven-publish'
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup'
-version = '0.1.1'
+version = '0.1.2'
 
 sourceCompatibility = targetCompatibility = 8
 
