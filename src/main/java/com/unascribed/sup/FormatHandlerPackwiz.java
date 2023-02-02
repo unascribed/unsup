@@ -169,6 +169,12 @@ public class FormatHandlerPackwiz extends FormatHandler {
 				} else {
 					pfx = "";
 				}
+				Toml option = metafile.getTable("option");
+				if (option != null && option.getBoolean("optional", false) && !option.getBoolean("default", false)) {
+					// TODO
+					Agent.log("INFO", "Skipping "+path+" as it's optional and not enabled by default");
+					continue;
+				}
 				path = pfx+metafile.getString("filename");
 				metafileFiles.put(mfpath, path);
 				toDelete.remove(path);
