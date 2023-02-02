@@ -21,14 +21,17 @@ import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -46,6 +49,9 @@ import com.unascribed.sup.PuppetHandler.AlertOptionType;
 import com.unascribed.sup.QDIni.QDIniException;
 
 import net.i2p.crypto.eddsa.EdDSAPublicKey;
+import okhttp3.Cookie;
+import okhttp3.CookieJar;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 
 class Agent {
@@ -62,6 +68,48 @@ class Agent {
 	
 	static final OkHttpClient okhttp = new OkHttpClient.Builder()
 			.connectTimeout(5, TimeUnit.SECONDS)
+			.cookieJar(new CookieJar() {
+				private final List<Cookie> cookies = new ArrayList<>();
+				
+				@Override
+				public synchronized void saveFromResponse(HttpUrl url, List<Cookie> cookies) {
+					Iterator<Cookie> iter = this.cookies.iterator();
+					while (iter.hasNext()) {
+						Cookie c1 = iter.next();
+						if (c1.expiresAt() < System.currentTimeMillis()) {
+							iter.remove();
+						} else {
+							for (Cookie c2 : cookies) {
+								if (c2.expiresAt() < System.currentTimeMillis()) continue;
+								if (Objects.equals(c1.name(), c2.name())
+											&& Objects.equals(c1.domain(), c2.domain())
+											&& Objects.equals(c1.path(), c2.path())
+											&& c1.secure() == c2.secure()
+											&& c1.hostOnly() == c2.hostOnly()
+										) {
+									iter.remove();
+								}
+							}
+						}
+					}
+					this.cookies.addAll(cookies);
+				}
+				
+				@Override
+				public synchronized List<Cookie> loadForRequest(HttpUrl url) {
+					List<Cookie> out = new ArrayList<>();
+					Iterator<Cookie> iter = cookies.iterator();
+					while (iter.hasNext()) {
+						Cookie c = iter.next();
+						if (c.expiresAt() < System.currentTimeMillis()) {
+							iter.remove();
+						} else if (c.matches(url)) {
+							out.add(c);
+						}
+					}
+					return out;
+				}
+			})
 			.build();
 	
 	public static void main(String[] args) throws UnsupportedEncodingException {
@@ -161,7 +209,7 @@ class Agent {
 				if (fmt == SourceFormat.UNSUP) {
 					res = FormatHandlerUnsup.check(src);
 				} else if (fmt == SourceFormat.PACKWIZ) {
-					// TODO
+					res = FormatHandlerPackwiz.check(src);
 				}
 				if (res != null) {
 					sourceVersion = res.ourVersion.name;
@@ -253,23 +301,23 @@ class Agent {
 				boolean normalConflict = false;
 				long size = dest.length();
 				if (from.hash == null) {
-					if (to.size == size && to.hash.equals(IOHelper.hash(to.func, dest))) {
+					if (to.sizeMatches(size) && to.hash.equals(IOHelper.hash(to.func, dest))) {
 						log("INFO", path+" was created in this update and locally, but the local version matches the update. Skipping");
 						continue;
 					}
 					conflictType = ConflictType.LOCAL_AND_REMOTE_CREATED;
-				} else if (size == from.size) {
+				} else if (from.sizeMatches(size)) {
 					String hash = IOHelper.hash(from.func, dest);
 					if (from.hash.equals(hash)) {
 						log("INFO", path+" matches the expected from hash");
-					} else if (to.size == size && to.hash.equals(from.func == to.func ? hash : IOHelper.hash(to.func, dest))) {
+					} else if (to.sizeMatches(size) && to.hash.equals(from.func == to.func ? hash : IOHelper.hash(to.func, dest))) {
 						log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
 						continue;
 					} else {
 						log("INFO", "CONFLICT: "+path+" doesn't match the expected from hash ("+hash+" != "+from.hash+")");
 						normalConflict = true;
 					}
-				} else if (to.size == size && to.hash.equals(IOHelper.hash(to.func, dest))) {
+				} else if (to.sizeMatches(size) && to.hash.equals(IOHelper.hash(to.func, dest))) {
 					log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
 					continue;
 				} else {
@@ -321,7 +369,7 @@ class Agent {
 					moveAside.add(path);
 				}
 			}
-			progressDenom += to.size;
+			progressDenom += to.size == -1 ? 1 : to.size;
 		}
 		File tmp = new File(".unsup-tmp");
 		if (!tmp.exists()) {
@@ -368,10 +416,20 @@ class Agent {
 				}
 				try {
 					long origProgress = progress.get();
+					if (f.primerUrl != null) {
+						try (InputStream in = IOHelper.get(f.primerUrl, f.hostile)) {
+							byte[] buf = new byte[8192];
+							while (true) {
+								if (in.read(buf) == -1) break;
+							}
+						}
+						Thread.sleep(2000+ThreadLocalRandom.current().nextInt(1200));
+					}
 					DownloadedFile df;
 					try {
 						log("INFO", "Downloading "+path+" from "+f.url);
-						df = IOHelper.downloadToFile(f.url, tmp, to.size, progress::addAndGet, updateProgress, to.func);
+						df = IOHelper.downloadToFile(f.url, tmp, to.size, to.size == -1 ? l -> {} : progress::addAndGet, updateProgress, to.func, f.hostile);
+						if (to.size == -1) progress.incrementAndGet();
 						if (!df.hash.equals(to.hash)) {
 							throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.url+" - expected "+to.hash+", got "+df.hash);
 						}
@@ -380,7 +438,7 @@ class Agent {
 							t.printStackTrace();
 							progress.set(origProgress);
 							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+f.fallbackUrl);
-							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size, progress::addAndGet, updateProgress, to.func);
+							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size, progress::addAndGet, updateProgress, to.func, false);
 							if (!df.hash.equals(to.hash)) {
 								throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.fallbackUrl+" - expected "+to.hash+", got "+df.hash);
 							}
@@ -408,6 +466,11 @@ class Agent {
 					break;
 				} catch (InterruptedException e) {
 				} catch (ExecutionException e) {
+					for (Future<?> f2 : futures) {
+						try {
+							f2.cancel(false);
+						} catch (Throwable t) {}
+					}
 					if (e.getCause() instanceof IOException) throw (IOException)e.getCause();
 					throw new RuntimeException(e);
 				}
@@ -418,7 +481,6 @@ class Agent {
 			PuppetHandler.updateSubtitle("Applying changes. Do not force close the updater.");
 			for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
 				String path = en.getKey();
-				FileState from = plan.expectedState.get(path);
 				FileToDownload f = en.getValue();
 				FileState to = f.state;
 				DownloadedFile df = downloads.get(f);
@@ -447,6 +509,7 @@ class Agent {
 					Files.move(df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
 				}
 			}
+			state = plan.newState;
 			state.put("current_version", res.theirVersion.toJson());
 			saveState();
 		}

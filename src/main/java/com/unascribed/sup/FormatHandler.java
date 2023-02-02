@@ -4,6 +4,8 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.grack.nanojson.JsonObject;
+
 abstract class FormatHandler {
 	
 	protected static final int K = 1024;
@@ -13,6 +15,8 @@ abstract class FormatHandler {
 		FileState state;
 		URL url;
 		URL fallbackUrl;
+		URL primerUrl;
+		boolean hostile;
 	}
 	
 	protected static class FileState {
@@ -27,11 +31,37 @@ abstract class FormatHandler {
 			this.hash = hash;
 			this.size = size;
 		}
+		
+		public boolean sizeMatches(long size) {
+			if (this.size == -1) return true;
+			return size == this.size;
+		}
 
 		@Override
 		public String toString() {
 			return func+"("+hash+") size "+size;
 		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj) return true;
+			if (obj == null) return false;
+			if (getClass() != obj.getClass()) return false;
+			FileState other = (FileState) obj;
+			if (func != other.func) return false;
+			if (hash == null) {
+				if (other.hash != null)
+					return false;
+			} else if (!hash.equals(other.hash))
+				return false;
+			if (size == -1 || other.size == -1)
+				return true;
+			if (size != other.size)
+				return false;
+			return true;
+		}
+		
+		
 	}
 	
 	protected static class UpdatePlan<F extends FileToDownload> {
@@ -40,11 +70,13 @@ abstract class FormatHandler {
 		final String toVersion;
 		Map<String, F> files = new HashMap<>();
 		Map<String, FileState> expectedState = new HashMap<>();
+		final JsonObject newState;
 		
-		public UpdatePlan(boolean isBootstrap, String fromVersion, String toVersion) {
+		public UpdatePlan(boolean isBootstrap, String fromVersion, String toVersion, JsonObject newState) {
 			this.isBootstrap = isBootstrap;
 			this.fromVersion = fromVersion;
 			this.toVersion = toVersion;
+			this.newState = newState;
 		}
 	}
 	

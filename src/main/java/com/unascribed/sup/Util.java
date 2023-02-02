@@ -3,6 +3,8 @@ package com.unascribed.sup;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Objects;
 
 import javax.imageio.ImageIO;
@@ -110,6 +112,10 @@ public class Util {
 		JPopupMenu.setDefaultLightWeightPopupEnabled(false);
 		// no ImageIO, I don't want you to write tons of tiny files to the disk, to be quite honest
 		ImageIO.setUseCache(false);
+	}
+
+	public static String b64Str(String b64) {
+		return new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8);
 	}
 
 }

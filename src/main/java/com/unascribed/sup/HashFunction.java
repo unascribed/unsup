@@ -4,6 +4,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Supplier;
 
 public enum HashFunction {
 	@Deprecated MD5("MD5", "MD5", 128, true),
@@ -12,12 +13,14 @@ public enum HashFunction {
 	SHA2_384("SHA-2 384", "SHA-384", 384, false),
 	SHA2_512("SHA-2 512", "SHA-512", 512, false),
 	SHA2_512_256("SHA-2 512/256", "SHA-512/256", 256, false),
+	
+	@Deprecated MURMUR2_CF("Murmur2-CF", Murmur2MessageDigest::new, 32, true)
 	;
 	
 	private static final Map<String, HashFunction> BY_NAME = new HashMap<>();
 	
 	public final String name;
-	private final String alg;
+	private final Supplier<MessageDigest> supplier;
 	public final int sizeInBits;
 	public final int sizeInBytes;
 	public final int sizeInHexChars;
@@ -27,8 +30,18 @@ public enum HashFunction {
 	private boolean hasWarned = false;
 	
 	HashFunction(String name, String alg, int sizeInBits, boolean insecure) {
+		this(name, () -> {
+			try {
+				return MessageDigest.getInstance(alg);
+			} catch (NoSuchAlgorithmException e) {
+				throw new AssertionError(e);
+			}
+		}, sizeInBits, insecure);
+	}
+	
+	HashFunction(String name, Supplier<MessageDigest> supplier, int sizeInBits, boolean insecure) {
 		this.name = name;
-		this.alg = alg;
+		this.supplier = supplier;
 		this.sizeInBits = sizeInBits;
 		this.sizeInBytes = (sizeInBits+7)/8;
 		this.sizeInHexChars = sizeInBytes*2;
@@ -37,11 +50,7 @@ public enum HashFunction {
 	}
 	
 	public MessageDigest createMessageDigest() {
-		try {
-			return MessageDigest.getInstance(alg);
-		} catch (NoSuchAlgorithmException e) {
-			throw new AssertionError(e);
-		}
+		return supplier.get();
 	}
 	
 	@Override

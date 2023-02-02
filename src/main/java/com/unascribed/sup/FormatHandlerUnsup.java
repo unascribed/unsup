@@ -36,6 +36,7 @@ class FormatHandlerUnsup extends FormatHandler {
 		if (System.getProperty("unsup.debug.overrideRemoteVersionCode") != null) {
 			theirVersion = new Version(theirVersion.name, Integer.getInteger("unsup.debug.overrideRemoteVersionCode", theirVersion.code));
 		}
+		JsonObject newState = new JsonObject(Agent.state);
 		String ourFlavor = Agent.state.getString("flavor");
 		JsonArray theirFlavors = manifest.getArray("flavors");
 		if (ourFlavor == null && theirFlavors != null) {
@@ -72,8 +73,7 @@ class FormatHandlerUnsup extends FormatHandler {
 				Agent.log("INFO", "Chose flavor "+id);
 				ourFlavor = id;
 			}
-			Agent.state.put("flavor", ourFlavor);
-			Agent.saveState();
+			newState.put("flavor", ourFlavor);
 		}
 		UpdatePlan<FileToDownloadWithCode> bootstrapPlan = null;
 		boolean bootstrapping = false;
@@ -95,7 +95,7 @@ class FormatHandlerUnsup extends FormatHandler {
 				}
 				HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
 				PuppetHandler.updateTitle("Bootstrapping...", false);
-				bootstrapPlan = new UpdatePlan<>(true, "null", bootstrapVersion.name);
+				bootstrapPlan = new UpdatePlan<>(true, "null", bootstrapVersion.name, newState);
 				for (Object o : bootstrap.getArray("files")) {
 					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in files array is not an object");
 					JsonObject file = (JsonObject)o;
@@ -149,7 +149,7 @@ class FormatHandlerUnsup extends FormatHandler {
 					return new CheckResult(ourVersion, theirVersion, null);
 				}
 			}
-			UpdatePlan<FileToDownloadWithCode> plan = new UpdatePlan<>(bootstrapping, ourVersion.name, theirVersion.name);
+			UpdatePlan<FileToDownloadWithCode> plan = new UpdatePlan<>(bootstrapping, ourVersion.name, theirVersion.name, newState);
 			if (bootstrapPlan != null) {
 				plan.files.putAll(bootstrapPlan.files);
 				plan.expectedState.putAll(bootstrapPlan.expectedState);

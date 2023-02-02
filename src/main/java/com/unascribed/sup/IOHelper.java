@@ -12,12 +12,15 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SignatureException;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.LongConsumer;
-
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonParserException;
+import com.moandjiezana.toml.Toml;
 import net.i2p.crypto.eddsa.EdDSAEngine;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -47,7 +50,7 @@ class IOHelper {
 		return ok ? url : null;
 	}
 	
-	protected static byte[] loadAndVerify(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
+	protected static byte[] loadAndVerify(URL src, int sizeLimit, URL sigUrl) throws IOException {
 		byte[] resp = downloadToMemory(src, sizeLimit);
 		if (resp == null) {
 			throw new IOException(src+" is larger than "+(sizeLimit/K)+"K, refusing to continue downloading");
@@ -72,14 +75,54 @@ class IOHelper {
 		byte[] resp = Util.collectLimited(conn, sizeLimit);
 		return resp;
 	}
+	
+	private static String currentFirefoxVersion;
+	private static final Set<String> alwaysHostile = new HashSet<>(Arrays.asList(Util.b64Str("YmV0YS5jdXJzZWZvcmdlLmNvbXx3d3cuY3Vyc2Vmb3JnZS5jb218Y3Vyc2Vmb3JnZS5jb218bWluZWNyYWZ0LmN1cnNlZm9yZ2UuY29tfG1lZGlhZmlsZXouZm9yZ2VjZG4ubmV0fG1lZGlhZmlsZXMuZm9yZ2VjZG4ubmV0fGZvcmdlY2RuLm5ldHxlZGdlLmZvcmdlY2RuLm5ldA==").split("\\|")));
 
 	protected static InputStream get(URL url) throws IOException {
-		Response res = Agent.okhttp.newCall(new Request.Builder()
+		return get(url, false);
+	}
+
+	protected static InputStream get(URL url, boolean hostile) throws IOException {
+		if (!hostile && alwaysHostile.contains(url.getHost())) {
+			hostile = true;
+		}
+		if (hostile && currentFirefoxVersion == null) {
+			try {
+				JsonObject data = loadJson(new URL("https://product-details.mozilla.org/1.0/firefox_versions.json"), 4*K, null);
+				currentFirefoxVersion = data.getString("LATEST_FIREFOX_VERSION");
+			} catch (Throwable t) {
+				currentFirefoxVersion = "109.0";
+			}
+			int firstDot = currentFirefoxVersion.indexOf('.');
+			if (firstDot != -1) {
+				int nextDot = currentFirefoxVersion.indexOf('.', firstDot+1);
+				if (nextDot != -1) {
+					// the UA only has the MAJOR.MINOR, no PATCH
+					currentFirefoxVersion = currentFirefoxVersion.substring(0, nextDot);
+				}
+			}
+		}
+		Request.Builder resbldr = new Request.Builder()
 				.url(url)
-				.header("User-Agent", "unsup/"+Util.VERSION)
-				.build()).execute();
+				.header("User-Agent",
+						// not a mistake. the rv: is locked at 109 (and the trailer still updates, yes. it's weird.)
+						hostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/"+currentFirefoxVersion
+						        : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
+					);
+		if (hostile) {
+			resbldr.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+			resbldr.header("Accept-Encoding", "gzip, deflate, br");
+			resbldr.header("Accept-Language", "en-US,en;q=0.5");
+			resbldr.header("Sec-Fetch-Dest", "document");
+			resbldr.header("Sec-Fetch-Mode", "navigate");
+			resbldr.header("Sec-Fetch-Site", "same-origin");
+			resbldr.header("Sec-Fetch-User", "?1");
+			resbldr.header("TE", "trailers");
+		}
+		Response res = Agent.okhttp.newCall(resbldr.build()).execute();
 		if (res.code() != 200) {
-			if (res.code() == 404 || res.code() == 410) throw new FileNotFoundException();
+			if (res.code() == 404 || res.code() == 410) throw new FileNotFoundException(url.toString());
 			byte[] b = Util.collectLimited(res.body().byteStream(), 512);
 			String s = b == null ? "(response too long)" : new String(b, StandardCharsets.UTF_8);
 			throw new IOException("Received non-200 response from server for "+url+": "+res.code()+"\n"+s);
@@ -87,12 +130,24 @@ class IOHelper {
 		return res.body().byteStream();
 	}
 	
-	protected static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
+	protected static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException {
 		return new String(loadAndVerify(src, sizeLimit, sigUrl), StandardCharsets.UTF_8);
 	}
 	
 	protected static JsonObject loadJson(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
 		return JsonParser.object().from(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
+	}
+	
+	protected static Toml loadToml(URL src, int sizeLimit, URL sigUrl) throws IOException {
+		return new Toml().read(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
+	}
+	
+	protected static Toml loadToml(URL src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
+		byte[] data = downloadToMemory(src, sizeLimit);
+		String hash = Util.toHexString(func.createMessageDigest().digest(data));
+		if (!hash.equals(expectedHash))
+			throw new IOException("Expected "+expectedHash+" from "+src+", but got "+hash);
+		return new Toml().read(new ByteArrayInputStream(data));
 	}
 	
 	protected static class DownloadedFile {
@@ -105,8 +160,8 @@ class IOHelper {
 		}
 	}
 	
-	protected static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc) throws IOException {
-		InputStream conn = get(url);
+	protected static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc, boolean hostile) throws IOException {
+		InputStream conn = get(url, hostile);
 		byte[] buf = new byte[16384];
 		File file = File.createTempFile("download", "", dir);
 		Agent.cleanup.add(file::delete);
@@ -128,7 +183,7 @@ class IOHelper {
 				}
 			}
 		}
-		if (readTotal != size) {
+		if (size != -1 && readTotal != size) {
 			throw new IOException("Underread; expected "+size+" bytes, but only got "+readTotal);
 		}
 		if (updateProgress != null) {

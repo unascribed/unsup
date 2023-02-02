@@ -42,6 +42,7 @@ sourceCompatibility = targetCompatibility = 8
 
 repositories { 
 	mavenCentral()
+	maven { url 'https://repo.sleeping.town' }
 }
 
 configurations {
@@ -56,6 +57,10 @@ dependencies {
 		exclude group: 'org.jetbrains'
 		exclude module: 'kotlin-stdlib-common'
 	}
+	shade('com.moandjiezana.toml:toml4j:0.7.2') {
+		transitive = false
+	}
+	shade 'com.unascribed:flexver-java:1.1.0'
 }
 
 jar {
@@ -64,7 +69,7 @@ jar {
 
 shadowJar {
 	classifier 'fat'
-	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson"].each {
+	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it
 	}
 }
