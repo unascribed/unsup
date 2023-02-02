@@ -40,7 +40,7 @@ import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonWriter;
 import com.unascribed.sup.FormatHandler.CheckResult;
 import com.unascribed.sup.FormatHandler.FileState;
-import com.unascribed.sup.FormatHandler.FileToDownload;
+import com.unascribed.sup.FormatHandler.FilePlan;
 import com.unascribed.sup.FormatHandler.UpdatePlan;
 import com.unascribed.sup.IOHelper.DownloadedFile;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
@@ -288,10 +288,10 @@ class Agent {
 		PuppetHandler.updateSubtitle("Verifying consistency");
 		Set<String> moveAside = new HashSet<>();
 		Map<ConflictType, AlertOption> conflictPreload = new EnumMap<>(ConflictType.class);
-		for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
+		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 			String path = en.getKey();
 			FileState from = plan.expectedState.get(path);
-			FileToDownload f = en.getValue();
+			FilePlan f = en.getValue();
 			FileState to = f.state;
 			File dest = new File(path);
 			if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
@@ -369,7 +369,7 @@ class Agent {
 					moveAside.add(path);
 				}
 			}
-			progressDenom += to.size == -1 ? 1 : to.size;
+			progressDenom += (to.size == -1 ? 1 : to.size);
 		}
 		File tmp = new File(".unsup-tmp");
 		if (!tmp.exists()) {
@@ -382,7 +382,7 @@ class Agent {
 		ExecutorService svc = Executors.newFixedThreadPool(6);
 		Set<String> files = new HashSet<>();
 		List<Future<?>> futures = new ArrayList<>();
-		Map<FileToDownload, DownloadedFile> downloads = new IdentityHashMap<>();
+		Map<FilePlan, DownloadedFile> downloads = new IdentityHashMap<>();
 		Runnable updateSubtitle = () -> {
 			if (files.size() == 0) {
 				PuppetHandler.updateSubtitle("Downloading...");
@@ -402,9 +402,9 @@ class Agent {
 				PuppetHandler.updateSubtitle("Downloading "+sb);
 			}
 		};
-		for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
+		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 			String path = en.getKey();
-			FileToDownload f = en.getValue();
+			FilePlan f = en.getValue();
 			FileState to = f.state;
 			if (to.size == 0) {
 				continue;
@@ -415,7 +415,6 @@ class Agent {
 					updateSubtitle.run();
 				}
 				try {
-					long origProgress = progress.get();
 					if (f.primerUrl != null) {
 						try (InputStream in = IOHelper.get(f.primerUrl, f.hostile)) {
 							byte[] buf = new byte[8192];
@@ -426,22 +425,25 @@ class Agent {
 						Thread.sleep(2000+ThreadLocalRandom.current().nextInt(1200));
 					}
 					DownloadedFile df;
+					long[] contributedProgress = {0};
 					try {
 						log("INFO", "Downloading "+path+" from "+f.url);
-						df = IOHelper.downloadToFile(f.url, tmp, to.size, to.size == -1 ? l -> {} : progress::addAndGet, updateProgress, to.func, f.hostile);
-						if (to.size == -1) progress.incrementAndGet();
+						df = IOHelper.downloadToFile(f.url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
+								updateProgress, to.func, f.hostile);
 						if (!df.hash.equals(to.hash)) {
 							throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.url+" - expected "+to.hash+", got "+df.hash);
 						}
+						if (to.size == -1) progress.incrementAndGet();
 					} catch (Throwable t) {
 						if (f.fallbackUrl != null) {
 							t.printStackTrace();
-							progress.set(origProgress);
+							progress.addAndGet(-contributedProgress[0]);
 							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+f.fallbackUrl);
-							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size, progress::addAndGet, updateProgress, to.func, false);
+							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size,  to.size == -1 ? l -> {} : progress::addAndGet, updateProgress, to.func, false);
 							if (!df.hash.equals(to.hash)) {
 								throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.fallbackUrl+" - expected "+to.hash+", got "+df.hash);
 							}
+							if (to.size == -1) progress.incrementAndGet();
 						} else {
 							throw t;
 						}
@@ -479,9 +481,9 @@ class Agent {
 		PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 		synchronized (dangerMutex) {
 			PuppetHandler.updateSubtitle("Applying changes. Do not force close the updater.");
-			for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
+			for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 				String path = en.getKey();
-				FileToDownload f = en.getValue();
+				FilePlan f = en.getValue();
 				FileState to = f.state;
 				DownloadedFile df = downloads.get(f);
 				File dest = new File(path);

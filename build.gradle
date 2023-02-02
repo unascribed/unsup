@@ -65,10 +65,12 @@ dependencies {
 
 jar {
 	classifier 'slim'
+	destinationDirectory.set(file('build/tmp'))
 }
 
 shadowJar {
 	classifier 'fat'
+	destinationDirectory.set(file('build/tmp'))
 	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it
 	}

@@ -21,7 +21,7 @@ class FormatHandlerUnsup extends FormatHandler {
 	
 	protected static final String DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256.name;
 
-	private static class FileToDownloadWithCode extends FileToDownload {
+	private static class FileToDownloadWithCode extends FilePlan {
 		int code;
 	}
 	

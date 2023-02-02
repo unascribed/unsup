@@ -11,7 +11,7 @@ abstract class FormatHandler {
 	protected static final int K = 1024;
 	protected static final int M = K*1024;
 	
-	protected static class FileToDownload {
+	protected static class FilePlan {
 		FileState state;
 		URL url;
 		URL fallbackUrl;
@@ -41,6 +41,11 @@ abstract class FormatHandler {
 		public String toString() {
 			return func+"("+hash+") size "+size;
 		}
+		
+		@Override
+		public int hashCode() {
+			return func.hashCode()^hash.hashCode();
+		}
 
 		@Override
 		public boolean equals(Object obj) {
@@ -64,7 +69,7 @@ abstract class FormatHandler {
 		
 	}
 	
-	protected static class UpdatePlan<F extends FileToDownload> {
+	protected static class UpdatePlan<F extends FilePlan> {
 		final boolean isBootstrap;
 		final String fromVersion;
 		final String toVersion;
