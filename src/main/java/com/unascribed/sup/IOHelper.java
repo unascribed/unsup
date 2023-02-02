@@ -8,6 +8,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.MalformedURLException;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -84,6 +85,13 @@ class IOHelper {
 	}
 
 	protected static InputStream get(URL url, boolean hostile) throws IOException {
+		if ("file".equals(url.getProtocol())) {
+			try {
+				return new FileInputStream(new File(url.toURI()));
+			} catch (URISyntaxException e) {
+				throw new IOException(e);
+			}
+		}
 		if (!hostile && alwaysHostile.contains(url.getHost())) {
 			hostile = true;
 		}
