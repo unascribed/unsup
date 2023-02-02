@@ -24,6 +24,8 @@ public enum HashFunction {
 	public final boolean insecure;
 	public final String emptyHash;
 	
+	private boolean hasWarned = false;
+	
 	HashFunction(String name, String alg, int sizeInBits, boolean insecure) {
 		this.name = name;
 		this.alg = alg;
@@ -49,7 +51,16 @@ public enum HashFunction {
 	
 	public static HashFunction byName(String name) {
 		if (!BY_NAME.containsKey(name)) throw new IllegalArgumentException("No hash function with name "+name);
-		return BY_NAME.get(name);
+		HashFunction func = BY_NAME.get(name);
+		if (func != null && func.insecure && !func.hasWarned) {
+			func.hasWarned = true;
+			if (Agent.publicKey != null) {
+				Agent.log("WARN", "Using insecure hash function "+func+" for a signed manifest! This is a very bad idea!");
+			} else {
+				Agent.log("WARN", "Using insecure hash function "+func);
+			}
+		}
+		return func;
 	}
 	
 	static {

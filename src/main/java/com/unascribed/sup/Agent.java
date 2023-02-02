@@ -1,90 +1,66 @@
 package com.unascribed.sup;
 
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.MessageDigest;
-import java.security.SignatureException;
 import java.security.spec.X509EncodedKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Base64;
-import java.util.Collection;
 import java.util.Date;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.StringJoiner;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.function.IntPredicate;
-import java.util.function.LongConsumer;
-import java.util.stream.Collectors;
 
-import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
-import com.grack.nanojson.JsonParserException;
 import com.grack.nanojson.JsonWriter;
+import com.unascribed.sup.FormatHandler.CheckResult;
+import com.unascribed.sup.FormatHandler.FileState;
+import com.unascribed.sup.FormatHandler.FileToDownload;
+import com.unascribed.sup.FormatHandler.UpdatePlan;
+import com.unascribed.sup.IOHelper.DownloadedFile;
+import com.unascribed.sup.PuppetHandler.AlertMessageType;
+import com.unascribed.sup.PuppetHandler.AlertOption;
+import com.unascribed.sup.PuppetHandler.AlertOptionType;
 import com.unascribed.sup.QDIni.QDIniException;
 
-import net.i2p.crypto.eddsa.EdDSAEngine;
 import net.i2p.crypto.eddsa.EdDSAPublicKey;
 import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
 
 class Agent {
 
-	private static final int EXIT_SUCCESS = 0;
-	private static final int EXIT_CONFIG_ERROR = 1;
-	private static final int EXIT_CONSISTENCY_ERROR = 2;
-	private static final int EXIT_BUG = 3;
-	private static final int EXIT_USER_REQUEST = 4;
-	
-	private static final int K = 1024;
-	private static final int M = K*1024;
-	
-	private static final long ONE_SECOND_IN_NANOS = TimeUnit.SECONDS.toNanos(1);
-	
-	private static final String DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256.name;
+	static final int EXIT_SUCCESS = 0;
+	static final int EXIT_CONFIG_ERROR = 1;
+	static final int EXIT_CONSISTENCY_ERROR = 2;
+	static final int EXIT_BUG = 3;
+	static final int EXIT_USER_REQUEST = 4;
 	
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
-	private static final Object dangerMutex = new Object();
+	static final Object dangerMutex = new Object();
 	private static final SimpleDateFormat logDateFormat = new SimpleDateFormat("HH:mm:ss");
 	
-	private static final Latch doneAnimatingLatch = new Latch();
-	
-	private static final OkHttpClient okhttp = new OkHttpClient.Builder()
+	static final OkHttpClient okhttp = new OkHttpClient.Builder()
 			.connectTimeout(5, TimeUnit.SECONDS)
 			.build();
 	
@@ -132,8 +108,8 @@ class Agent {
 			}
 			
 			if (!noGui) {
-				createPuppet();
-				cleanup.add(puppet::destroy);
+				PuppetHandler.create();
+				cleanup.add(PuppetHandler::destroy);
 			}
 			
 			if (config.containsKey("public_key")) {
@@ -167,57 +143,62 @@ class Agent {
 				state = new JsonObject();
 			}
 			
-			if (puppet != null) {
-				puppetOut = new BufferedOutputStream(puppet.getOutputStream(), 512);
-			}
+			PuppetHandler.setPuppetColorsFromConfig();
 			
-			setPuppetColorsFromConfig();
+			PuppetHandler.tellPuppet(":build");
 			
-			tellPuppet(":build");
-			
-			tellPuppet(":subtitle="+config.get("subtitle", ""));
+			PuppetHandler.tellPuppet(":subtitle="+config.get("subtitle", ""));
 			// we don't want to flash a window on the screen if things aren't going slow, so we tell
 			// the puppet to wait 750ms before actually making the window visible, and assign an
 			// identifier to our order so we can belay it later if we finished before the timer
 			// expired
-			tellPuppet("[openTimeout]750:visible=true");
+			PuppetHandler.tellPuppet("[openTimeout]750:visible=true");
 
 			
-			updateTitle("Checking for updates...", false);
+			PuppetHandler.updateTitle("Checking for updates...", false);
 			try {
+				CheckResult res = null;
 				if (fmt == SourceFormat.UNSUP) {
-					doUnsupFormatUpdate(src);
+					res = FormatHandlerUnsup.check(src);
+				} else if (fmt == SourceFormat.PACKWIZ) {
+					// TODO
+				}
+				if (res != null) {
+					sourceVersion = res.ourVersion.name;
+					if (res.plan != null) {
+						applyUpdate(res);
+					}
 				}
 			} catch (Throwable t) {
 				t.printStackTrace();
 				log("WARN", "Error while updating");
-				tellPuppet(":expedite=openTimeout");
-				if (openAlert("unsup error",
+				PuppetHandler.tellPuppet(":expedite=openTimeout");
+				if (PuppetHandler.openAlert("unsup error",
 						"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
-						AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
+						PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
 					log("INFO", "User cancelled error dialog! Exiting.");
 					exit(EXIT_USER_REQUEST);
 					return;
 				}
 			} finally {
-				tellPuppet(":subtitle=");
+				PuppetHandler.tellPuppet(":subtitle=");
 			}
 			
 			if (awaitingExit) Util.blockForever();
 
-			tellPuppet(":belay=openTimeout");
-			if (puppetOut != null) {
+			PuppetHandler.tellPuppet(":belay=openTimeout");
+			if (PuppetHandler.puppetOut != null) {
 				log("INFO", "Waiting for puppet to complete done animation...");
-				tellPuppet(":title=All done");
-				tellPuppet(":mode=done");
-				doneAnimatingLatch.await();
+				PuppetHandler.tellPuppet(":title=All done");
+				PuppetHandler.tellPuppet(":mode=done");
+				PuppetHandler.doneAnimatingLatch.await();
 			}
-			tellPuppet(":exit");
-			if (puppet != null) {
+			PuppetHandler.tellPuppet(":exit");
+			if (PuppetHandler.puppet != null) {
 				log("INFO", "Waiting for puppet to exit...");
-				if (!puppet.waitFor(2, TimeUnit.SECONDS)) {
+				if (!PuppetHandler.puppet.waitFor(2, TimeUnit.SECONDS)) {
 					log("WARN", "Tired of waiting, killing the puppet.");
-					puppet.destroyForcibly();
+					PuppetHandler.puppet.destroyForcibly();
 				}
 			}
 			
@@ -251,6 +232,228 @@ class Agent {
 	// "step" methods, called only once, exist to turn premain() into a logical overview that can be
 	// drilled down into as necessary
 	
+	private static void applyUpdate(CheckResult res) throws IOException {
+		UpdatePlan<?> plan = res.plan;
+		boolean bootstrapping = plan.isBootstrap;
+		long progressDenom = 1;
+		File wd = new File("");
+		PuppetHandler.updateSubtitle("Verifying consistency");
+		Set<String> moveAside = new HashSet<>();
+		Map<ConflictType, AlertOption> conflictPreload = new EnumMap<>(ConflictType.class);
+		for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
+			String path = en.getKey();
+			FileState from = plan.expectedState.get(path);
+			FileToDownload f = en.getValue();
+			FileState to = f.state;
+			File dest = new File(path);
+			if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
+				throw new IOException("Refusing to download to a file outside of working directory");
+			ConflictType conflictType = ConflictType.NO_CONFLICT;
+			if (dest.exists()) {
+				boolean normalConflict = false;
+				long size = dest.length();
+				if (from.hash == null) {
+					if (to.size == size && to.hash.equals(IOHelper.hash(to.func, dest))) {
+						log("INFO", path+" was created in this update and locally, but the local version matches the update. Skipping");
+						continue;
+					}
+					conflictType = ConflictType.LOCAL_AND_REMOTE_CREATED;
+				} else if (size == from.size) {
+					String hash = IOHelper.hash(from.func, dest);
+					if (from.hash.equals(hash)) {
+						log("INFO", path+" matches the expected from hash");
+					} else if (to.size == size && to.hash.equals(from.func == to.func ? hash : IOHelper.hash(to.func, dest))) {
+						log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
+						continue;
+					} else {
+						log("INFO", "CONFLICT: "+path+" doesn't match the expected from hash ("+hash+" != "+from.hash+")");
+						normalConflict = true;
+					}
+				} else if (to.size == size && to.hash.equals(IOHelper.hash(to.func, dest))) {
+					log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
+					continue;
+				} else {
+					log("INFO", "CONFLICT: "+path+" doesn't match the expected from size ("+size+" != "+from.size+")");
+					normalConflict = true;
+				}
+				if (normalConflict) {
+					if (to.hash == null) {
+						conflictType = ConflictType.LOCAL_CHANGED_REMOTE_DELETED;
+					} else {
+						conflictType = ConflictType.LOCAL_AND_REMOTE_CHANGED;
+					}
+				}
+			} else {
+				if (to.hash == null) {
+					log("INFO", path+" was deleted in this update, but it's already missing locally. Skipping");
+					continue;
+				} else if (from.hash != null) {
+					conflictType = ConflictType.LOCAL_DELETED_REMOTE_CHANGED;
+				}
+			}
+			if (conflictType != ConflictType.NO_CONFLICT) {
+				AlertOption resp;
+				if (conflictPreload.containsKey(conflictType)) {
+					resp = conflictPreload.get(conflictType);
+				} else {
+					resp = PuppetHandler.openAlert("File conflict",
+							"<b>The file "+path+" was "+conflictType.msg+".</b><br/>"
+									+ "Do you want to replace it with the version from the update?<br/>"
+									+ "Choose Cancel to abort. No files have been changed yet."+
+									(dest.exists() ? "<br/><br/>If you choose Yes, a copy of the current file will be created at "+path+".orig." : ""),
+							AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
+					if (resp == AlertOption.NOTOALL) {
+						resp = AlertOption.NO;
+						conflictPreload.put(conflictType, AlertOption.NO);
+					} else if (resp == AlertOption.YESTOALL) {
+						resp = AlertOption.YES;
+						conflictPreload.put(conflictType, AlertOption.YES);
+					}
+				}
+				if (resp == AlertOption.NO) {
+					continue;
+				} else if (resp == AlertOption.CANCEL) {
+					log("INFO", "User cancelled error dialog! Exiting.");
+					exit(EXIT_USER_REQUEST);
+					return;
+				}
+				if (dest.exists()) {
+					moveAside.add(path);
+				}
+			}
+			progressDenom += to.size;
+		}
+		File tmp = new File(".unsup-tmp");
+		if (!tmp.exists()) {
+			tmp.mkdirs();
+		}
+		final long progressDenomf = progressDenom;
+		AtomicLong progress = new AtomicLong();
+		Runnable updateProgress = () -> PuppetHandler.updateProgress((int)((progress.get()*1000)/progressDenomf));
+		PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", true);
+		ExecutorService svc = Executors.newFixedThreadPool(6);
+		Set<String> files = new HashSet<>();
+		List<Future<?>> futures = new ArrayList<>();
+		Map<FileToDownload, DownloadedFile> downloads = new IdentityHashMap<>();
+		Runnable updateSubtitle = () -> {
+			if (files.size() == 0) {
+				PuppetHandler.updateSubtitle("Downloading...");
+			} else if (files.size() == 1) {
+				PuppetHandler.updateSubtitle("Downloading "+files.iterator().next());
+			} else {
+				StringBuilder sb = new StringBuilder();
+				boolean first = true;
+				for (String s : files) {
+					if (first) {
+						first = false;
+					} else {
+						sb.append(", ");
+					}
+					sb.append(s.substring(s.lastIndexOf('/')+1));
+				}
+				PuppetHandler.updateSubtitle("Downloading "+sb);
+			}
+		};
+		for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
+			String path = en.getKey();
+			FileToDownload f = en.getValue();
+			FileState to = f.state;
+			if (to.size == 0) {
+				continue;
+			}
+			futures.add(svc.submit(() -> {
+				synchronized (files) {
+					files.add(path);
+					updateSubtitle.run();
+				}
+				try {
+					long origProgress = progress.get();
+					DownloadedFile df;
+					try {
+						log("INFO", "Downloading "+path+" from "+f.url);
+						df = IOHelper.downloadToFile(f.url, tmp, to.size, progress::addAndGet, updateProgress, to.func);
+						if (!df.hash.equals(to.hash)) {
+							throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.url+" - expected "+to.hash+", got "+df.hash);
+						}
+					} catch (Throwable t) {
+						if (f.fallbackUrl != null) {
+							t.printStackTrace();
+							progress.set(origProgress);
+							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+f.fallbackUrl);
+							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size, progress::addAndGet, updateProgress, to.func);
+							if (!df.hash.equals(to.hash)) {
+								throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.fallbackUrl+" - expected "+to.hash+", got "+df.hash);
+							}
+						} else {
+							throw t;
+						}
+					}
+					synchronized (downloads) {
+						downloads.put(f, df);
+					}
+					return null;
+				} finally {
+					synchronized (files) {
+						files.remove(path);
+						updateSubtitle.run();
+					}
+				}
+			}));
+		}
+		svc.shutdown();
+		for (Future<?> future : futures) {
+			while (true) {
+				try {
+					future.get();
+					break;
+				} catch (InterruptedException e) {
+				} catch (ExecutionException e) {
+					if (e.getCause() instanceof IOException) throw (IOException)e.getCause();
+					throw new RuntimeException(e);
+				}
+			}
+		}
+		PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
+		synchronized (dangerMutex) {
+			PuppetHandler.updateSubtitle("Applying changes. Do not force close the updater.");
+			for (Map.Entry<String, ? extends FileToDownload> en : plan.files.entrySet()) {
+				String path = en.getKey();
+				FileState from = plan.expectedState.get(path);
+				FileToDownload f = en.getValue();
+				FileState to = f.state;
+				DownloadedFile df = downloads.get(f);
+				File dest = new File(path);
+				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
+					throw new IOException("Refusing to download to a file outside of working directory");
+				Path destPath = dest.toPath();
+				if (dest.getParentFile() != null) Files.createDirectories(dest.getParentFile().toPath());
+				if (moveAside.contains(path)) {
+					Files.move(destPath, destPath.resolveSibling(destPath.getFileName().toString()+".orig"), StandardCopyOption.REPLACE_EXISTING);
+				}
+				if (to.size == 0) {
+					if (to.hash == null) {
+						log("INFO", "Deleting "+path);
+						Files.deleteIfExists(destPath);
+					} else {
+						if (dest.exists()) {
+							try (FileOutputStream fos = new FileOutputStream(dest)) {
+								// open and then immediately close the file to overwrite it with nothing
+							}
+						} else {
+							dest.createNewFile();
+						}
+					}
+				} else {
+					Files.move(df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+				}
+			}
+			state.put("current_version", res.theirVersion.toJson());
+			saveState();
+		}
+		log("INFO", "Update successful!");
+		updated = true;
+	}
+
 	private static void createLogStream() {
 		File logFile;
 		if (new File("logs").isDirectory()) {
@@ -403,788 +606,8 @@ class Agent {
 		cleanup.add(() -> validEnvs = null);
 	}
 
-	private static void createPuppet() {
-		log("INFO", "Attempting to summon a puppet for GUI feedback...");
-		out: {
-			URI uri;
-			try {
-				uri = Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI();
-			} catch (URISyntaxException e) {
-				log("WARN", "Failed to find our own JAR file or directory.");
-				puppet = null;
-				break out;
-			}
-			File ourPath;
-			try {
-				ourPath = new File(uri);
-			} catch (IllegalArgumentException e) {
-				log("WARN", "Failed to find our own JAR file or directory.");
-				puppet = null;
-				break out;
-			}
-			File javaBin = new File(System.getProperty("java.home")+File.separator+"bin");
-			String[] executableNames = {
-					"javaw.exe",
-					"java.exe",
-					"javaw",
-					"java"
-			};
-			String java = null;
-			for (String exe : executableNames) {
-				File f = new File(javaBin, exe);
-				if (f.exists()) {
-					java = f.getAbsolutePath();
-					break;
-				}
-			}
-			if (java == null) {
-				log("WARN", "Failed to find Java. Looked in "+javaBin+", but can't find a known executable.");
-				puppet = null;
-			} else {
-				Process p;
-				try {
-					p = new ProcessBuilder(java, "-cp", ourPath.getAbsolutePath(), "com.unascribed.sup.Puppet")
-						.start();
-				} catch (Throwable t) {
-					log("WARN", "Failed to summon a puppet.");
-					log("WARN", "unsup location detected as "+ourPath);
-					log("WARN", "Java location detected as "+java);
-					t.printStackTrace();
-					puppet = null;
-					break out;
-				}
-				log("INFO", "Dark spell successful. Puppet summoned.");
-				puppet = p;
-			}
-		}
-		if (puppet == null) {
-			log("WARN", "Failed to summon a puppet. Continuing without a GUI.");
-		} else {
-			Thread puppetErr = new Thread(() -> {
-				BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getErrorStream(), StandardCharsets.UTF_8));
-				try {
-					while (true) {
-						String line = br.readLine();
-						if (line == null) return;
-						if (line.contains("|")) {
-							int idx = line.indexOf('|');
-							log("puppet", line.substring(0, idx), line.substring(idx+1));
-						} else {
-							System.err.println("puppet: "+line);
-						}
-					}
-				} catch (IOException e) {}
-			}, "unsup puppet error printer");
-			puppetErr.setDaemon(true);
-			puppetErr.start();
-			log("INFO", "Waiting for the puppet to come to life...");
-			BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getInputStream(), StandardCharsets.UTF_8));
-			String firstLine = null;
-			try {
-				firstLine = br.readLine();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-			if (firstLine == null) {
-				log("WARN", "Puppet failed to come alive. Continuing without a GUI.");
-				puppet.destroy();
-				puppet = null;
-			} else if (!"unsup puppet ready".equals(firstLine)) {
-				log("WARN", "Puppet sent unexpected hello line \""+firstLine+"\". (Expected \"unsup puppet ready\") Continuing without a GUI.");
-				puppet.destroy();
-				puppet = null;
-			} else {
-				log("INFO", "Puppet is alive! Continuing.");
-				Thread puppetOut = new Thread(() -> {
-					try {
-						while (true) {
-							String line = br.readLine();
-							if (line == null) return;
-							if (line.equals("closeRequested")) {
-								log("INFO", "User closed puppet window! Exiting...");
-								awaitingExit = true;
-								long start = System.nanoTime();
-								synchronized (dangerMutex) {
-									long diff = System.nanoTime()-start;
-									if (diff > TimeUnit.MILLISECONDS.toNanos(500)) {
-										log("INFO", "Uninterruptible operations finished, exiting!");
-									}
-									puppet.destroy();
-									if (!puppet.waitFor(1, TimeUnit.SECONDS)) {
-										puppet.destroyForcibly();
-									}
-									exit(EXIT_USER_REQUEST);
-								}
-							} else if (line.startsWith("alert:")) {
-								String[] split = line.split(":");
-								String name = split[1];
-								String opt = split[2];
-								synchronized (alertResults) {
-									alertResults.put(name, opt);
-									Latch latch = alertWaiters.remove(name);
-									if (latch != null) {
-										latch.release();
-									}
-								}
-							} else if (line.equals("doneAnimating")) {
-								doneAnimatingLatch.release();
-							} else {
-								log("WARN", "Unknown line from puppet: "+line);
-							}
-						}
-					} catch (IOException | InterruptedException e) {}
-				}, "unsup puppet out parser");
-				puppetOut.setDaemon(true);
-				puppetOut.start();
-			}
-		}
-	}
-	
-	private static void setPuppetColorsFromConfig() {
-		tellPuppet(":colorBackground="+config.get("colors.background", "000000"));
-		tellPuppet(":colorTitle="+config.get("colors.title", "FFFFFF"));
-		tellPuppet(":colorSubtitle="+config.get("colors.subtitle", "AAAAAA"));
-		
-		tellPuppet(":colorProgress="+config.get("colors.progress", "FF0000"));
-		tellPuppet(":colorProgressTrack="+config.get("colors.progress_track", "AAAAAA"));
-		
-		tellPuppet(":colorDialog="+config.get("colors.dialog", "FFFFFF"));
-		tellPuppet(":colorButton="+config.get("colors.button", "FFFFFF"));
-		tellPuppet(":colorButtonText="+config.get("colors.button_text", "FFFFFF"));
-	}
-	
-	private enum ConflictType {
-		NO_CONFLICT(null),
-		LOCAL_AND_REMOTE_CREATED("created by you and in this update"),
-		LOCAL_AND_REMOTE_CHANGED("changed by you and in this update"),
-		LOCAL_CHANGED_REMOTE_DELETED("changed by you and deleted in this update"),
-		LOCAL_DELETED_REMOTE_CHANGED("deleted by you and changed in this update"),
-		;
-		public final String msg;
-		ConflictType(String msg) {
-			this.msg = msg;
-		}
-	}
-	
-	private static void doUnsupFormatUpdate(URL src) throws IOException, JsonParserException {
-		log("INFO", "Loading unsup-format manifest from "+src);
-		JsonObject manifest = loadJson(src, 32*K, new URL(src, "manifest.sig"));
-		checkManifestFlavor(manifest, "root", IntPredicates.equals(1));
-		Version ourVersion = Version.fromJson(state.getObject("current_version"));
-		if (!manifest.containsKey("versions")) throw new IOException("Manifest is missing versions field");
-		Version theirVersion = Version.fromJson(manifest.getObject("versions").getObject("current"));
-		if (theirVersion == null) throw new IOException("Manifest is missing current version field");
-		String ourFlavor = state.getString("flavor");
-		JsonArray theirFlavors = manifest.getArray("flavors");
-		if (ourFlavor == null && theirFlavors != null) {
-			List<JsonObject> flavorObjects = theirFlavors.stream()
-					.map(o -> (JsonObject)o)
-					.filter(o -> o.getArray("envs") == null || arrayContains(o.getArray("envs"), detectedEnv))
-					.collect(Collectors.toList());
-			if (flavorObjects.isEmpty()) {
-				// there are no flavors eligible for our environment, so we can continue while ignoring flavors
-			} else if (flavorObjects.size() == 1) {
-				// there is exactly one eligible flavor choice, no sense in bothering the user
-				ourFlavor = flavorObjects.get(0).getString("id");
-			} else {
-				List<String> flavorNames = flavorObjects.stream()
-						.map(o -> o.getString("name"))
-						.collect(Collectors.toList());
-				Map<String, String> namesToIds = flavorObjects.stream()
-						.collect(Collectors.toMap(o -> o.getString("name"), o -> o.getString("id")));
-				Set<String> ids = flavorObjects.stream()
-						.map(o -> o.getString("id"))
-						.collect(Collectors.toSet());
-				String def = config.get("flavor");
-				if (def != null && !ids.contains(def)) {
-					log("WARN", "Default flavor specified in unsup.ini does not exist in the manifest.");
-					def = null;
-				}
-				String flavor = openChoiceAlert("Choose flavor", "<b>There are multiple flavor choices available.</b><br/>Please choose one.", flavorNames, def);
-				if (flavor == null) {
-					log("ERROR", "This is a flavorful manifest, but the unsup.ini doesn't specify a default flavor and we don't have a GUI to ask for a choice! Exiting.");
-					exit(EXIT_CONFIG_ERROR);
-					return;
-				}
-				String id = namesToIds.getOrDefault(flavor, flavor);
-				log("INFO", "Chose flavor "+id);
-				ourFlavor = id;
-			}
-			state.put("flavor", ourFlavor);
-			saveJson(stateFile, state);
-		}
-		boolean bootstrapping = false;
-		if (ourVersion == null) {
-			bootstrapping = true;
-			log("INFO", "Update available! We have nothing, they have "+theirVersion);
-			JsonObject bootstrap = null;
-			try {
-				bootstrap = loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
-			} catch (FileNotFoundException e) {
-				log("INFO", "Bootstrap manifest missing, will have to retrieve and collapse every update");
-			}
-			if (bootstrap != null) {
-				checkManifestFlavor(bootstrap, "bootstrap", IntPredicates.equals(1));
-				Version bootstrapVersion = Version.fromJson(bootstrap.getObject("version"));
-				if (bootstrapVersion == null) throw new IOException("Bootstrap manifest is missing version field");
-				if (bootstrapVersion.code < theirVersion.code) {
-					log("WARN", "Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
-				}
-				HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
-				warnIfInsecure(func);
-				updateTitle("Bootstrapping...", false);
-				long progressDenom = 0;
-				class FileToDownload { String path; String hash; long size; String url; DownloadedFile df; File dest; }
-				List<FileToDownload> todo = new ArrayList<>();
-				for (Object o : bootstrap.getArray("files")) {
-					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in files array is not an object");
-					JsonObject file = (JsonObject)o;
-					String path = file.getString("path");
-					if (path == null) throw new IOException("Entry in files array is missing path");
-					String hash = file.getString("hash");
-					if (hash == null) throw new IOException(path+" in files array is missing hash");
-					if (hash.length() != func.sizeInHexChars)  throw new IOException(path+" in files array hash "+hash+" is wrong length ("+hash.length()+" != "+func.sizeInHexChars+")");
-					long size = file.getLong("size", -1);
-					if (size < 0) throw new IOException(path+" in files array has invalid or missing size");
-					if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
-					String url = checkSchemeMismatch(src, file.getString("url"));
-					JsonArray envs = file.getArray("envs");
-					if (!arrayContains(envs, detectedEnv)) {
-						log("INFO", "Skipping "+path+" as it's not eligible for env "+detectedEnv);
-						continue;
-					}
-					JsonArray flavors = file.getArray("flavors");
-					if (flavors != null && !arrayContains(flavors, ourFlavor)) {
-						log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
-						continue;
-					}
-					FileToDownload ftd = new FileToDownload();
-					ftd.path = path;
-					ftd.hash = hash;
-					ftd.size = size;
-					ftd.url = url;
-					todo.add(ftd);
-					progressDenom += size;
-				}
-				File tmp = new File(".unsup-tmp");
-				if (!tmp.exists()) {
-					tmp.mkdirs();
-				}
-				updateTitle("Bootstrapping...", true);
-				final long progressDenomf = progressDenom;
-				AtomicLong progress = new AtomicLong();
-				Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
-				File wd = new File("");
-				AlertOption[] passOnePreload = new AlertOption[1];
-				ExecutorService svc = Executors.newFixedThreadPool(6);
-				Set<String> files = new HashSet<>();
-				List<Future<?>> futures = new ArrayList<>();
-				Runnable updateSubtitle = () -> {
-					if (files.size() == 0) {
-						tellPuppet(":subtitle=Downloading...");
-					} else if (files.size() == 1) {
-						tellPuppet(":subtitle=Downloading "+files.iterator().next());
-					} else {
-						StringBuilder sb = new StringBuilder();
-						boolean first = true;
-						for (String s : files) {
-							if (first) {
-								first = false;
-							} else {
-								sb.append(", ");
-							}
-							sb.append(s.substring(s.lastIndexOf('/')+1));
-						}
-						tellPuppet(":subtitle=Downloading "+sb);
-					}
-				};
-				for (FileToDownload ftd : todo) {
-					futures.add(svc.submit(() -> {
-						synchronized (files) {
-							files.add(ftd.path);
-							updateSubtitle.run();
-						}
-						try {
-							URL blobUrl = new URL(src, "blobs/"+ftd.hash.substring(0, 2)+"/"+ftd.hash);
-							URL u;
-							if (ftd.url != null) {
-								u = new URL(ftd.url);
-							} else {
-								u = blobUrl;
-							}
-							File dest = new File(ftd.path);
-							if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
-								throw new IOException("Refusing to download to a file outside of working directory: "+dest);
-							if (dest.exists()) {
-								if (dest.length() == ftd.size) {
-									String hash = hash(func, dest);
-									if (ftd.hash.equals(hash)) {
-										log("INFO", ftd.path+" already exists and the hash matches, keeping it and skipping download");
-										progress.addAndGet(ftd.size);
-										updateProgress.run();
-										return null;
-									} else {
-										log("INFO", ftd.path+" already exists but the hash doesn't match, redownloading it ("+hash+" != "+ftd.hash+")");
-									}
-								} else {
-									log("INFO", ftd.path+" already exists but the size doesn't match, redownloading it ("+dest.length()+" != "+ftd.size+")");
-								}
-								AlertOption resp;
-								synchronized (passOnePreload) {
-									if (passOnePreload[0] == null) {
-										resp = openAlert("File conflict",
-												"<b>The file "+ftd.path+" already exists.</b><br/>Do you want to replace it?<br/>Choose Cancel to abort. No files have been changed yet.",
-												AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
-										if (resp == AlertOption.NOTOALL) {
-											passOnePreload[0] = resp = AlertOption.NO;
-										} else if (resp == AlertOption.YESTOALL) {
-											passOnePreload[0] = resp = AlertOption.YES;
-										}
-									} else {
-										resp = passOnePreload[0];
-									}
-								}
-								if (resp == AlertOption.NO) {
-									return null;
-								} else if (resp == AlertOption.CANCEL) {
-									log("INFO", "User cancelled error dialog! Exiting.");
-									exit(EXIT_USER_REQUEST);
-									return null;
-								}
-							}
-							if (ftd.size == 0) {
-								ftd.dest = dest;
-								return null;
-							}
-							long origProgress = progress.get();
-							DownloadedFile df;
-							try {
-								log("INFO", "Downloading "+ftd.path+" from "+u);
-								df = downloadToFile(u, tmp, ftd.size, progress::addAndGet, updateProgress, func);
-								if (!df.hash.equals(ftd.hash)) {
-									throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
-								}
-							} catch (Throwable t) {
-								if (ftd.url != null) {
-									t.printStackTrace();
-									progress.set(origProgress);
-									log("WARN", "Failed to download "+ftd.path+" from specified URL, trying again from "+blobUrl);
-									df = downloadToFile(blobUrl, tmp, ftd.size, progress::addAndGet, updateProgress, func);
-									if (!df.hash.equals(ftd.hash)) {
-										throw new IOException("Hash mismatch on downloaded file for "+ftd.path+" from "+u+" - expected "+ftd.hash+", got "+df.hash);
-									}
-								} else {
-									throw t;
-								}
-							}
-							ftd.df = df;
-							ftd.dest = dest;
-							return null;
-						} finally {
-							synchronized (files) {
-								files.remove(ftd.path);
-								updateSubtitle.run();
-							}
-						}
-					}));
-				}
-				svc.shutdown();
-				for (Future<?> future : futures) {
-					while (true) {
-						try {
-							future.get();
-							break;
-						} catch (InterruptedException e) {
-						} catch (ExecutionException e) {
-							if (e.getCause() instanceof IOException) throw (IOException)e.getCause();
-							throw new RuntimeException(e);
-						}
-					}
-				}
-				updateTitle("Bootstrapping...", false);
-				synchronized (dangerMutex) {
-					tellPuppet(":subtitle=Applying changes");
-					for (FileToDownload ftd : todo) {
-						if (ftd.dest == null) continue;
-						if (ftd.dest.getParentFile() != null) {
-							Files.createDirectories(ftd.dest.getParentFile().toPath());
-						}
-						if (ftd.size == 0) {
-							if (ftd.dest.exists()) {
-								try (FileOutputStream fos = new FileOutputStream(ftd.dest)) {
-									// open and then immediately close the file to overwrite it with nothing
-								}
-							} else {
-								ftd.dest.createNewFile();
-							}
-						} else {
-							Files.move(ftd.df.file.toPath(), ftd.dest.toPath(), StandardCopyOption.REPLACE_EXISTING);
-						}
-					}
-					state.put("current_version", bootstrapVersion.toJson());
-					saveJson(stateFile, state);
-				}
-				ourVersion = bootstrapVersion;
-				log("INFO", "Bootstrap successful!");
-				updated = true;
-			} else {
-				ourVersion = new Version("null", 0);
-			}
-		}
-		if (theirVersion.code > ourVersion.code) {
-			if (!bootstrapping) {
-				log("INFO", "Update available! We have "+ourVersion+", they have "+theirVersion);
-				AlertOption updateResp = openAlert("Update available",
-						"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
-						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
-				if (updateResp == AlertOption.NO) {
-					log("INFO", "Ignoring update by user choice.");
-					return;
-				}
-			}
-			class Change {
-				String path;
-				HashFunction fromHashFunc; String fromHash; long fromSize; int fromCode;
-				HashFunction toHashFunc; String toHash; long toSize; int toCode;
-				String url;
-				DownloadedFile df; File dest;
-				boolean moveAside;
-			}
-			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
-			tellPuppet(":subtitle=Calculating update");
-			Map<String, Change> changesByPath = new LinkedHashMap<>();
-			boolean yappedAboutConsistency = false;
-			int updates = theirVersion.code-ourVersion.code;
-			for (int i = 0; i < updates; i++) {
-				int code = ourVersion.code+(i+1);
-				JsonObject ver = loadJson(new URL(src, "versions/"+code+".json"), 2*M, new URL(src, "versions/"+code+".sig"));
-				checkManifestFlavor(ver, "update", IntPredicates.equals(1));
-				HashFunction func = HashFunction.byName(ver.getString("hash_function", DEFAULT_HASH_FUNCTION));
-				warnIfInsecure(func);
-				for (Object o : ver.getArray("changes")) {
-					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in changes array is not an object");
-					JsonObject file = (JsonObject)o;
-					String path = file.getString("path");
-					if (path == null) throw new IOException("Entry in changes array is missing path");
-					String fromHash = file.getString("from_hash");
-					if (fromHash != null && fromHash.length() != func.sizeInHexChars)  throw new IOException(path+" in changes array from_hash "+fromHash+" is wrong length ("+fromHash.length()+" != "+func.sizeInHexChars+")");
-					long fromSize = file.getLong("from_size", -1);
-					if (fromSize < 0) throw new IOException(path+" in changes array has invalid or missing from_size");
-					if (fromSize == 0 && (fromHash != null && !fromHash.equals(func.emptyHash))) throw new IOException(path+" from in changes array is empty file, but hash isn't the empty hash or null ("+fromHash+" != "+func.emptyHash+")");
-					String toHash = file.getString("to_hash");
-					if (toHash != null && toHash.length() != func.sizeInHexChars)  throw new IOException(path+" in changes array to_hash "+toHash+" is wrong length ("+toHash.length()+" != "+func.sizeInHexChars+")");
-					long toSize = file.getLong("to_size", -1);
-					if (toSize < 0) throw new IOException(path+" in changes array has invalid or missing toSize");
-					if (toSize == 0 && (toHash != null && !toHash.equals(func.emptyHash))) throw new IOException(path+" to in changes array is empty file, but hash isn't the empty hash or null ("+toHash+" != "+func.emptyHash+")");
-					if (fromSize == toSize && Objects.equals(fromHash, toHash)) {
-						log("WARN", path+" in changes array has same from and to hash/size? Ignoring");
-						continue;
-					}
-					String url = checkSchemeMismatch(src, file.getString("url"));
-					JsonArray envs = file.getArray("envs");
-					if (!arrayContains(envs, detectedEnv)) {
-						log("INFO", "Skipping "+path+" as it's not eligible for env "+detectedEnv);
-						continue;
-					}
-					JsonArray flavors = file.getArray("flavors");
-					if (flavors != null && !arrayContains(flavors, ourFlavor)) {
-						log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
-						continue;
-					}
-					if (changesByPath.containsKey(path)) {
-						Change c = changesByPath.get(path);
-						if (c.toHashFunc == func) {
-							if (!Objects.equals(c.toHash, fromHash) || c.toSize != fromSize) {
-								throw new IOException("Bad update: "+path+" in "+c.toCode+" specified to become "+c.toHash+" size "+c.toSize+", but "+code+" expects it to have been "+fromHash+" size "+fromSize);
-							}
-						} else if (!yappedAboutConsistency) {
-							yappedAboutConsistency = true;
-							log("WARN", "Cannot perform consistency check on multi-update due to mismatched hash functions");
-						}
-						c.toHash = toHash;
-						c.toHashFunc = func;
-						c.toSize = toSize;
-						c.toCode = code;
-						c.url = url;
-					} else {
-						Change c = new Change();
-						c.path = path;
-						c.fromHash = fromHash;
-						c.fromHashFunc = func;
-						c.fromSize = fromSize;
-						c.fromCode = code;
-						c.toHash = toHash;
-						c.toHashFunc = func;
-						c.toSize = toSize;
-						c.toCode = code;
-						c.url = url;
-						changesByPath.put(path, c);
-					}
-				}
-			}
-			long progressDenom = 0;
-			File wd = new File("");
-			tellPuppet(":subtitle=Verifying consistency");
-			Map<ConflictType, AlertOption> conflictPreload = new EnumMap<>(ConflictType.class);
-			for (Change c : changesByPath.values()) {
-				File dest = new File(c.path);
-				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
-					throw new IOException("Refusing to download to a file outside of working directory");
-				ConflictType conflictType = ConflictType.NO_CONFLICT;
-				if (dest.exists()) {
-					boolean normalConflict = false;
-					long size = dest.length();
-					if (c.fromHash == null) {
-						if (c.toSize == size && c.toHash.equals(hash(c.toHashFunc, dest))) {
-							log("INFO", c.path+" was created in this update and locally, but the local version matches the update. Skipping");
-							continue;
-						}
-						conflictType = ConflictType.LOCAL_AND_REMOTE_CREATED;
-					} else if (size == c.fromSize) {
-						String hash = hash(c.fromHashFunc, dest);
-						if (c.fromHash.equals(hash)) {
-							log("INFO", c.path+" matches the expected from hash");
-						} else if (c.toSize == size && c.toHash.equals(c.fromHashFunc == c.toHashFunc ? hash : hash(c.toHashFunc, dest))) {
-							log("INFO", c.path+" matches the expected to hash, so has already been updated locally. Skipping");
-							continue;
-						} else {
-							log("INFO", "CONFLICT: "+c.path+" doesn't match the expected from hash ("+hash+" != "+c.fromHash+")");
-							normalConflict = true;
-						}
-					} else if (c.toSize == size && c.toHash.equals(hash(c.toHashFunc, dest))) {
-						log("INFO", c.path+" matches the expected to hash, so has already been updated locally. Skipping");
-						continue;
-					} else {
-						log("INFO", "CONFLICT: "+c.path+" doesn't match the expected from size ("+size+" != "+c.fromSize+")");
-						normalConflict = true;
-					}
-					if (normalConflict) {
-						if (c.toHash == null) {
-							conflictType = ConflictType.LOCAL_CHANGED_REMOTE_DELETED;
-						} else {
-							conflictType = ConflictType.LOCAL_AND_REMOTE_CHANGED;
-						}
-					}
-				} else {
-					if (c.toHash == null) {
-						log("INFO", c.path+" was deleted in this update, but it's already missing locally. Skipping");
-						continue;
-					} else if (c.fromHash != null) {
-						conflictType = ConflictType.LOCAL_DELETED_REMOTE_CHANGED;
-					}
-				}
-				if (conflictType != ConflictType.NO_CONFLICT) {
-					AlertOption resp;
-					if (conflictPreload.containsKey(conflictType)) {
-						resp = conflictPreload.get(conflictType);
-					} else {
-						resp = openAlert("File conflict",
-								"<b>The file "+c.path+" was "+conflictType.msg+".</b><br/>"
-										+ "Do you want to replace it with the version from the update?<br/>"
-										+ "Choose Cancel to abort. No files have been changed yet."+
-										(dest.exists() ? "<br/><br/>If you choose Yes, a copy of the current file will be created at "+c.path+".orig." : ""),
-								AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
-						if (resp == AlertOption.NOTOALL) {
-							resp = AlertOption.NO;
-							conflictPreload.put(conflictType, AlertOption.NO);
-						} else if (resp == AlertOption.YESTOALL) {
-							resp = AlertOption.YES;
-							conflictPreload.put(conflictType, AlertOption.YES);
-						}
-					}
-					if (resp == AlertOption.NO) {
-						continue;
-					} else if (resp == AlertOption.CANCEL) {
-						log("INFO", "User cancelled error dialog! Exiting.");
-						exit(EXIT_USER_REQUEST);
-						return;
-					}
-					if (dest.exists()) {
-						c.moveAside = true;
-					}
-				}
-				progressDenom += c.toSize;
-				c.dest = dest;
-			}
-			File tmp = new File(".unsup-tmp");
-			if (!tmp.exists()) {
-				tmp.mkdirs();
-				try {
-					Files.setAttribute(tmp.toPath(), "dos:hidden", true);
-				} catch (Throwable t) {}
-			}
-			final long progressDenomf = progressDenom;
-			AtomicLong progress = new AtomicLong();
-			Runnable updateProgress = () -> updateProgress((int)((progress.get()*1000)/progressDenomf));
-			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", true);
-			ExecutorService svc = Executors.newFixedThreadPool(6);
-			Set<String> files = new HashSet<>();
-			List<Future<?>> futures = new ArrayList<>();
-			Runnable updateSubtitle = () -> {
-				if (files.size() == 0) {
-					tellPuppet(":subtitle=Downloading...");
-				} else if (files.size() == 1) {
-					tellPuppet(":subtitle=Downloading "+files.iterator().next());
-				} else {
-					StringBuilder sb = new StringBuilder();
-					boolean first = true;
-					for (String s : files) {
-						if (first) {
-							first = false;
-						} else {
-							sb.append(", ");
-						}
-						sb.append(s.substring(s.lastIndexOf('/')+1));
-					}
-					tellPuppet(":subtitle=Downloading "+sb);
-				}
-			};
-			for (Change c : changesByPath.values()) {
-				if (c.toSize == 0 || c.dest == null) {
-					continue;
-				}
-				futures.add(svc.submit(() -> {
-					synchronized (files) {
-						files.add(c.path);
-						updateSubtitle.run();
-					}
-					try {
-						URL blobUrl = new URL(src, "blobs/"+c.toHash.substring(0, 2)+"/"+c.toHash);
-						URL u;
-						if (c.url != null) {
-							u = new URL(c.url);
-						} else {
-							u = blobUrl;
-						}
-						long origProgress = progress.get();
-						DownloadedFile df;
-						try {
-							log("INFO", "Downloading "+c.path+" from "+u);
-							df = downloadToFile(u, tmp, c.toSize, progress::addAndGet, updateProgress, c.toHashFunc);
-							if (!df.hash.equals(c.toHash)) {
-								throw new IOException("Hash mismatch on downloaded file for "+c.path+" from "+u+" - expected "+c.toHash+", got "+df.hash);
-							}
-						} catch (Throwable t) {
-							if (c.url != null) {
-								t.printStackTrace();
-								progress.set(origProgress);
-								log("WARN", "Failed to download "+c.path+" from specified URL, trying again from "+blobUrl);
-								df = downloadToFile(blobUrl, tmp, c.toSize, progress::addAndGet, updateProgress, c.toHashFunc);
-								if (!df.hash.equals(c.toHash)) {
-									throw new IOException("Hash mismatch on downloaded file for "+c.path+" from "+u+" - expected "+c.toHash+", got "+df.hash);
-								}
-							} else {
-								throw t;
-							}
-						}
-						c.df = df;
-						return null;
-					} finally {
-						synchronized (files) {
-							files.remove(c.path);
-							updateSubtitle.run();
-						}
-					}
-				}));
-			}
-			svc.shutdown();
-			for (Future<?> future : futures) {
-				while (true) {
-					try {
-						future.get();
-						break;
-					} catch (InterruptedException e) {
-					} catch (ExecutionException e) {
-						if (e.getCause() instanceof IOException) throw (IOException)e.getCause();
-						throw new RuntimeException(e);
-					}
-				}
-			}
-			updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
-			synchronized (dangerMutex) {
-				tellPuppet(":subtitle=Applying changes. Do not force close the updater.");
-				for (Change c : changesByPath.values()) {
-					if (c.dest == null) continue;
-					Path destPath = c.dest.toPath();
-					if (c.dest.getParentFile() != null) Files.createDirectories(c.dest.getParentFile().toPath());
-					if (c.moveAside) {
-						Files.move(destPath, destPath.resolveSibling(destPath.getFileName().toString()+".orig"), StandardCopyOption.REPLACE_EXISTING);
-					}
-					if (c.toSize == 0) {
-						if (c.toHash == null) {
-							log("INFO", "Deleting "+c.path);
-							Files.deleteIfExists(destPath);
-						} else {
-							if (c.dest.exists()) {
-								try (FileOutputStream fos = new FileOutputStream(c.dest)) {
-									// open and then immediately close the file to overwrite it with nothing
-								}
-							} else {
-								c.dest.createNewFile();
-							}
-						}
-					} else {
-						Files.move(c.df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
-					}
-				}
-				state.put("current_version", theirVersion.toJson());
-				saveJson(stateFile, state);
-			}
-			ourVersion = theirVersion;
-			log("INFO", "Update successful!");
-			updated = true;
-		} else if (ourVersion.code > theirVersion.code) {
-			log("INFO", "Remote version is older than local version, doing nothing");
-		} else {
-			log("INFO", "We appear to be up-to-date. Nothing to do");
-		}
-		sourceVersion = ourVersion.name;
-	}
-
 	// helper methods, called more than once
 	
-	private static void tellPuppet(String order) {
-		if (puppetOut == null) return;
-		synchronized (puppetOut) {
-			try {
-				byte[] utf = order.getBytes(StandardCharsets.UTF_8);
-				for (byte b : utf) {
-					if (b == 0) {
-						// replace NUL with overlong NUL
-						puppetOut.write(0xC0);
-						puppetOut.write(0x80);
-					} else {
-						puppetOut.write(b);
-					}
-				}
-				puppetOut.write(0);
-				puppetOut.flush();
-			} catch (IOException e) {
-				e.printStackTrace();
-				log("WARN", "IO error while talking to puppet. Killing and continuing without GUI.");
-				puppet.destroyForcibly();
-				puppet = null;
-				puppetOut = null;
-			}
-		}
-	}
-	
-	private static void updateTitle(String title, boolean determinate) {
-		Agent.title = title;
-		tellPuppet(":prog=0");
-		tellPuppet(":mode="+(determinate ? "det" : "ind"));
-		tellPuppet(":title="+title);
-	}
-
-	private static void updateProgress(int prog) {
-		tellPuppet(":prog="+prog);
-		if (Math.abs(lastReportedProgress-prog) >= 100 || System.nanoTime()-lastReportedProgressTime > TimeUnit.SECONDS.toNanos(3)) {
-			lastReportedProgress = prog;
-			lastReportedProgressTime = System.nanoTime();
-			log("INFO", title+" "+(prog/10)+"%");
-		}
-	}
-
 	private static QDIni mergePreset(QDIni config, String presetName) {
 		URL u = Agent.class.getClassLoader().getResource("presets/"+presetName+".ini");
 		if (u == null) {
@@ -1204,214 +627,6 @@ class Agent {
 		return config;
 	}
 	
-	private static void warnIfInsecure(HashFunction func) {
-		if (func.insecure) {
-			if (publicKey != null) {
-				log("WARN", "Using insecure hash function "+func+" for a signed manifest! This is a very bad idea!");
-			} else {
-				log("WARN", "Using insecure hash function "+func);
-			}
-		}
-	}
-	
-	private enum AlertMessageType { QUESTION, INFO, WARN, ERROR, NONE }
-	private enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
-	private enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
-	
-	private static AlertOption openAlert(String title, String body, AlertMessageType messageType, AlertOptionType optionType, AlertOption def) {
-		if (puppetOut == null) {
-			return def;
-		} else {
-			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
-			Latch latch = new Latch();
-			alertWaiters.put(name, latch);
-			tellPuppet("["+name+"]:alert="+title+":"+body+":"+messageType.name().toLowerCase(Locale.ROOT)+":"+optionType.name().toLowerCase(Locale.ROOT).replace("_", ""));
-			latch.awaitUninterruptibly();
-			return AlertOption.valueOf(alertResults.remove(name).toUpperCase(Locale.ROOT));
-		}
-	}
-	
-	private static String openChoiceAlert(String title, String body, Collection<String> choices, String def) {
-		if (puppetOut == null) {
-			return def;
-		} else {
-			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
-			Latch latch = new Latch();
-			alertWaiters.put(name, latch);
-			StringJoiner joiner = new StringJoiner("\u001C");
-			choices.forEach(c -> joiner.add(c.replace(':', '\u001B')));
-			tellPuppet("["+name+"]:alert="+title+":"+body+":choice="+joiner+":"+def);
-			latch.awaitUninterruptibly();
-			return alertResults.remove(name);
-		}
-	}
-	
-	private static String checkSchemeMismatch(URL src, String url) throws MalformedURLException {
-		if (url == null) return null;
-		URL parsed = new URL(url);
-		boolean ok = false;
-		if (src.getProtocol().equals("file")) {
-			// promoting from file to http is ok, as well as using files from files
-			ok = "http".equals(parsed.getProtocol()) || "https".equals(parsed.getProtocol())
-					|| "file".equals(parsed.getProtocol());
-		} else if ("http".equals(src.getProtocol()) || "https".equals(src.getProtocol())) {
-			// going between http and https is ok
-			ok = "http".equals(parsed.getProtocol()) || "https".equals(parsed.getProtocol());
-		}
-		if (!ok) {
-			log("WARN", "Ignoring custom URL with bad scheme "+parsed.getProtocol());
-		}
-		return ok ? url : null;
-	}
-	
-	private static byte[] loadAndVerify(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
-		byte[] resp = downloadToMemory(src, sizeLimit);
-		if (resp == null) {
-			throw new IOException(src+" is larger than "+(sizeLimit/K)+"K, refusing to continue downloading");
-		}
-		if (publicKey != null && sigUrl != null) {
-			try {
-				byte[] sigResp = downloadToMemory(sigUrl, 512);
-				EdDSAEngine engine = new EdDSAEngine();
-				engine.initVerify(publicKey);
-				if (!engine.verifyOneShot(resp, sigResp)) {
-					throw new SignatureException("Signature is invalid");
-				}
-			} catch (Throwable t) {
-				throw new IOException("Failed to validate signature for "+src, t);
-			}
-		}
-		return resp;
-	}
-	
-	private static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
-		return new String(loadAndVerify(src, sizeLimit, sigUrl), StandardCharsets.UTF_8);
-	}
-	
-	private static JsonObject loadJson(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
-		return JsonParser.object().from(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
-	}
-
-	private static byte[] downloadToMemory(URL url, int sizeLimit) throws IOException {
-		InputStream conn = get(url);
-		byte[] resp = Util.collectLimited(conn, sizeLimit);
-		return resp;
-	}
-
-	private static InputStream get(URL url) throws IOException {
-		Response res = okhttp.newCall(new Request.Builder()
-				.url(url)
-				.header("User-Agent", "unsup/"+Util.VERSION)
-				.build()).execute();
-		if (res.code() != 200) {
-			if (res.code() == 404 || res.code() == 410) throw new FileNotFoundException();
-			byte[] b = Util.collectLimited(res.body().byteStream(), 512);
-			String s = b == null ? "(response too long)" : new String(b, StandardCharsets.UTF_8);
-			throw new IOException("Received non-200 response from server for "+url+": "+res.code()+"\n"+s);
-		}
-		return res.body().byteStream();
-	}
-	
-	private static class DownloadedFile {
-		/** null if no hash function was specified */
-		public final String hash;
-		public final File file;
-		private DownloadedFile(String hash, File file) {
-			this.hash = hash;
-			this.file = file;
-		}
-	}
-	
-	private static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc) throws IOException {
-		InputStream conn = get(url);
-		byte[] buf = new byte[16384];
-		File file = File.createTempFile("download", "", dir);
-		cleanup.add(file::delete);
-		long readTotal = 0;
-		long lastProgressUpdate = 0;
-		MessageDigest digest = hashFunc == null ? null : hashFunc.createMessageDigest();
-		try (InputStream in = conn; FileOutputStream out = new FileOutputStream(file)) {
-			while (true) {
-				int read = in.read(buf);
-				if (read == -1) break;
-				readTotal += read;
-				if (size != -1 && readTotal > size) throw new IOException("Overread; expected "+size+" bytes, but got at least "+readTotal);
-				out.write(buf, 0, read);
-				if (digest != null) digest.update(buf, 0, read);
-				if (addProgress != null) addProgress.accept(read);
-				if (updateProgress != null && System.nanoTime()-lastProgressUpdate > ONE_SECOND_IN_NANOS/30) {
-					lastProgressUpdate = System.nanoTime();
-					updateProgress.run();
-				}
-			}
-		}
-		if (readTotal != size) {
-			throw new IOException("Underread; expected "+size+" bytes, but only got "+readTotal);
-		}
-		if (updateProgress != null) {
-			updateProgress.run();
-		}
-		String hash = null;
-		if (digest != null) {
-			hash = Util.toHexString(digest.digest());
-		}
-		return new DownloadedFile(hash, file);
-	}
-	
-	private static String hash(HashFunction func, File f) throws IOException {
-		MessageDigest digest = func.createMessageDigest();
-		byte[] buf = new byte[16384];
-		try (FileInputStream in = new FileInputStream(f)) {
-			while (true) {
-				int read = in.read(buf);
-				if (read == -1) break;
-				digest.update(buf, 0, read);
-			}
-		}
-		return Util.toHexString(digest.digest());
-	}
-	
-	private static boolean arrayContains(JsonArray arr, Object obj) {
-		if (arr != null) {
-			boolean anyMatch = false;
-			for (Object en : arr) {
-				if (Objects.equals(en, obj)) {
-					anyMatch = true;
-					break;
-				}
-			}
-			if (!anyMatch) {
-				return false;
-			}
-		}
-		return true;
-	}
-	
-	private static int checkManifestFlavor(JsonObject manifest, String flavor, IntPredicate versionPredicate) throws IOException {
-		if (!manifest.containsKey("unsup_manifest")) throw new IOException("unsup_manifest key is missing");
-		String str = manifest.getString("unsup_manifest");
-		if (str == null) throw new IOException("unsup_manifest key is not a string");
-		int dash = str.indexOf('-');
-		if (dash == -1) throw new IOException("unsup_manifest value does not contain a dash");
-		String lhs = str.substring(0, dash);
-		if (!(flavor.equals(lhs))) throw new IOException("Manifest is of flavor "+lhs+", but we expected "+flavor);
-		String rhs = str.substring(dash+1);
-		int rhsI;
-		try {
-			rhsI = Integer.parseInt(rhs);
-		} catch (IllegalArgumentException e) {
-			throw new IOException("unsup_manifest value right-hand side is not a number: "+rhs);
-		}
-		if (!versionPredicate.test(rhsI)) throw new IOException("Don't know how to parse "+str+" manifest (version too new)");
-		return rhsI;
-	}
-	
-	private static void saveJson(File file, JsonObject obj) throws IOException {
-		try (FileOutputStream fos = new FileOutputStream(file)) {
-			JsonWriter.on(fos).object(obj).done();
-		}
-	}
-	
 	private static void cleanup() {
 		for (ExceptableRunnable er : cleanup) {
 			try {
@@ -1423,80 +638,53 @@ class Agent {
 		cleanup = null;
 	}
 	
-	private static void exit(int code) {
+	static void saveState() throws IOException {
+		saveJson(stateFile, state);
+	}
+	
+	static void saveJson(File file, JsonObject obj) throws IOException {
+		try (FileOutputStream fos = new FileOutputStream(file)) {
+			JsonWriter.on(fos).object(obj).done();
+		}
+	}
+	
+	static void exit(int code) {
 		cleanup();
 		System.exit(code);
 	}
 	
-	private static synchronized void log(String flavor, String msg) {
+	static synchronized void log(String flavor, String msg) {
 		log(standalone ? "sync" : "agent", flavor, msg);
 	}
 	
-	private static synchronized void log(String tag, String flavor, String msg) {
+	static synchronized void log(String tag, String flavor, String msg) {
 		String line = "["+logDateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
 		System.out.println(line);
 		logStream.println(line);
 	}
 	
-	private static volatile boolean awaitingExit = false;
+	static volatile boolean awaitingExit = false;
 	
 	private static PrintStream logStream;
 	
 	private static boolean standalone;
 	public static boolean filesystemIsCaseSensitive;
 	
-	private static List<ExceptableRunnable> cleanup = new ArrayList<>();
-	private static Process puppet;
-	private static QDIni config;
+	static List<ExceptableRunnable> cleanup = new ArrayList<>();
+	static QDIni config;
 	
-	private static String detectedEnv;
-	private static Set<String> validEnvs;
+	static String detectedEnv;
+	static Set<String> validEnvs;
 	
-	private static String title;
-	private static int lastReportedProgress = 0;
-	private static long lastReportedProgressTime = 0;
-	
-	private static Map<String, String> alertResults = new HashMap<>();
-	private static Map<String, Latch> alertWaiters = new HashMap<>();
-	
-	private static EdDSAPublicKey publicKey;
+	static EdDSAPublicKey publicKey;
 	
 	// read by the Unsup class when it loads
 	// be careful not to load that class until this is all initialized
 	public static String sourceVersion;
 	public static boolean updated;
 
-	private static OutputStream puppetOut;
-
-	private static JsonObject state;
+	static JsonObject state;
 
 	private static File stateFile;
-	
-	private static class Version {
-		public final String name;
-		public final int code;
-		
-		public Version(String name, int code) {
-			this.name = name;
-			this.code = code;
-		}
-		
-		public JsonObject toJson() {
-			JsonObject obj = new JsonObject();
-			obj.put("name", name);
-			obj.put("code", code);
-			return obj;
-		}
-		
-		public static Version fromJson(JsonObject obj) {
-			if (obj == null) return null;
-			return new Version(obj.getString("name"), obj.getInt("code"));
-		}
-		
-		@Override
-		public String toString() {
-			return name+" ("+code+")";
-		}
-	}
 	
 }

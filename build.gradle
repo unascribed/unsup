@@ -36,7 +36,7 @@ apply plugin: 'maven-publish'
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup'
-version = '0.1.2'
+version = '0.2.0'
 
 sourceCompatibility = targetCompatibility = 8
 
@@ -233,7 +233,7 @@ publishing {
 			artifactId = 'unsup'
 			version = project.version
 
-			artifact shadowJar
+			artifact proguardJar
 		}
 	}
 }
