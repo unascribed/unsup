@@ -10,11 +10,9 @@ import java.util.Objects;
 import javax.imageio.ImageIO;
 import javax.swing.JPopupMenu;
 
-import com.grack.nanojson.JsonArray;
-
 public class Util {
 
-	public static final String VERSION = "0.2.0-pre1";
+	public static final String VERSION = "0.2.0-pre2";
 
 	public static boolean containsWholeWord(String haystack, String needle) {
 		if (haystack == null || needle == null) return false;
@@ -29,11 +27,27 @@ public class Util {
 		}
 	}
 	
-	protected static boolean arrayContains(JsonArray arr, Object obj) {
+	protected static boolean iterableContains(Iterable<?> arr, Object obj) {
 		if (arr != null) {
 			boolean anyMatch = false;
 			for (Object en : arr) {
 				if (Objects.equals(en, obj)) {
+					anyMatch = true;
+					break;
+				}
+			}
+			if (!anyMatch) {
+				return false;
+			}
+		}
+		return true;
+	}
+	
+	protected static boolean iterablesIntersect(Iterable<?> a, Iterable<?> b) {
+		if (a != null) {
+			boolean anyMatch = false;
+			for (Object en : a) {
+				if (iterableContains(b, en)) {
 					anyMatch = true;
 					break;
 				}

@@ -3,16 +3,14 @@ package com.unascribed.sup;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.function.IntPredicate;
-import java.util.stream.Collectors;
-
 import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParserException;
+import com.unascribed.sup.FlavorGroup.FlavorChoice;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
@@ -37,43 +35,98 @@ class FormatHandlerUnsup extends FormatHandler {
 			theirVersion = new Version(theirVersion.name, Integer.getInteger("unsup.debug.overrideRemoteVersionCode", theirVersion.code));
 		}
 		JsonObject newState = new JsonObject(Agent.state);
-		String ourFlavor = Agent.state.getString("flavor");
-		JsonArray theirFlavors = manifest.getArray("flavors");
-		if (ourFlavor == null && theirFlavors != null) {
-			List<JsonObject> flavorObjects = theirFlavors.stream()
-					.map(o -> (JsonObject)o)
-					.filter(o -> o.getArray("envs") == null || Util.arrayContains(o.getArray("envs"), Agent.detectedEnv))
-					.collect(Collectors.toList());
-			if (flavorObjects.isEmpty()) {
-				// there are no flavors eligible for our environment, so we can continue while ignoring flavors
-			} else if (flavorObjects.size() == 1) {
-				// there is exactly one eligible flavor choice, no sense in bothering the user
-				ourFlavor = flavorObjects.get(0).getString("id");
-			} else {
-				List<String> flavorNames = flavorObjects.stream()
-						.map(o -> o.getString("name"))
-						.collect(Collectors.toList());
-				Map<String, String> namesToIds = flavorObjects.stream()
-						.collect(Collectors.toMap(o -> o.getString("name"), o -> o.getString("id")));
-				Set<String> ids = flavorObjects.stream()
-						.map(o -> o.getString("id"))
-						.collect(Collectors.toSet());
-				String def = Agent.config.get("flavor");
-				if (def != null && !ids.contains(def)) {
-					Agent.log("WARN", "Default flavor specified in unsup.ini does not exist in the manifest.");
-					def = null;
+		JsonArray ourFlavors = Agent.state.getArray("flavors");
+		if (ourFlavors == null && Agent.state.containsKey("flavor")) {
+			ourFlavors = new JsonArray();
+			ourFlavors.add(Agent.state.get("flavor"));
+			newState.put("flavors", ourFlavors);
+			newState.remove("flavor");
+		}
+		JsonArray theirFlavorGroups = manifest.getArray("flavor_groups");
+		List<FlavorGroup> unpickedGroups = new ArrayList<>();
+		if (theirFlavorGroups != null) {
+			flavors: for (Object ele : theirFlavorGroups) {
+				if (ele instanceof JsonObject) {
+					JsonObject obj = (JsonObject)ele;
+					JsonArray envs = obj.getArray("envs");
+					if (envs != null && !Util.iterableContains(envs, Agent.detectedEnv)) {
+						continue;
+					}
+					String id = obj.getString("id");
+					if (id == null)
+						throw new IOException("A flavor group is missing an ID");
+					String name = obj.getString("name", id);
+					String description = obj.getString("description", "No description");
+					String defChoice = Agent.config.get("flavors."+id);
+					JsonArray choices = obj.getArray("choices");
+					FlavorGroup grp = new FlavorGroup();
+					grp.id = id;
+					grp.name = name;
+					grp.description = description;
+					for (Object cele : choices) {
+						FlavorChoice c = new FlavorChoice();
+						if (cele instanceof JsonObject) {
+							JsonObject cobj = (JsonObject)cele;
+							c.id = cobj.getString("id");
+							if (c.id == null)
+								throw new IOException("A flavor choice in group "+id+" is missing an ID");
+							c.name = cobj.getString("name", c.id);
+							c.description = cobj.getString("description", "");
+						} else {
+							c.id = String.valueOf(cele);
+							c.name = c.id;
+							c.description = "";
+						}
+						if (Util.iterableContains(ourFlavors, c.id)) {
+							// a choice has already been made for this flavor
+							continue flavors;
+						}
+						c.def = c.id.equals(defChoice);
+						if (c.def) {
+							grp.defChoice = c.id;
+							grp.defChoiceName = c.name;
+						}
+						grp.choices.add(c);
+					}
+					unpickedGroups.add(grp);
 				}
-				String flavor = PuppetHandler.openChoiceAlert("Choose flavor", "<b>There are multiple flavor choices available.</b><br/>Please choose one.", flavorNames, def);
-				if (flavor == null) {
-					Agent.log("ERROR", "This is a flavorful manifest, but the unsup.ini doesn't specify a default flavor and we don't have a GUI to ask for a choice! Exiting.");
-					Agent.exit(Agent.EXIT_CONFIG_ERROR);
-					return null;
-				}
-				String id = namesToIds.getOrDefault(flavor, flavor);
-				Agent.log("INFO", "Chose flavor "+id);
-				ourFlavor = id;
 			}
-			newState.put("flavor", ourFlavor);
+			ourFlavors = handleFlavorSelection(ourFlavors, unpickedGroups, newState);
+		} else {
+			JsonArray theirFlavors = manifest.getArray("flavors");
+			if (theirFlavors != null) {
+				FlavorGroup grp = new FlavorGroup();
+				grp.id = "default";
+				grp.name = "Flavor";
+				for (Object ele : theirFlavors) {
+					if (ele instanceof JsonObject) {
+						JsonObject obj = (JsonObject)ele;
+						JsonArray envs = obj.getArray("envs");
+						if (envs != null && !Util.iterableContains(envs, Agent.detectedEnv)) {
+							continue;
+						}
+						String id = obj.getString("id");
+						if (id == null)
+							throw new IOException("A flavor group is missing an ID");
+						String name = obj.getString("name", id);
+						String description = "No description";
+						int firstOParen = name.indexOf('(');
+						int lastCParen = name.lastIndexOf(')');
+						if (firstOParen != -1 && lastCParen > firstOParen) {
+							String newName = name.substring(0, firstOParen).trim();
+							description = name.substring(firstOParen+1, lastCParen);
+							name = newName;
+						}
+						FlavorChoice c = new FlavorChoice();
+						c.id = id;
+						c.name = name;
+						c.description = description;
+						grp.choices.add(c);
+					}
+				}
+				unpickedGroups.add(grp);
+				ourFlavors = handleFlavorSelection(ourFlavors, unpickedGroups, newState);
+			}
 		}
 		UpdatePlan<FileToDownloadWithCode> bootstrapPlan = null;
 		boolean bootstrapping = false;
@@ -109,13 +162,13 @@ class FormatHandlerUnsup extends FormatHandler {
 					if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
 					String urlStr = IOHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!Util.arrayContains(envs, Agent.detectedEnv)) {
+					if (!Util.iterableContains(envs, Agent.detectedEnv)) {
 						Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
 					JsonArray flavors = file.getArray("flavors");
-					if (flavors != null && !Util.arrayContains(flavors, ourFlavor)) {
-						Agent.log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
+					if (flavors != null && !Util.iterablesIntersect(flavors, ourFlavors)) {
+						Agent.log("INFO", "Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
 					URL fallbackUrl = new URL(src, blobPath(hash));
@@ -184,13 +237,13 @@ class FormatHandlerUnsup extends FormatHandler {
 					}
 					String urlStr = IOHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!Util.arrayContains(envs, Agent.detectedEnv)) {
+					if (!Util.iterableContains(envs, Agent.detectedEnv)) {
 						Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
 					JsonArray flavors = file.getArray("flavors");
-					if (flavors != null && !Util.arrayContains(flavors, ourFlavor)) {
-						Agent.log("INFO", "Skipping "+path+" as it's not eligible for flavor "+ourFlavor);
+					if (flavors != null && !Util.iterablesIntersect(flavors, ourFlavors)) {
+						Agent.log("INFO", "Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
 					URL fallbackUrl = toHash == null ? null : new URL(src, blobPath(toHash));
@@ -237,7 +290,7 @@ class FormatHandlerUnsup extends FormatHandler {
 			return new CheckResult(ourVersion, theirVersion, null);
 		}
 	}
-	
+
 	private static String blobPath(String hash) {
 		return "blobs/"+hash.substring(0, 2)+"/"+hash;
 	}

@@ -9,8 +9,11 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -261,6 +264,30 @@ class PuppetHandler {
 			tellPuppet("["+name+"]:alert="+title+":"+body+":choice="+joiner+":"+def);
 			latch.awaitUninterruptibly();
 			return alertResults.remove(name);
+		}
+	}
+	
+	static List<String> openFlavorSelectDialog(String title, String body, List<FlavorGroup> groups) {
+		if (puppetOut == null) {
+			return new ArrayList<>();
+		} else {
+			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
+			Latch latch = new Latch();
+			alertWaiters.put(name, latch);
+			StringJoiner groupJoiner = new StringJoiner("\u001D");
+			for (FlavorGroup group : groups) {
+				StringJoiner joiner = new StringJoiner("\u001C");
+				joiner.add(group.id);
+				joiner.add(group.name);
+				joiner.add(group.description);
+				for (FlavorGroup.FlavorChoice choice : group.choices) {
+					joiner.add(choice.id).add(choice.name).add(choice.description).add(Boolean.toString(choice.def));
+				}
+				groupJoiner.add(joiner.toString());
+			}
+			tellPuppet("["+name+"]:pickFlavor="+groupJoiner.toString().replace(':', '\u001B'));
+			latch.awaitUninterruptibly();
+			return Arrays.asList(alertResults.remove(name).split("\u001C"));
 		}
 	}
 

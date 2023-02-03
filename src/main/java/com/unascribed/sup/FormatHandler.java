@@ -1,9 +1,12 @@
 package com.unascribed.sup;
 
 import java.net.URL;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
+import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 
 abstract class FormatHandler {
@@ -95,6 +98,28 @@ abstract class FormatHandler {
 			this.theirVersion = theirVersion;
 			this.plan = plan;
 		}
+	}
+	
+	protected static JsonArray handleFlavorSelection(JsonArray ourFlavors, List<FlavorGroup> unpickedGroups, JsonObject newState) {
+		if (!unpickedGroups.isEmpty()) {
+			ourFlavors = new JsonArray(ourFlavors == null ? Collections.emptyList() : ourFlavors);
+			if (PuppetHandler.puppetOut != null) {
+				ourFlavors.addAll(PuppetHandler.openFlavorSelectDialog("Select flavors", "", unpickedGroups));
+			} else {
+				for (FlavorGroup grp : unpickedGroups) {
+					if (grp.defChoice != null) {
+						Agent.log("INFO", "Selecting default choice "+grp.defChoiceName+" for flavor group "+grp.name);
+						ourFlavors.add(grp.defChoice);
+					} else {
+						Agent.log("ERROR", "No choice provided for flavor group "+grp.name);
+						Agent.exit(Agent.EXIT_CONFIG_ERROR);
+						return null;
+					}
+				}
+			}
+			newState.put("flavors", ourFlavors);
+		}
+		return ourFlavors;
 	}
 
 }
