@@ -9,6 +9,10 @@ update multiple Minecraft modpacks across Forge and Fabric for multiple
 versions of Minecraft. The main missing piece right now is the Creator GUI;
 manifests must be [written by hand](https://git.sleeping.town/unascribed/unsup/wiki/Manifest-format).
 
+*As of 0.2.0*, you can also point the unsup agent at a Packwiz `pack.toml`.
+This is the recommended solution to deploying packs with unsup at the moment.
+The Creator may still get implemented to offer a GUI solution.
+
 unsup is a somewhat minimal implementation of a generic working directory
 syncer in Java. It supports running as a Java agent, to piggy-back off of the
 launch of another program.
@@ -50,6 +54,8 @@ branding. It ships with a dark theme with teal accents.
 ![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/conflict.png)
 
 ![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/update.png)
+
+![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/flavors.png)
 
 ![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/done.png)
 
