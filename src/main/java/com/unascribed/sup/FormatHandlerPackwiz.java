@@ -26,6 +26,8 @@ import com.unascribed.sup.PuppetHandler.AlertOptionType;
 
 public class FormatHandlerPackwiz extends FormatHandler {
 	
+	private static final boolean changeFlavors = Boolean.getBoolean("unsup.packwiz.changeFlavors");
+	
 	static CheckResult check(URL src) throws IOException {
 		Agent.log("WARN", "Loading packwiz-format manifest from "+src+" - this functionality is experimental!");
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
@@ -43,7 +45,8 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			throw new IOException("Malformed pack.toml: [index] table is missing");
 		HashFunction indexFunc = parseFunc(indexMeta.getString("hash-format"));
 		String indexDoublet = indexFunc+":"+indexMeta.getString("hash");
-		if (!indexDoublet.equals(pwstate.getString("lastIndexHash"))) {
+		boolean actualUpdate = !indexDoublet.equals(pwstate.getString("lastIndexHash"));
+		if (changeFlavors || actualUpdate) {
 			if (ourVersion == null) {
 				ourVersion = new Version("null", 0);
 			}
@@ -51,13 +54,14 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			JsonObject newState = new JsonObject(Agent.state);
 			pwstate = new JsonObject(pwstate);
 			newState.put("packwiz", pwstate);
+			
 			Agent.log("INFO", "Update available - our index state is "+pwstate.getString("lastIndexHash")+", theirs is "+indexDoublet);
 			String interlude = " from "+ourVersion.name+" to "+theirVersion.name;
 			if (ourVersion.name.equals(theirVersion.name)) {
 				interlude = "";
 			}
 			boolean bootstrapping = !pwstate.containsKey("lastIndexHash");
-			if (!bootstrapping) {
+			if (!bootstrapping && actualUpdate) {
 				AlertOption updateResp = PuppetHandler.openAlert("Update available",
 						"<b>An update"+interlude+" is available!</b><br/>Do you want to install it?",
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
@@ -129,7 +133,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 										name = id;
 										description = "";
 									}
-									if (Util.iterableContains(ourFlavors, id)) {
+									if (!changeFlavors && Util.iterableContains(ourFlavors, id)) {
 										// a choice has already been made for this flavor
 										continue flavors;
 									}
@@ -137,7 +141,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 									c.id = id;
 									c.name = name;
 									c.description = description;
-									c.def = id.equals(defChoice);
+									c.def = changeFlavors ? Util.iterableContains(ourFlavors, id) : id.equals(defChoice);
 									if (c.def) {
 										grp.defChoice = c.id;
 										grp.defChoiceName = c.name;
@@ -211,7 +215,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 				if (file.getBoolean("metafile", false)) {
 					String name = path.substring(path.lastIndexOf('/')+1, path.endsWith(".pw.toml") ? path.length()-8 : path.length());
 					String metafileDoublet = (func+":"+hash);
-					if (metafileDoublet.equals(metafileState.getString(path))) {
+					if (metafileDoublet.equals(metafileState.getString(path)) && !changeFlavors) {
 						toDelete.remove(String.valueOf(metafileFiles.get(path)));
 						continue;
 					}
@@ -278,7 +282,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					synth.id = mf.name;
 					synth.name = metafile.getString("name");
 					synth.description = option.getString("description", "No description");
-					boolean defOn = option.getBoolean("default", false);
+					boolean defOn = changeFlavors ? Util.iterableContains(ourFlavors, mf.name+"_on") : option.getBoolean("default", false);
 					FlavorGroup.FlavorChoice on = new FlavorGroup.FlavorChoice();
 					on.id = mf.name+"_on";
 					on.name = "On";
@@ -297,7 +301,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			JsonObject syntheticGroupsJson = new JsonObject();
 			pwstate.put("syntheticFlavorGroups", syntheticGroupsJson);
 			for (Map.Entry<String, FlavorGroup> en : syntheticGroups.entrySet()) {
-				if (!en.getValue().choices.stream().map(c -> c.id).anyMatch(ourFlavors::contains)) {
+				if (changeFlavors || !en.getValue().choices.stream().map(c -> c.id).anyMatch(ourFlavors::contains)) {
 					unpickedGroups.add(en.getValue());
 				}
 				FlavorGroup grp = en.getValue();
@@ -316,9 +320,11 @@ public class FormatHandlerPackwiz extends FormatHandler {
 				obj.put("choices", choices);
 				syntheticGroupsJson.put(en.getKey(), obj);
 			}
-			
 
 			PuppetHandler.updateSubtitle("Waiting for flavor selection");
+			if (changeFlavors) {
+				ourFlavors.clear();
+			}
 			ourFlavors = handleFlavorSelection(ourFlavors, unpickedGroups, newState);
 			
 			for (Future<Metafile> future : metafileFutures) {
@@ -329,6 +335,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					throw new AssertionError(e);
 				}
 				
+
 				if (!Util.iterablesIntersect(metafileFlavors.get(mf.name), ourFlavors)) {
 					Agent.log("INFO", "Skipping "+mf.target+" as it's not eligible for our selected flavors");
 					continue;

@@ -674,7 +674,7 @@ class Agent {
 	// helper methods, called more than once
 	
 	private static QDIni mergePreset(QDIni config, String presetName) {
-		URL u = Agent.class.getClassLoader().getResource("presets/"+presetName+".ini");
+		URL u = Agent.class.getClassLoader().getResource("com/unascribed/sup/presets/"+presetName+".ini");
 		if (u == null) {
 			log("ERROR", "Config file error: Preset "+presetName+" not found at "+config.getBlame("preset")+"! Exiting.");
 			exit(EXIT_CONFIG_ERROR);
