@@ -62,6 +62,32 @@ class Agent {
 	static final int EXIT_BUG = 3;
 	static final int EXIT_USER_REQUEST = 4;
 	
+	static final boolean DEBUG = Boolean.getBoolean("unsup.debug");
+	
+	static volatile boolean awaitingExit = false;
+	
+	private static PrintStream logStream;
+	
+	private static boolean standalone;
+	public static boolean filesystemIsCaseSensitive;
+	
+	static List<ExceptableRunnable> cleanup = new ArrayList<>();
+	static QDIni config;
+	
+	static String detectedEnv;
+	static Set<String> validEnvs;
+	
+	static EdDSAPublicKey publicKey;
+	
+	// read by the Unsup class when it loads
+	// be careful not to load that class until this is all initialized
+	public static String sourceVersion;
+	public static boolean updated;
+
+	static JsonObject state;
+
+	private static File stateFile;
+	
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
 	static final Object dangerMutex = new Object();
 	private static final SimpleDateFormat logDateFormat = new SimpleDateFormat("HH:mm:ss");
@@ -427,7 +453,7 @@ class Agent {
 					DownloadedFile df;
 					long[] contributedProgress = {0};
 					try {
-						log("INFO", "Downloading "+path+" from "+f.url);
+						log("INFO", "Downloading "+path+" from "+describe(f.url));
 						df = IOHelper.downloadToFile(f.url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
 								updateProgress, to.func, f.hostile);
 						if (!df.hash.equals(to.hash)) {
@@ -438,7 +464,7 @@ class Agent {
 						if (f.fallbackUrl != null) {
 							t.printStackTrace();
 							progress.addAndGet(-contributedProgress[0]);
-							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+f.fallbackUrl);
+							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+describe(f.fallbackUrl));
 							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size,  to.size == -1 ? l -> {} : progress::addAndGet, updateProgress, to.func, false);
 							if (!df.hash.equals(to.hash)) {
 								throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.fallbackUrl+" - expected "+to.hash+", got "+df.hash);
@@ -517,6 +543,28 @@ class Agent {
 		}
 		log("INFO", "Update successful!");
 		updated = true;
+	}
+
+	private static String describe(URL url) {
+		if (url == null) return "(null)";
+		if (DEBUG) return url.toString();
+		String host = url.getHost();
+		if (host == null) return "[null]";
+		switch (host) {
+			case "modrinth.com":
+			case "cdn.modrinth.com":
+					return "Modrinth";
+			
+			case "mediafilez.forgecdn.net": case "mediafiles.forgecdn.net":
+			case "curseforge.com": case "www.curseforge.com":
+			case "edge.forgecdn.net":
+				return "CurseForge";
+			
+			case "github.com": case "objects.githubusercontent.com":
+				return "GitHub";
+				
+			default: return host;
+		}
 	}
 
 	private static void createLogStream() {
@@ -723,33 +771,10 @@ class Agent {
 	}
 	
 	static synchronized void log(String tag, String flavor, String msg) {
+		if ("DEBUG" == flavor && !DEBUG) return;
 		String line = "["+logDateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
 		System.out.println(line);
 		logStream.println(line);
 	}
-	
-	static volatile boolean awaitingExit = false;
-	
-	private static PrintStream logStream;
-	
-	private static boolean standalone;
-	public static boolean filesystemIsCaseSensitive;
-	
-	static List<ExceptableRunnable> cleanup = new ArrayList<>();
-	static QDIni config;
-	
-	static String detectedEnv;
-	static Set<String> validEnvs;
-	
-	static EdDSAPublicKey publicKey;
-	
-	// read by the Unsup class when it loads
-	// be careful not to load that class until this is all initialized
-	public static String sourceVersion;
-	public static boolean updated;
-
-	static JsonObject state;
-
-	private static File stateFile;
 	
 }

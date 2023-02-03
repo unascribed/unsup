@@ -335,9 +335,14 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					throw new AssertionError(e);
 				}
 				
-
+				Agent.log("DEBUG", "Flavors for "+mf.name+": "+metafileFlavors.get(mf.name));
 				if (!Util.iterablesIntersect(metafileFlavors.get(mf.name), ourFlavors)) {
 					Agent.log("INFO", "Skipping "+mf.target+" as it's not eligible for our selected flavors");
+					continue;
+				}
+				
+				if (mf.target == null) {
+					// skipped in an earlier pass
 					continue;
 				}
 				

@@ -4,8 +4,14 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
+import java.util.AbstractSet;
 import java.util.Base64;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 import javax.imageio.ImageIO;
 import javax.swing.JPopupMenu;
@@ -130,6 +136,87 @@ public class Util {
 
 	public static String b64Str(String b64) {
 		return new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8);
+	}
+
+	public static <K, V> Map<K, V> nullRejectingMap(Map<K, V> delegate) {
+		return new NullRejectingMap<K, V>(delegate);
+	}
+
+	private static class NullRejectingMap<K, V> extends AbstractMap<K, V> {
+		private final Map<K, V> delegate;
+
+		private NullRejectingMap(Map<K, V> delegate) {
+			this.delegate = delegate;
+		}
+
+		@Override
+		public Set<Entry<K, V>> entrySet() {
+			Set<Entry<K, V>> delegateSet = delegate.entrySet();
+			return new AbstractSet<Map.Entry<K,V>>() {
+
+				@Override
+				public int size() {
+					return delegate.size();
+				}
+
+				@Override
+				public Iterator<Entry<K, V>> iterator() {
+					Iterator<Entry<K, V>> delegateIter = delegateSet.iterator();
+					return new Iterator<Map.Entry<K,V>>() {
+						@Override
+						public boolean hasNext() {
+							return delegateIter.hasNext();
+						}
+						
+						@Override
+						public Entry<K, V> next() {
+							Entry<K, V> delegateEn = delegateIter.next();
+							return new Entry<K, V>() {
+
+								@Override
+								public K getKey() {
+									return delegateEn.getKey();
+								}
+
+								@Override
+								public V getValue() {
+									return delegateEn.getValue();
+								}
+
+								@Override
+								public V setValue(V value) {
+									if (value == null) throw new IllegalArgumentException("Cannot assign null to a key: "+getKey());
+									return delegateEn.setValue(value);
+								}
+							};
+						}
+					};
+				}
+
+				@Override
+				public boolean add(Entry<K, V> e) {
+					return delegateSet.add(e);
+				}
+
+				@Override
+				public boolean addAll(Collection<? extends Entry<K, V>> c) {
+					return delegateSet.addAll(c);
+				}
+			};
+		}
+
+		@Override
+		public V put(K key, V value) {
+			if (key == null) throw new IllegalArgumentException("Cannot assign a value to a null key: "+value);
+			if (value == null) throw new IllegalArgumentException("Cannot assign null to a key: "+key);
+			return delegate.put(key, value);
+		}
+
+		@SuppressWarnings("unlikely-arg-type")
+		@Override
+		public V remove(Object key) {
+			return delegate.remove(key);
+		}
 	}
 
 }

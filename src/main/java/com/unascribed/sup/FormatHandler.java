@@ -76,8 +76,8 @@ abstract class FormatHandler {
 		final boolean isBootstrap;
 		final String fromVersion;
 		final String toVersion;
-		Map<String, F> files = new HashMap<>();
-		Map<String, FileState> expectedState = new HashMap<>();
+		final Map<String, F> files = Util.nullRejectingMap(new HashMap<>());
+		final Map<String, FileState> expectedState = Util.nullRejectingMap(new HashMap<>());
 		final JsonObject newState;
 		
 		public UpdatePlan(boolean isBootstrap, String fromVersion, String toVersion, JsonObject newState) {
