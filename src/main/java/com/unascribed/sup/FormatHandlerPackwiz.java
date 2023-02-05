@@ -73,7 +73,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			pwstate.put("lastIndexHash", indexDoublet);
 			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 			PuppetHandler.updateSubtitle("Calculating update");
-			Toml index = IOHelper.loadToml(new URL(src, indexMeta.getString("file")), 64*K,
+			Toml index = IOHelper.loadToml(new URL(src, indexMeta.getString("file")), 2*M,
 					indexFunc, indexMeta.getString("hash"));
 			Toml unsup = null;
 			List<FlavorGroup> unpickedGroups = new ArrayList<>();
@@ -170,7 +170,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					}
 				}
 			}
-			UpdatePlan<FilePlan> plan = new UpdatePlan<>(bootstrapping, ourVersion.name, theirVersion.name, newState);
+			UpdatePlan<FilePlan> plan = new UpdatePlan<>(bootstrapping, newState);
 			Set<String> toDelete = new HashSet<>();
 			JsonObject lastState = pwstate.getObject("lastState");
 			if (lastState != null) {
@@ -225,7 +225,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 				} else {
 					FilePlan f = new FilePlan();
 					f.state = new FileState(func, hash, -1);
-					f.url = new URL(src, path);
+					f.url = new URL(src, path.replace(" ", "%20"));
 					toDelete.remove(path);
 					postState.put(path, f.state);
 					if (!plan.expectedState.containsKey(path)) {

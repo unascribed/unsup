@@ -100,8 +100,7 @@ class PuppetHandler {
 			Agent.log("WARN", "Failed to summon a puppet. Continuing without a GUI.");
 		} else {
 			Thread puppetErr = new Thread(() -> {
-				BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getErrorStream(), StandardCharsets.UTF_8));
-				try {
+				try (BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getErrorStream(), StandardCharsets.UTF_8))) {
 					while (true) {
 						String line = br.readLine();
 						if (line == null) return;

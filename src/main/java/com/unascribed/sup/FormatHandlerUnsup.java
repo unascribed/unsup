@@ -148,7 +148,7 @@ class FormatHandlerUnsup extends FormatHandler {
 				}
 				HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
 				PuppetHandler.updateTitle("Bootstrapping...", false);
-				bootstrapPlan = new UpdatePlan<>(true, "null", bootstrapVersion.name, newState);
+				bootstrapPlan = new UpdatePlan<>(true, newState);
 				for (Object o : bootstrap.getArray("files")) {
 					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in files array is not an object");
 					JsonObject file = (JsonObject)o;
@@ -202,7 +202,7 @@ class FormatHandlerUnsup extends FormatHandler {
 					return new CheckResult(ourVersion, theirVersion, null);
 				}
 			}
-			UpdatePlan<FileToDownloadWithCode> plan = new UpdatePlan<>(bootstrapping, ourVersion.name, theirVersion.name, newState);
+			UpdatePlan<FileToDownloadWithCode> plan = new UpdatePlan<>(bootstrapping, newState);
 			if (bootstrapPlan != null) {
 				plan.files.putAll(bootstrapPlan.files);
 				plan.expectedState.putAll(bootstrapPlan.expectedState);

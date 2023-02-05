@@ -316,7 +316,7 @@ class Agent {
 		Map<ConflictType, AlertOption> conflictPreload = new EnumMap<>(ConflictType.class);
 		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 			String path = en.getKey();
-			FileState from = plan.expectedState.get(path);
+			FileState from = plan.expectedState.getOrDefault(path, FileState.EMPTY);
 			FilePlan f = en.getValue();
 			FileState to = f.state;
 			File dest = new File(path);
@@ -524,14 +524,12 @@ class Agent {
 					if (to.hash == null) {
 						log("INFO", "Deleting "+path);
 						Files.deleteIfExists(destPath);
-					} else {
-						if (dest.exists()) {
-							try (FileOutputStream fos = new FileOutputStream(dest)) {
-								// open and then immediately close the file to overwrite it with nothing
-							}
-						} else {
-							dest.createNewFile();
+					} else if (dest.exists()) {
+						try (FileOutputStream fos = new FileOutputStream(dest)) {
+							// open and then immediately close the file to overwrite it with nothing
 						}
+					} else {
+						dest.createNewFile();
 					}
 				} else {
 					Files.move(df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
@@ -550,6 +548,7 @@ class Agent {
 		if (DEBUG) return url.toString();
 		String host = url.getHost();
 		if (host == null) return "[null]";
+		if (host.isEmpty()) return url.toString();
 		switch (host) {
 			case "modrinth.com":
 			case "cdn.modrinth.com":

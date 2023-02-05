@@ -152,6 +152,7 @@ class IOHelper {
 	
 	protected static Toml loadToml(URL src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
 		byte[] data = downloadToMemory(src, sizeLimit);
+		if (data == null) throw new IOException("Size limit of "+(sizeLimit/K)+"K for "+src+" exceeded");
 		String hash = Util.toHexString(func.createMessageDigest().digest(data));
 		if (!hash.equals(expectedHash))
 			throw new IOException("Expected "+expectedHash+" from "+src+", but got "+hash);

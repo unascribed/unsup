@@ -18,7 +18,7 @@ import javax.swing.JPopupMenu;
 
 public class Util {
 
-	public static final String VERSION = "0.2.0-pre3";
+	public static final String VERSION = "0.2.0-pre4";
 
 	public static boolean containsWholeWord(String haystack, String needle) {
 		if (haystack == null || needle == null) return false;

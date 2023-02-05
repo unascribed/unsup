@@ -223,7 +223,7 @@ public class QDIni {
 
 			@Override
 			public int size() {
-				return size();
+				return QDIni.this.size();
 			}
 			
 		};
@@ -327,7 +327,7 @@ public class QDIni {
 
 					@Override
 					public int size() {
-						return size();
+						return QDIni.this.size();
 					}
 					
 				};

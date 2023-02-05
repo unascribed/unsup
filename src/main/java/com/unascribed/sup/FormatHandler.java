@@ -74,16 +74,12 @@ abstract class FormatHandler {
 	
 	protected static class UpdatePlan<F extends FilePlan> {
 		final boolean isBootstrap;
-		final String fromVersion;
-		final String toVersion;
 		final Map<String, F> files = Util.nullRejectingMap(new HashMap<>());
 		final Map<String, FileState> expectedState = Util.nullRejectingMap(new HashMap<>());
 		final JsonObject newState;
 		
-		public UpdatePlan(boolean isBootstrap, String fromVersion, String toVersion, JsonObject newState) {
+		public UpdatePlan(boolean isBootstrap, JsonObject newState) {
 			this.isBootstrap = isBootstrap;
-			this.fromVersion = fromVersion;
-			this.toVersion = toVersion;
 			this.newState = newState;
 		}
 	}
@@ -104,6 +100,7 @@ abstract class FormatHandler {
 		if (!unpickedGroups.isEmpty()) {
 			ourFlavors = new JsonArray(ourFlavors == null ? Collections.emptyList() : ourFlavors);
 			if (PuppetHandler.puppetOut != null) {
+				PuppetHandler.tellPuppet(":expedite=openTimeout");
 				ourFlavors.addAll(PuppetHandler.openFlavorSelectDialog("Select flavors", "", unpickedGroups));
 			} else {
 				for (FlavorGroup grp : unpickedGroups) {

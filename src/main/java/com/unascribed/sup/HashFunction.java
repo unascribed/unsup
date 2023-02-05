@@ -13,8 +13,8 @@ public enum HashFunction {
 	SHA2_384("SHA-2 384", "SHA-384", 384, false),
 	SHA2_512("SHA-2 512", "SHA-512", 512, false),
 	SHA2_512_256("SHA-2 512/256", "SHA-512/256", 256, false),
-	
-	@Deprecated MURMUR2_CF("Murmur2-CF", Murmur2MessageDigest::new, 32, true)
+
+	@Deprecated MURMUR2_CF("Murmur2-CF", Murmur2MessageDigest::new, 32, true),
 	;
 	
 	private static final Map<String, HashFunction> BY_NAME = new HashMap<>();
