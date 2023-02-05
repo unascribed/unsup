@@ -98,6 +98,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 							if (c.id == null) continue;
 							c.name = cobj.getString("name");
 							c.description = cobj.getString("description");
+							grp.choices.add(c);
 						}
 					}
 					syntheticGroups.put(en.getKey(), grp);
@@ -300,8 +301,9 @@ public class FormatHandlerPackwiz extends FormatHandler {
 
 			JsonObject syntheticGroupsJson = new JsonObject();
 			pwstate.put("syntheticFlavorGroups", syntheticGroupsJson);
+			final JsonArray fourFlavors = ourFlavors;
 			for (Map.Entry<String, FlavorGroup> en : syntheticGroups.entrySet()) {
-				if (changeFlavors || !en.getValue().choices.stream().map(c -> c.id).anyMatch(ourFlavors::contains)) {
+				if (changeFlavors || !en.getValue().choices.stream().anyMatch(c -> Util.iterableContains(fourFlavors, c.id))) {
 					unpickedGroups.add(en.getValue());
 				}
 				FlavorGroup grp = en.getValue();
