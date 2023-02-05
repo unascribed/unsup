@@ -573,7 +573,6 @@ class Puppet {
 		};
 		Box options = Box.createVerticalBox();
 		for (FlavorGroup grp : groups) {
-			if (grp.choices.isEmpty()) continue;
 			if (!isBoolean(grp)) {
 				Box box = Box.createVerticalBox();
 				JLabel title = new JLabel(grp.name);
@@ -642,7 +641,7 @@ class Puppet {
 					btns.add(btn);
 					btng.add(btn);
 				}
-				if (!selectedAny) {
+				if (!selectedAny && !grp.choices.isEmpty()) {
 					btng.getElements().nextElement().setSelected(true);
 				}
 				btns.setAlignmentX(0);
