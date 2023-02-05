@@ -155,9 +155,9 @@ class PuppetHandler {
 									Agent.exit(Agent.EXIT_USER_REQUEST);
 								}
 							} else if (line.startsWith("alert:")) {
-								String[] split = line.split(":");
+								String[] split = line.split(":", 2);
 								String name = split[1];
-								String opt = split[2];
+								String opt = split.length > 1 ? split[2] : "";
 								synchronized (alertResults) {
 									alertResults.put(name, opt);
 									Latch latch = alertWaiters.remove(name);
