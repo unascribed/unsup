@@ -29,7 +29,6 @@ public class FormatHandlerPackwiz extends FormatHandler {
 	private static final boolean changeFlavors = Boolean.getBoolean("unsup.packwiz.changeFlavors");
 	
 	static CheckResult check(URL src) throws IOException {
-		Agent.log("WARN", "Loading packwiz-format manifest from "+src+" - this functionality is experimental!");
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
 		Toml pack = IOHelper.loadToml(src, 4*K, new URL(src, "unsup.sig"));
 		String fmt = pack.getString("pack-format");
@@ -73,7 +72,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			pwstate.put("lastIndexHash", indexDoublet);
 			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 			PuppetHandler.updateSubtitle("Calculating update");
-			Toml index = IOHelper.loadToml(new URL(src, indexMeta.getString("file")), 2*M,
+			Toml index = IOHelper.loadToml(new URL(src, indexMeta.getString("file")), 8*M,
 					indexFunc, indexMeta.getString("hash"));
 			Toml unsup = null;
 			List<FlavorGroup> unpickedGroups = new ArrayList<>();
@@ -114,6 +113,11 @@ public class FormatHandlerPackwiz extends FormatHandler {
 						if (en.getValue() instanceof Toml) {
 							Toml group = (Toml)en.getValue();
 							String groupId = en.getKey();
+							String side = group.getString("side");
+							if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
+								Agent.log("INFO", "Skipping flavor group "+groupId+" as it's not eligible for env "+Agent.detectedEnv);
+								continue;
+							}
 							String groupName = group.getString("name", groupId);
 							String groupDescription = group.getString("description", "No description");
 							String defChoice = Agent.config.get("flavors."+groupId);
@@ -191,6 +195,10 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			if (metafileFiles == null) {
 				metafileFiles = new JsonObject();
 				pwstate.put("metafileFiles", metafileFiles);
+			} else {
+				for (Map.Entry<String, Object> en : metafileFiles.entrySet()) {
+					toDelete.add(String.valueOf(en.getValue()));
+				}
 			}
 			class Metafile {
 				final String name;
@@ -283,6 +291,9 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					synth.id = mf.name;
 					synth.name = metafile.getString("name");
 					synth.description = option.getString("description", "No description");
+					String defChoice = Agent.config.get("flavors."+mf.name);
+					synth.defChoice = defChoice;
+					synth.defChoiceName = defChoice;
 					boolean defOn = changeFlavors ? Util.iterableContains(ourFlavors, mf.name+"_on") : option.getBoolean("default", false);
 					FlavorGroup.FlavorChoice on = new FlavorGroup.FlavorChoice();
 					on.id = mf.name+"_on";

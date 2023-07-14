@@ -21,11 +21,9 @@ import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -43,15 +41,13 @@ import com.unascribed.sup.FormatHandler.FileState;
 import com.unascribed.sup.FormatHandler.FilePlan;
 import com.unascribed.sup.FormatHandler.UpdatePlan;
 import com.unascribed.sup.IOHelper.DownloadedFile;
+import com.unascribed.sup.IOHelper.Retry;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
 import com.unascribed.sup.QDIni.QDIniException;
 
 import net.i2p.crypto.eddsa.EdDSAPublicKey;
-import okhttp3.Cookie;
-import okhttp3.CookieJar;
-import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 
 class Agent {
@@ -93,49 +89,10 @@ class Agent {
 	private static final SimpleDateFormat logDateFormat = new SimpleDateFormat("HH:mm:ss");
 	
 	static final OkHttpClient okhttp = new OkHttpClient.Builder()
-			.connectTimeout(5, TimeUnit.SECONDS)
-			.cookieJar(new CookieJar() {
-				private final List<Cookie> cookies = new ArrayList<>();
-				
-				@Override
-				public synchronized void saveFromResponse(HttpUrl url, List<Cookie> cookies) {
-					Iterator<Cookie> iter = this.cookies.iterator();
-					while (iter.hasNext()) {
-						Cookie c1 = iter.next();
-						if (c1.expiresAt() < System.currentTimeMillis()) {
-							iter.remove();
-						} else {
-							for (Cookie c2 : cookies) {
-								if (c2.expiresAt() < System.currentTimeMillis()) continue;
-								if (Objects.equals(c1.name(), c2.name())
-											&& Objects.equals(c1.domain(), c2.domain())
-											&& Objects.equals(c1.path(), c2.path())
-											&& c1.secure() == c2.secure()
-											&& c1.hostOnly() == c2.hostOnly()
-										) {
-									iter.remove();
-								}
-							}
-						}
-					}
-					this.cookies.addAll(cookies);
-				}
-				
-				@Override
-				public synchronized List<Cookie> loadForRequest(HttpUrl url) {
-					List<Cookie> out = new ArrayList<>();
-					Iterator<Cookie> iter = cookies.iterator();
-					while (iter.hasNext()) {
-						Cookie c = iter.next();
-						if (c.expiresAt() < System.currentTimeMillis()) {
-							iter.remove();
-						} else if (c.matches(url)) {
-							out.add(c);
-						}
-					}
-					return out;
-				}
-			})
+			.connectTimeout(30, TimeUnit.SECONDS)
+			.readTimeout(15, TimeUnit.SECONDS)
+			.callTimeout(120, TimeUnit.SECONDS)
+			.cookieJar(new MemoryCookieJar())
 			.build();
 	
 	public static void main(String[] args) throws UnsupportedEncodingException {
@@ -454,21 +411,15 @@ class Agent {
 					long[] contributedProgress = {0};
 					try {
 						log("INFO", "Downloading "+path+" from "+describe(f.url));
-						df = IOHelper.downloadToFile(f.url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
-								updateProgress, to.func, f.hostile);
-						if (!df.hash.equals(to.hash)) {
-							throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.url+" - expected "+to.hash+", got "+df.hash);
-						}
+						df = downloadAndCheckHash(tmp, progress, updateProgress, path, f, f.url, to, contributedProgress);
 						if (to.size == -1) progress.incrementAndGet();
 					} catch (Throwable t) {
 						if (f.fallbackUrl != null) {
 							t.printStackTrace();
 							progress.addAndGet(-contributedProgress[0]);
+							contributedProgress[0] = 0;
 							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+describe(f.fallbackUrl));
-							df = IOHelper.downloadToFile(f.fallbackUrl, tmp, to.size,  to.size == -1 ? l -> {} : progress::addAndGet, updateProgress, to.func, false);
-							if (!df.hash.equals(to.hash)) {
-								throw new IOException("Hash mismatch on downloaded file for "+path+" from "+f.fallbackUrl+" - expected "+to.hash+", got "+df.hash);
-							}
+							df = downloadAndCheckHash(tmp, progress, updateProgress, path, f, f.fallbackUrl, to, contributedProgress);
 							if (to.size == -1) progress.incrementAndGet();
 						} else {
 							throw t;
@@ -541,6 +492,18 @@ class Agent {
 		}
 		log("INFO", "Update successful!");
 		updated = true;
+	}
+
+	private static DownloadedFile downloadAndCheckHash(File tmp, AtomicLong progress, Runnable updateProgress, String path, FilePlan f, URL url, FileState to, long[] contributedProgress) throws IOException {
+		return IOHelper.withRetries(3, () -> {
+			DownloadedFile df = IOHelper.downloadToFile(url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
+					updateProgress, to.func, f.hostile);
+			if (!df.hash.equals(to.hash)) {
+				throw new Retry("Hash mismatch on downloaded file for "+path+" from "+url+" - expected "+to.hash+", got "+df.hash,
+						IOException::new);
+			}
+			return df;
+		});
 	}
 
 	private static String describe(URL url) {

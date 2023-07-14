@@ -7,9 +7,12 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.net.MalformedURLException;
+import java.net.SocketTimeoutException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SignatureException;
@@ -17,6 +20,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.function.LongConsumer;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
@@ -72,9 +76,16 @@ class IOHelper {
 	}
 
 	protected static byte[] downloadToMemory(URL url, int sizeLimit) throws IOException {
-		InputStream conn = get(url);
-		byte[] resp = Util.collectLimited(conn, sizeLimit);
-		return resp;
+		return withRetries(10, () -> {
+			try {
+				InputStream conn = get(url);
+				byte[] resp = Util.collectLimited(conn, sizeLimit);
+				return resp;
+			} catch (SocketTimeoutException e) {
+				throw new Retry("Connection to "+url.getHost()+" timed out",
+						SocketTimeoutException::new);
+			}
+		});
 	}
 	
 	private static String currentFirefoxVersion;
@@ -111,31 +122,83 @@ class IOHelper {
 				}
 			}
 		}
-		Request.Builder resbldr = new Request.Builder()
-				.url(url)
-				.header("User-Agent",
-						// not a mistake. the rv: is locked at 109 (and the trailer still updates, yes. it's weird.)
-						hostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/"+currentFirefoxVersion
-						        : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
-					);
-		if (hostile) {
-			resbldr.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
-			resbldr.header("Accept-Encoding", "gzip, deflate, br");
-			resbldr.header("Accept-Language", "en-US,en;q=0.5");
-			resbldr.header("Sec-Fetch-Dest", "document");
-			resbldr.header("Sec-Fetch-Mode", "navigate");
-			resbldr.header("Sec-Fetch-Site", "same-origin");
-			resbldr.header("Sec-Fetch-User", "?1");
-			resbldr.header("TE", "trailers");
+		final boolean fhostile = hostile;
+		return IOHelper.withRetries(10, () -> {
+			try {
+				Request.Builder reqbldr = new Request.Builder()
+						.url(url)
+						.header("User-Agent",
+								// not a mistake. the rv: is locked at 109 (and the trailer still updates, yes. it's weird.)
+								fhostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/"+currentFirefoxVersion
+								        : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
+							);
+				if (fhostile) {
+					reqbldr.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
+					reqbldr.header("Accept-Encoding", "gzip, deflate, br");
+					reqbldr.header("Accept-Language", "en-US,en;q=0.5");
+					reqbldr.header("Sec-Fetch-Dest", "document");
+					reqbldr.header("Sec-Fetch-Mode", "navigate");
+					reqbldr.header("Sec-Fetch-Site", "same-origin");
+					reqbldr.header("Sec-Fetch-User", "?1");
+					reqbldr.header("TE", "trailers");
+				}
+				Response res = Agent.okhttp.newCall(reqbldr.build()).execute();
+				if (res.code() != 200) {
+					if (res.code() == 404 || res.code() == 410) throw new FileNotFoundException(url.toString());
+					byte[] b = Util.collectLimited(res.body().byteStream(), 512);
+					String s = b == null ? "(response too long)" : new String(b, StandardCharsets.UTF_8);
+					res.close();
+					if (res.code()/100 == 500) {
+						throw new Retry(url.getHost()+" responded with a server error for "+url+" ("+res.code()+")",
+								new IOException("Received non-200 response from server for "+url+": "+res.code()+"\n"+s));
+					} else {
+						throw new IOException("Received non-200 response from server for "+url+": "+res.code()+"\n"+s);
+					}
+				}
+				return res.body().byteStream();
+			} catch (InterruptedIOException e) {
+				throw new Retry("Connection to "+url.getHost()+" timed out",
+						e);
+			} catch (UnknownHostException e) {
+				throw new Retry("DNS resolution of "+url.getHost()+" failed",
+						e);
+			}
+		});
+	}
+	
+	protected static final class Retry extends Exception {
+		public Retry(String msg, Function<String, Throwable> ifCantRetry) {
+			this(msg, ifCantRetry.apply(msg));
 		}
-		Response res = Agent.okhttp.newCall(resbldr.build()).execute();
-		if (res.code() != 200) {
-			if (res.code() == 404 || res.code() == 410) throw new FileNotFoundException(url.toString());
-			byte[] b = Util.collectLimited(res.body().byteStream(), 512);
-			String s = b == null ? "(response too long)" : new String(b, StandardCharsets.UTF_8);
-			throw new IOException("Received non-200 response from server for "+url+": "+res.code()+"\n"+s);
+		public Retry(String msg, Throwable ifCantRetry) {
+			super(msg, ifCantRetry);
 		}
-		return res.body().byteStream();
+	}
+	
+	protected interface RetryCallable<T, E extends Throwable> {
+		T call() throws E, Retry;
+	}
+	
+	protected static <T, E extends Throwable> T withRetries(int tries, RetryCallable<T, E> call) throws E {
+		int secs = 1;
+		while (true) {
+			boolean canRetry = tries > 0;
+			tries--;
+			try {
+				return call.call();
+			} catch (Retry r) {
+				if (canRetry) {
+					Agent.log("WARN", r.getMessage()+". Trying again in "+secs+" second"+(secs == 1 ? "" : "s")
+							+", "+(tries == 0 ? "final retry" : tries+" retr"+(tries == 1 ? "y" : "ies")+" left"));
+					try {
+						TimeUnit.SECONDS.sleep(secs);
+					} catch (InterruptedException ignore) {}
+					secs += (secs+2)/3;
+				} else {
+					throw (E)r.getCause();
+				}
+			}
+		}
 	}
 	
 	protected static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException {
@@ -170,39 +233,51 @@ class IOHelper {
 	}
 	
 	protected static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc, boolean hostile) throws IOException {
-		InputStream conn = get(url, hostile);
-		byte[] buf = new byte[16384];
 		File file = File.createTempFile("download", "", dir);
 		Agent.cleanup.add(file::delete);
-		long readTotal = 0;
-		long lastProgressUpdate = 0;
-		MessageDigest digest = hashFunc == null ? null : hashFunc.createMessageDigest();
-		try (InputStream in = conn; FileOutputStream out = new FileOutputStream(file)) {
-			while (true) {
-				int read = in.read(buf);
-				if (read == -1) break;
-				readTotal += read;
-				if (size != -1 && readTotal > size) throw new IOException("Overread; expected "+size+" bytes, but got at least "+readTotal);
-				out.write(buf, 0, read);
-				if (digest != null) digest.update(buf, 0, read);
-				if (addProgress != null) addProgress.accept(read);
-				if (updateProgress != null && System.nanoTime()-lastProgressUpdate > ONE_SECOND_IN_NANOS/30) {
-					lastProgressUpdate = System.nanoTime();
+		return withRetries(10, () -> {
+			try {
+				long readTotal = 0;
+				long lastProgressUpdate = 0;
+				MessageDigest digest = hashFunc == null ? null : hashFunc.createMessageDigest();
+				try (InputStream in = get(url, hostile)) {
+					byte[] buf = new byte[16384];
+					try (FileOutputStream out = new FileOutputStream(file)) {
+						while (true) {
+							int read = in.read(buf);
+							if (read == -1) break;
+							readTotal += read;
+							if (size != -1 && readTotal > size) throw new IOException("Overread; expected "+size+" bytes, but got at least "+readTotal);
+							out.write(buf, 0, read);
+							if (digest != null) digest.update(buf, 0, read);
+							if (addProgress != null) addProgress.accept(read);
+							if (updateProgress != null && System.nanoTime()-lastProgressUpdate > ONE_SECOND_IN_NANOS/30) {
+								lastProgressUpdate = System.nanoTime();
+								updateProgress.run();
+							}
+						}
+					}
+				} catch (InterruptedIOException e) {
+					if (addProgress != null) addProgress.accept(-readTotal);
+					if (updateProgress != null) updateProgress.run();
+					throw e;
+				}
+				if (size != -1 && readTotal != size) {
+					throw new IOException("Underread; expected "+size+" bytes, but only got "+readTotal);
+				}
+				if (updateProgress != null) {
 					updateProgress.run();
 				}
+				String hash = null;
+				if (digest != null) {
+					hash = Util.toHexString(digest.digest());
+				}
+				return new DownloadedFile(hash, file);
+			} catch (InterruptedIOException e) {
+				throw new Retry("Connection to "+url.getHost()+" timed out",
+						e);
 			}
-		}
-		if (size != -1 && readTotal != size) {
-			throw new IOException("Underread; expected "+size+" bytes, but only got "+readTotal);
-		}
-		if (updateProgress != null) {
-			updateProgress.run();
-		}
-		String hash = null;
-		if (digest != null) {
-			hash = Util.toHexString(digest.digest());
-		}
-		return new DownloadedFile(hash, file);
+		});
 	}
 	
 	protected static String hash(HashFunction func, File f) throws IOException {

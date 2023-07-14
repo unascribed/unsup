@@ -108,7 +108,7 @@ abstract class FormatHandler {
 						Agent.log("INFO", "Selecting default choice "+grp.defChoiceName+" for flavor group "+grp.name);
 						ourFlavors.add(grp.defChoice);
 					} else {
-						Agent.log("ERROR", "No choice provided for flavor group "+grp.name);
+						Agent.log("ERROR", "No choice provided for flavor group "+grp.name+" ("+grp.id+")");
 						Agent.exit(Agent.EXIT_CONFIG_ERROR);
 						return null;
 					}

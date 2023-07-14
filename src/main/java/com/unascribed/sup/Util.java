@@ -18,7 +18,7 @@ import javax.swing.JPopupMenu;
 
 public class Util {
 
-	public static final String VERSION = "0.2.0-pre4";
+	public static final String VERSION = "0.2.0";
 
 	public static boolean containsWholeWord(String haystack, String needle) {
 		if (haystack == null || needle == null) return false;
@@ -117,9 +117,11 @@ public class Util {
 
 	public static void fixSwing() {
 		// enable a bunch of nice things that are off by default for legacy compat
-		// use OpenGL or Direct3D where supported
+		// use OpenGL if possible
 		System.setProperty("sun.java2d.opengl", "true");
-		System.setProperty("sun.java2d.d3d", "true");
+		// do not use DirectX, it's buggy. software is better if OGL support is missing
+		System.setProperty("sun.java2d.d3d", "false");
+		System.setProperty("sun.java2d.noddraw", "true");
 		// force font antialiasing
 		System.setProperty("awt.useSystemAAFontSettings", "on");
 		System.setProperty("swing.aatext", "true");
