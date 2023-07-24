@@ -206,11 +206,19 @@ class IOHelper {
 	}
 	
 	protected static JsonObject loadJson(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
-		return JsonParser.object().from(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
+		try {
+			return JsonParser.object().from(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
+		} catch (JsonParserException e) {
+			throw new IOException("Failed to parse "+src+" as JSON: "+e.getMessage()+" (at line "+e.getLinePosition()+" column "+e.getCharPosition()+")");
+		}
 	}
 	
 	protected static Toml loadToml(URL src, int sizeLimit, URL sigUrl) throws IOException {
-		return new Toml().read(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
+		try {
+			return new Toml().read(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
+		} catch (IllegalStateException e) {
+			throw new IOException("Failed to parse "+src+" as TOML: "+e.getMessage());
+		}
 	}
 	
 	protected static Toml loadToml(URL src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
