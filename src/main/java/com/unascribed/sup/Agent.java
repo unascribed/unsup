@@ -342,6 +342,7 @@ class Agent {
 					}
 				}
 				if (resp == AlertOption.NO) {
+					f.skip = true;
 					continue;
 				} else if (resp == AlertOption.CANCEL) {
 					log("INFO", "User cancelled error dialog! Exiting.");
@@ -388,6 +389,10 @@ class Agent {
 		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 			String path = en.getKey();
 			FilePlan f = en.getValue();
+			if (f.skip) {
+				log("INFO", "Skipping download of "+path);
+				continue;
+			}
 			FileState to = f.state;
 			if (to.size == 0) {
 				continue;

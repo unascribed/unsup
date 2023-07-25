@@ -20,6 +20,7 @@ abstract class FormatHandler {
 		URL fallbackUrl;
 		URL primerUrl;
 		boolean hostile;
+		boolean skip = false;
 	}
 	
 	protected static class FileState {
