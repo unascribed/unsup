@@ -408,8 +408,15 @@ public class FormatHandlerPackwiz extends FormatHandler {
 				postState.put(path, FileState.EMPTY);
 			}
 			lastState = new JsonObject();
-			for (Map.Entry<String, FileState> en : postState.entrySet()) {
+			for (Map.Entry<String, FileState> en : plan.expectedState.entrySet()) {
 				if (en.getValue().hash == null) continue;
+				lastState.put(en.getKey(), en.getValue().func+":"+en.getValue().hash);
+			}
+			for (Map.Entry<String, FileState> en : postState.entrySet()) {
+				if (en.getValue().hash == null) {
+					lastState.remove(en.getKey());
+					continue;
+				}
 				lastState.put(en.getKey(), en.getValue().func+":"+en.getValue().hash);
 			}
 			pwstate.put("lastState", lastState);

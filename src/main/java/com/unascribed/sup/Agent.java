@@ -57,7 +57,7 @@ class Agent {
 	static final int EXIT_CONSISTENCY_ERROR = 2;
 	static final int EXIT_BUG = 3;
 	static final int EXIT_USER_REQUEST = 4;
-	
+
 	static final boolean DEBUG = Boolean.getBoolean("unsup.debug");
 	
 	static volatile boolean awaitingExit = false;
@@ -266,6 +266,31 @@ class Agent {
 	private static void applyUpdate(CheckResult res) throws IOException {
 		UpdatePlan<?> plan = res.plan;
 		boolean bootstrapping = plan.isBootstrap;
+		log("DEBUG", "Alright, so here's what I'm thinking:");
+		Set<String> unchanged = new HashSet<>(plan.expectedState.keySet());
+		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
+			unchanged.remove(en.getKey());
+			FileState from = plan.expectedState.get(en.getKey());
+			FilePlan to = en.getValue();
+			log("DEBUG", "- "+en.getKey()+" is currently "+ponder(from));
+			log("DEBUG", "  It has been changed to "+ponder(to.state));
+			if (to.url != null) {
+				if (to.fallbackUrl != null) {
+					log("DEBUG", "  I'll be grabbing that from "+to.url+" (or "+to.fallbackUrl+" if that doesn't work)");
+				} else {
+					log("DEBUG", "  I'll be grabbing that from "+to.url);
+				}
+			}
+		}
+		log("DEBUG", unchanged.size()+" other file"+(unchanged.size() == 1 ? "" : "s")+" have not been changed.");
+		if (DEBUG) {
+			log("DEBUG", "Sound good? You have 4 seconds to kill the process if not.");
+			try {
+				Thread.sleep(4000);
+			} catch (InterruptedException e) {
+			}
+			log("DEBUG", "Continuing.");
+		}
 		long progressDenom = 1;
 		File wd = new File("");
 		PuppetHandler.updateSubtitle("Verifying consistency");
@@ -499,6 +524,14 @@ class Agent {
 		updated = true;
 	}
 
+	private static String ponder(FileState state) {
+		if (state == null) return "[MISSING. STATE DATA IS INCOMPLETE OR CORRUPT]";
+		if (state.hash == null) {
+			return "[deleted]";
+		}
+		return state.toString();
+	}
+
 	private static DownloadedFile downloadAndCheckHash(File tmp, AtomicLong progress, Runnable updateProgress, String path, FilePlan f, URL url, FileState to, long[] contributedProgress) throws IOException {
 		return IOHelper.withRetries(3, () -> {
 			DownloadedFile df = IOHelper.downloadToFile(url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
@@ -535,11 +568,23 @@ class Agent {
 	}
 
 	private static void createLogStream() {
-		File logFile;
-		if (new File("logs").isDirectory()) {
-			logFile = new File("logs/unsup.log");
-		} else {
-			logFile = new File("unsup.log");
+		File logTarget = new File("logs");
+		if (!logTarget.isDirectory()) {
+			logTarget = new File(".");
+		}
+		File logFile = new File(logTarget, "unsup.log");
+		File oldLogFile = new File(logTarget, "unsup.log.1");
+		File olderLogFile = new File(logTarget, "unsup.log.2");
+		// intentionally ignoring exceptional return here
+		// don't really care if any of it fails
+		if (logFile.exists()) {
+			if (oldLogFile.exists()) {
+				if (olderLogFile.exists()) {
+					olderLogFile.delete();
+				}
+				oldLogFile.renameTo(olderLogFile);
+			}
+			logFile.renameTo(oldLogFile);
 		}
 		try {
 			OutputStream logOut = new FileOutputStream(logFile);
@@ -738,9 +783,8 @@ class Agent {
 	}
 	
 	static synchronized void log(String tag, String flavor, String msg) {
-		if ("DEBUG" == flavor && !DEBUG) return;
 		String line = "["+logDateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
-		System.out.println(line);
+		if ("DEBUG" != flavor || DEBUG) System.out.println(line);
 		logStream.println(line);
 	}
 	

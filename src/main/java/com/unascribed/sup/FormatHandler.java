@@ -43,7 +43,9 @@ abstract class FormatHandler {
 
 		@Override
 		public String toString() {
-			return func+"("+hash+") size "+size;
+			String s = func+"("+hash+")";
+			if (size == -1) return s;
+			return s+" size "+size;
 		}
 		
 		@Override
