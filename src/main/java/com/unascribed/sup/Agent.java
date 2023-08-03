@@ -493,6 +493,10 @@ class Agent {
 				FilePlan f = en.getValue();
 				FileState to = f.state;
 				DownloadedFile df = downloads.get(f);
+				if (df == null) {
+					// Conflict dialog was rejected, skip this file.
+					continue;
+				}
 				File dest = new File(path);
 				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
 					throw new IOException("Refusing to download to a file outside of working directory");
