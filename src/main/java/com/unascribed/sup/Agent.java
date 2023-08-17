@@ -153,8 +153,7 @@ class Agent {
 					}
 					cleanup.add(() -> publicKey = null);
 				} catch (Throwable t) {
-					t.printStackTrace();
-					log("ERROR", "Config file error: public_key is not valid at "+config.getBlame("public_key")+"! Exiting.");
+					log("ERROR", "Config file error: public_key is not valid at "+config.getBlame("public_key")+"! Exiting.", t);
 					exit(EXIT_CONFIG_ERROR);
 					return;
 				}
@@ -165,8 +164,7 @@ class Agent {
 				try (InputStream in = new FileInputStream(stateFile)) {
 					state = JsonParser.object().from(in);
 				} catch (Exception e) {
-					e.printStackTrace();
-					log("ERROR", "Couldn't load state file! Exiting.");
+					log("ERROR", "Couldn't load state file! Exiting.", e);
 					exit(EXIT_CONSISTENCY_ERROR);
 					return;
 				}
@@ -201,8 +199,7 @@ class Agent {
 					}
 				}
 			} catch (Throwable t) {
-				t.printStackTrace();
-				log("WARN", "Error while updating");
+				log("WARN", "Error while updating", t);
 				PuppetHandler.tellPuppet(":expedite=openTimeout");
 				if (PuppetHandler.openAlert("unsup error",
 						"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
@@ -445,10 +442,9 @@ class Agent {
 						if (to.size == -1) progress.incrementAndGet();
 					} catch (Throwable t) {
 						if (f.fallbackUrl != null) {
-							t.printStackTrace();
 							progress.addAndGet(-contributedProgress[0]);
 							contributedProgress[0] = 0;
-							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+describe(f.fallbackUrl));
+							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+describe(f.fallbackUrl), t);
 							df = downloadAndCheckHash(tmp, progress, updateProgress, path, f, f.fallbackUrl, to, contributedProgress);
 							if (to.size == -1) progress.incrementAndGet();
 						} else {
@@ -493,7 +489,7 @@ class Agent {
 				FilePlan f = en.getValue();
 				FileState to = f.state;
 				DownloadedFile df = downloads.get(f);
-				if (df == null) {
+				if (df == null && to.size != 0) {
 					// Conflict dialog was rejected, skip this file.
 					continue;
 				}
@@ -625,8 +621,7 @@ class Agent {
 				tmp.delete();
 			}
 		} catch (IOException e1) {
-			e1.printStackTrace();
-			log("INFO", "Failed to test if filesystem is case sensitive. Assuming it is.");
+			log("INFO", "Failed to test if filesystem is case sensitive. Assuming it is.", e1);
 			filesystemIsCaseSensitive = true;
 		}
 	}
@@ -639,8 +634,7 @@ class Agent {
 				cleanup.add(() -> config = null);
 				log("INFO", "Found and loaded unsup.ini. What secrets does it hold?");
 			} catch (Exception e) {
-				e.printStackTrace();
-				log("ERROR", "Found unsup.ini, but couldn't parse it! Exiting.");
+				log("ERROR", "Found unsup.ini, but couldn't parse it! Exiting.", e);
 				exit(EXIT_CONFIG_ERROR);
 			}
 			return true;
@@ -748,8 +742,7 @@ class Agent {
 			QDIni preset = QDIni.load("<preset "+presetName+">", in);
 			config = preset.merge(config);
 		} catch (IOException e) {
-			e.printStackTrace();
-			log("ERROR", "Failed to load preset "+presetName+"! Exiting.");
+			log("ERROR", "Failed to load preset "+presetName+"! Exiting.", e);
 			exit(EXIT_CONFIG_ERROR);
 			return null;
 		}
@@ -784,6 +777,18 @@ class Agent {
 	
 	static synchronized void log(String flavor, String msg) {
 		log(standalone ? "sync" : "agent", flavor, msg);
+	}
+	
+	static synchronized void log(String flavor, String msg, Throwable t) {
+		log(standalone ? "sync" : "agent", flavor, msg, t);
+	}
+	
+	static synchronized void log(String tag, String flavor, String msg, Throwable t) {
+		if ("DEBUG" != flavor || DEBUG) {
+			t.printStackTrace();
+		}
+		t.printStackTrace(logStream);
+		log(tag, flavor, msg);
 	}
 	
 	static synchronized void log(String tag, String flavor, String msg) {
