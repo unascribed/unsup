@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.pieces;
 
 import java.util.ArrayList;
 import java.util.Iterator;

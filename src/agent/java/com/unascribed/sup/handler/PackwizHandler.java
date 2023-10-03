@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.handler;
 
 import java.io.IOException;
 import java.net.URL;
@@ -19,18 +19,27 @@ import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.moandjiezana.toml.Toml;
 import com.unascribed.flexver.FlexVerComparator;
-import com.unascribed.sup.FlavorGroup.FlavorChoice;
+import com.unascribed.sup.Agent;
+import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
+import com.unascribed.sup.data.FlavorGroup;
+import com.unascribed.sup.data.HashFunction;
+import com.unascribed.sup.data.Version;
+import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
+import com.unascribed.sup.pieces.Murmur2MessageDigest;
+import com.unascribed.sup.util.Bases;
+import com.unascribed.sup.util.RequestHelper;
+import com.unascribed.sup.util.Iterables;
 
-public class FormatHandlerPackwiz extends FormatHandler {
+public class PackwizHandler extends AbstractFormatHandler {
 	
 	private static final boolean changeFlavors = Boolean.getBoolean("unsup.packwiz.changeFlavors");
 	
-	static CheckResult check(URL src) throws IOException {
+	public static CheckResult check(URL src) throws IOException {
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
-		Toml pack = IOHelper.loadToml(src, 4*K, new URL(src, "unsup.sig"));
+		Toml pack = RequestHelper.loadToml(src, 4*K, new URL(src, "unsup.sig"));
 		String fmt = pack.getString("pack-format");
 		if (!fmt.equals("unsup-packwiz") && (!fmt.startsWith("packwiz:") || FlexVerComparator.compare("packwiz:1.1.0", fmt) < 0))
 			throw new IOException("Cannot read unknown pack-format "+fmt);
@@ -72,7 +81,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			pwstate.put("lastIndexHash", indexDoublet);
 			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 			PuppetHandler.updateSubtitle("Calculating update");
-			Toml index = IOHelper.loadToml(new URL(src, indexMeta.getString("file")), 8*M,
+			Toml index = RequestHelper.loadToml(new URL(src, indexMeta.getString("file")), 8*M,
 					indexFunc, indexMeta.getString("hash"));
 			Toml unsup = null;
 			List<FlavorGroup> unpickedGroups = new ArrayList<>();
@@ -107,7 +116,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			JsonArray ourFlavors = Agent.state.getArray("flavors");
 			if (ourFlavors == null) ourFlavors = new JsonArray();
 			if (pack.containsTable("versions") && pack.getTable("versions").containsPrimitive("unsup")) {
-				unsup = IOHelper.loadToml(new URL(src, "unsup.toml"), 64*K, null);
+				unsup = RequestHelper.loadToml(new URL(src, "unsup.toml"), 64*K, null);
 				if (unsup.containsTable("flavor_groups")) {
 					flavors: for (Map.Entry<String, Object> en : unsup.getTable("flavor_groups").entrySet()) {
 						if (en.getValue() instanceof Toml) {
@@ -138,7 +147,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 										name = id;
 										description = "";
 									}
-									if (!changeFlavors && Util.iterableContains(ourFlavors, id)) {
+									if (!changeFlavors && Iterables.contains(ourFlavors, id)) {
 										// a choice has already been made for this flavor
 										continue flavors;
 									}
@@ -146,7 +155,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 									c.id = id;
 									c.name = name;
 									c.description = description;
-									c.def = changeFlavors ? Util.iterableContains(ourFlavors, id) : id.equals(defChoice);
+									c.def = changeFlavors ? Iterables.contains(ourFlavors, id) : id.equals(defChoice);
 									if (c.def) {
 										grp.defChoice = c.id;
 										grp.defChoiceName = c.name;
@@ -229,7 +238,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 						continue;
 					}
 					metafileFutures.add(svc.submit(() -> {
-						return new Metafile(name, path, hash, IOHelper.loadToml(new URL(src, path), 8*K, func, hash));
+						return new Metafile(name, path, hash, RequestHelper.loadToml(new URL(src, path), 8*K, func, hash));
 					}));
 				} else {
 					FilePlan f = new FilePlan();
@@ -294,7 +303,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					String defChoice = Agent.config.get("flavors."+mf.name);
 					synth.defChoice = defChoice;
 					synth.defChoiceName = defChoice;
-					boolean defOn = changeFlavors ? Util.iterableContains(ourFlavors, mf.name+"_on") : option.getBoolean("default", false);
+					boolean defOn = changeFlavors ? Iterables.contains(ourFlavors, mf.name+"_on") : option.getBoolean("default", false);
 					FlavorGroup.FlavorChoice on = new FlavorGroup.FlavorChoice();
 					on.id = mf.name+"_on";
 					on.name = "On";
@@ -314,7 +323,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 			pwstate.put("syntheticFlavorGroups", syntheticGroupsJson);
 			final JsonArray fourFlavors = ourFlavors;
 			for (Map.Entry<String, FlavorGroup> en : syntheticGroups.entrySet()) {
-				if (changeFlavors || !en.getValue().choices.stream().anyMatch(c -> Util.iterableContains(fourFlavors, c.id))) {
+				if (changeFlavors || !en.getValue().choices.stream().anyMatch(c -> Iterables.contains(fourFlavors, c.id))) {
 					unpickedGroups.add(en.getValue());
 				}
 				FlavorGroup grp = en.getValue();
@@ -349,7 +358,7 @@ public class FormatHandlerPackwiz extends FormatHandler {
 				}
 				
 				Agent.log("DEBUG", "Flavors for "+mf.name+": "+metafileFlavors.get(mf.name));
-				if (!Util.iterablesIntersect(metafileFlavors.get(mf.name), ourFlavors)) {
+				if (!Iterables.intersects(metafileFlavors.get(mf.name), ourFlavors)) {
 					Agent.log("INFO", "Skipping "+mf.target+" as it's not eligible for our selected flavors");
 					continue;
 				}
@@ -384,17 +393,17 @@ public class FormatHandlerPackwiz extends FormatHandler {
 					f.url = new URL(url);
 				} else {
 					String mode = download.getString("mode");
-					if (Util.b64Str("bWV0YWRhdGE6Y3Vyc2Vmb3JnZQ==").equals(mode)) {
+					if (Bases.b64ToString("bWV0YWRhdGE6Y3Vyc2Vmb3JnZQ==").equals(mode)) {
 						// Not a virus. Trust me, I'm a dolphin
-						Toml tbl = metafile.getTable(Util.b64Str("dXBkYXRlLmN1cnNlZm9yZ2U="));
+						Toml tbl = metafile.getTable(Bases.b64ToString("dXBkYXRlLmN1cnNlZm9yZ2U="));
 						f.hostile = true;
-						String str = Long.toString(tbl.getLong(Util.b64Str("ZmlsZS1pZA==")));
+						String str = Long.toString(tbl.getLong(Bases.b64ToString("ZmlsZS1pZA==")));
 						int i = (str.length()+1)/2;
 						String l = str.substring(0, i);
 						String r = str.substring(i);
 						while (r.startsWith("0")) r = r.substring(1);
-						f.url = new URL(String.format(Util.b64Str("aHR0cHM6Ly9tZWRpYWZpbGV6LmZvcmdlY2RuLm5ldC9maWxlcy8lcy8lcy8lcw=="),
-								l, r, metafile.getString(Util.b64Str("ZmlsZW5hbWU=")).replace("+", "%2B")));
+						f.url = new URL(String.format(Bases.b64ToString("aHR0cHM6Ly9tZWRpYWZpbGV6LmZvcmdlY2RuLm5ldC9maWxlcy8lcy8lcy8lcw=="),
+								l, r, metafile.getString(Bases.b64ToString("ZmlsZW5hbWU=")).replace("+", "%2B")));
 					} else {
 						throw new IOException("Cannot update "+path+" - unrecognized download mode "+mode);
 					}

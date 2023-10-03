@@ -3,7 +3,7 @@ package com.unascribed.sup.json;
 import java.util.function.IntPredicate;
 
 import com.unascribed.sup.Creator;
-import com.unascribed.sup.IntPredicates;
+import com.unascribed.sup.util.IntPredicates;
 
 import blue.endless.jankson.JsonGrammar;
 

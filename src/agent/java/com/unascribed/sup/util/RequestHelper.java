@@ -1,6 +1,7 @@
-package com.unascribed.sup;
+package com.unascribed.sup.util;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -26,18 +27,22 @@ import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonParserException;
 import com.moandjiezana.toml.Toml;
+import com.unascribed.sup.Agent;
+import com.unascribed.sup.Util;
+import com.unascribed.sup.data.HashFunction;
+
 import net.i2p.crypto.eddsa.EdDSAEngine;
 import okhttp3.Request;
 import okhttp3.Response;
 
-class IOHelper {
+public class RequestHelper {
 	
-	protected static final int K = 1024;
-	protected static final int M = K*1024;
+	public static final int K = 1024;
+	public static final int M = K*1024;
 	
-	protected static final long ONE_SECOND_IN_NANOS = TimeUnit.SECONDS.toNanos(1);
+	public static final long ONE_SECOND_IN_NANOS = TimeUnit.SECONDS.toNanos(1);
 	
-	protected static String checkSchemeMismatch(URL src, String url) throws MalformedURLException {
+	public static String checkSchemeMismatch(URL src, String url) throws MalformedURLException {
 		if (url == null) return null;
 		URL parsed = new URL(url);
 		boolean ok = false;
@@ -55,7 +60,7 @@ class IOHelper {
 		return ok ? url : null;
 	}
 	
-	protected static byte[] loadAndVerify(URL src, int sizeLimit, URL sigUrl) throws IOException {
+	public static byte[] loadAndVerify(URL src, int sizeLimit, URL sigUrl) throws IOException {
 		byte[] resp = downloadToMemory(src, sizeLimit);
 		if (resp == null) {
 			throw new IOException(src+" is larger than "+(sizeLimit/K)+"K, refusing to continue downloading");
@@ -75,11 +80,11 @@ class IOHelper {
 		return resp;
 	}
 
-	protected static byte[] downloadToMemory(URL url, int sizeLimit) throws IOException {
+	public static byte[] downloadToMemory(URL url, int sizeLimit) throws IOException {
 		return withRetries(10, () -> {
 			try {
 				InputStream conn = get(url);
-				byte[] resp = Util.collectLimited(conn, sizeLimit);
+				byte[] resp = RequestHelper.collectLimited(conn, sizeLimit);
 				return resp;
 			} catch (SocketTimeoutException e) {
 				throw new Retry("Connection to "+url.getHost()+" timed out",
@@ -89,13 +94,13 @@ class IOHelper {
 	}
 	
 	private static String currentFirefoxVersion;
-	private static final Set<String> alwaysHostile = new HashSet<>(Arrays.asList(Util.b64Str("YmV0YS5jdXJzZWZvcmdlLmNvbXx3d3cuY3Vyc2Vmb3JnZS5jb218Y3Vyc2Vmb3JnZS5jb218bWluZWNyYWZ0LmN1cnNlZm9yZ2UuY29tfG1lZGlhZmlsZXouZm9yZ2VjZG4ubmV0fG1lZGlhZmlsZXMuZm9yZ2VjZG4ubmV0fGZvcmdlY2RuLm5ldHxlZGdlLmZvcmdlY2RuLm5ldA==").split("\\|")));
+	private static final Set<String> alwaysHostile = new HashSet<>(Arrays.asList(Bases.b64ToString("YmV0YS5jdXJzZWZvcmdlLmNvbXx3d3cuY3Vyc2Vmb3JnZS5jb218Y3Vyc2Vmb3JnZS5jb218bWluZWNyYWZ0LmN1cnNlZm9yZ2UuY29tfG1lZGlhZmlsZXouZm9yZ2VjZG4ubmV0fG1lZGlhZmlsZXMuZm9yZ2VjZG4ubmV0fGZvcmdlY2RuLm5ldHxlZGdlLmZvcmdlY2RuLm5ldA==").split("\\|")));
 
-	protected static InputStream get(URL url) throws IOException {
+	public static InputStream get(URL url) throws IOException {
 		return get(url, false);
 	}
 
-	protected static InputStream get(URL url, boolean hostile) throws IOException {
+	public static InputStream get(URL url, boolean hostile) throws IOException {
 		if ("file".equals(url.getProtocol())) {
 			try {
 				return new FileInputStream(new File(url.toURI()));
@@ -123,14 +128,14 @@ class IOHelper {
 			}
 		}
 		final boolean fhostile = hostile;
-		return IOHelper.withRetries(10, () -> {
+		return RequestHelper.withRetries(10, () -> {
 			try {
 				Request.Builder reqbldr = new Request.Builder()
 						.url(url)
 						.header("User-Agent",
 								// not a mistake. the rv: is locked at 109 (and the trailer still updates, yes. it's weird.)
 								fhostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/"+currentFirefoxVersion
-								        : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
+								         : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
 							);
 				if (fhostile) {
 					reqbldr.header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8");
@@ -145,7 +150,7 @@ class IOHelper {
 				Response res = Agent.okhttp.newCall(reqbldr.build()).execute();
 				if (res.code() != 200) {
 					if (res.code() == 404 || res.code() == 410) throw new FileNotFoundException(url.toString());
-					byte[] b = Util.collectLimited(res.body().byteStream(), 512);
+					byte[] b = RequestHelper.collectLimited(res.body().byteStream(), 512);
 					String s = b == null ? "(response too long)" : new String(b, StandardCharsets.UTF_8);
 					res.close();
 					if (res.code()/100 == 500) {
@@ -166,7 +171,7 @@ class IOHelper {
 		});
 	}
 	
-	protected static final class Retry extends Exception {
+	public static final class Retry extends Exception {
 		public Retry(String msg, Function<String, Throwable> ifCantRetry) {
 			this(msg, ifCantRetry.apply(msg));
 		}
@@ -175,11 +180,11 @@ class IOHelper {
 		}
 	}
 	
-	protected interface RetryCallable<T, E extends Throwable> {
+	public interface RetryCallable<T, E extends Throwable> {
 		T call() throws E, Retry;
 	}
 	
-	protected static <T, E extends Throwable> T withRetries(int tries, RetryCallable<T, E> call) throws E {
+	public static <T, E extends Throwable> T withRetries(int tries, RetryCallable<T, E> call) throws E {
 		int secs = 1;
 		while (true) {
 			boolean canRetry = tries > 0;
@@ -201,11 +206,11 @@ class IOHelper {
 		}
 	}
 	
-	protected static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException {
+	public static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException {
 		return new String(loadAndVerify(src, sizeLimit, sigUrl), StandardCharsets.UTF_8);
 	}
 	
-	protected static JsonObject loadJson(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
+	public static JsonObject loadJson(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
 		try {
 			return JsonParser.object().from(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
 		} catch (JsonParserException e) {
@@ -213,7 +218,7 @@ class IOHelper {
 		}
 	}
 	
-	protected static Toml loadToml(URL src, int sizeLimit, URL sigUrl) throws IOException {
+	public static Toml loadToml(URL src, int sizeLimit, URL sigUrl) throws IOException {
 		try {
 			return new Toml().read(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
 		} catch (IllegalStateException e) {
@@ -221,26 +226,26 @@ class IOHelper {
 		}
 	}
 	
-	protected static Toml loadToml(URL src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
+	public static Toml loadToml(URL src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
 		byte[] data = downloadToMemory(src, sizeLimit);
 		if (data == null) throw new IOException("Size limit of "+(sizeLimit/K)+"K for "+src+" exceeded");
-		String hash = Util.toHexString(func.createMessageDigest().digest(data));
+		String hash = Bases.bytesToHex(func.createMessageDigest().digest(data));
 		if (!hash.equals(expectedHash))
 			throw new IOException("Expected "+expectedHash+" from "+src+", but got "+hash);
 		return new Toml().read(new ByteArrayInputStream(data));
 	}
 	
-	protected static class DownloadedFile {
+	public static class DownloadedFile {
 		/** null if no hash function was specified */
 		public final String hash;
 		public final File file;
-		protected DownloadedFile(String hash, File file) {
+		public DownloadedFile(String hash, File file) {
 			this.hash = hash;
 			this.file = file;
 		}
 	}
 	
-	protected static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc, boolean hostile) throws IOException {
+	public static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc, boolean hostile) throws IOException {
 		File file = File.createTempFile("download", "", dir);
 		Agent.cleanup.add(file::delete);
 		return withRetries(10, () -> {
@@ -278,7 +283,7 @@ class IOHelper {
 				}
 				String hash = null;
 				if (digest != null) {
-					hash = Util.toHexString(digest.digest());
+					hash = Bases.bytesToHex(digest.digest());
 				}
 				return new DownloadedFile(hash, file);
 			} catch (InterruptedIOException e) {
@@ -288,7 +293,7 @@ class IOHelper {
 		});
 	}
 	
-	protected static String hash(HashFunction func, File f) throws IOException {
+	public static String hash(HashFunction func, File f) throws IOException {
 		MessageDigest digest = func.createMessageDigest();
 		byte[] buf = new byte[16384];
 		try (FileInputStream in = new FileInputStream(f)) {
@@ -298,7 +303,30 @@ class IOHelper {
 				digest.update(buf, 0, read);
 			}
 		}
-		return Util.toHexString(digest.digest());
+		return Bases.bytesToHex(digest.digest());
+	}
+
+	/**
+	 * Closes the stream when done.
+	 */
+	private static byte[] collectLimited(InputStream in, int limit) throws IOException {
+		try {
+			ByteArrayOutputStream baos = new ByteArrayOutputStream();
+			int totalRead = 0;
+			byte[] buf = new byte[limit/4];
+			while (true) {
+				int read = in.read(buf);
+				if (read == -1) break;
+				totalRead += read;
+				if (totalRead > limit) {
+					return null;
+				}
+				baos.write(buf, 0, read);
+			}
+			return baos.toByteArray();
+		} finally {
+			in.close();
+		}
 	}
 
 }

@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.util;
 
 import java.util.Arrays;
 import java.util.function.IntPredicate;

@@ -44,6 +44,7 @@ import org.lwjgl.system.MemoryStack;
 
 import com.formdev.flatlaf.extras.FlatAnimatedLafChange;
 import com.formdev.flatlaf.util.UIScale;
+import com.unascribed.sup.data.HashFunction;
 import com.unascribed.sup.json.ManifestVersion;
 import com.unascribed.sup.json.Marshallable;
 import com.unascribed.sup.json.OrderedVersion;
@@ -51,6 +52,7 @@ import com.unascribed.sup.json.ReportableException;
 import com.unascribed.sup.json.manifest.BootstrapManifest;
 import com.unascribed.sup.json.manifest.RootManifest;
 import com.unascribed.sup.json.manifest.UpdateManifest;
+import com.unascribed.sup.util.SwingHelper;
 
 import blue.endless.jankson.Jankson;
 import blue.endless.jankson.JsonArray;
@@ -135,7 +137,7 @@ public class Creator {
 	private static JMenuItem redoItem;
 	
 	public static void main(String[] args) {
-		Util.fixSwing();
+		SwingHelper.fixSwing();
 		
 		FlatUnsupDarkLaf.install();
 		

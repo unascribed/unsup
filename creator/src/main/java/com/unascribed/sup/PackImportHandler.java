@@ -62,6 +62,7 @@ import com.formdev.flatlaf.util.UIScale;
 import com.unascribed.sup.json.OrderedVersion;
 import com.unascribed.sup.json.manifest.RootManifest;
 import com.unascribed.sup.json.manifest.UpdateManifest;
+import com.unascribed.sup.util.Bases;
 
 public class PackImportHandler {
 
@@ -497,7 +498,7 @@ public class PackImportHandler {
 										}
 									}
 									byte[] digest = md.digest();
-									String hexDigest = Util.toHexString(digest);
+									String hexDigest = Bases.bytesToHex(digest);
 									UpdateManifest.Change change = new UpdateManifest.Change();
 									newPaths.add(path);
 									change.path = path;

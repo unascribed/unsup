@@ -28,6 +28,7 @@ import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
+import org.objectweb.asm.tree.LdcInsnNode;
 
 apply plugin: 'com.github.johnrengelman.shadow'
 apply plugin: 'java-library'
@@ -36,13 +37,24 @@ apply plugin: 'maven-publish'
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup'
-version = '0.2.3'
+version = '0.3.0-dev'
 
 sourceCompatibility = targetCompatibility = 8
 
 repositories { 
 	mavenCentral()
 	maven { url 'https://repo.sleeping.town' }
+}
+
+sourceSets {
+	// prevent crossing puppet/agent boundary and using heavy libs from puppet
+	puppet {
+		compileClasspath += sourceSets.main.output
+	}
+	agent {
+		compileClasspath += sourceSets.main.compileClasspath
+		compileClasspath += sourceSets.main.output
+	}
 }
 
 configurations {
@@ -66,6 +78,8 @@ dependencies {
 jar {
 	classifier 'slim'
 	destinationDirectory.set(file('build/tmp'))
+	from sourceSets.puppet.output
+	from sourceSets.agent.output
 }
 
 shadowJar {
@@ -74,6 +88,8 @@ shadowJar {
 	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it
 	}
+	from sourceSets.puppet.output
+	from sourceSets.agent.output
 }
 
 task proguard(type: proguard.gradle.ProGuardTask) {
@@ -108,12 +124,14 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 // merge everything into one package so it can be package-private
 task proguardAgain(type: proguard.gradle.ProGuardTask) {
 	doFirst {
+		def pat = java.util.regex.Pattern.compile('^(com/unascribed/sup/([^/]+)/(.*))\\.class$')
 		file('build/tmp/mapping.map').withWriter {
 			ZipFile zf = new ZipFile("build/tmp/proguard.jar");
 			for (ZipEntry ze : Collections.list(zf.entries())) {
-				if (ze.getName().startsWith("com/unascribed/sup/lib/") && ze.getName().endsWith(".class")) {
-					def inName = ze.getName().substring(0, ze.getName().length()-6).replace('/', '.')
-					def outName = inName.replace('.', '_').replace("com_unascribed_sup_lib_", 'com.unascribed.sup.$lib$$')
+				def m = pat.matcher(ze.getName())
+				if (m.matches()) {
+					def inName = m.group(1).replace('/', '.')
+					def outName = inName.replace('.', '_').replace("com_unascribed_sup_"+m.group(2)+"_", 'com.unascribed.sup.$'+m.group(2)+'$$')
 					it.write("${inName} -> ${outName}:\n")
 				}
 			}
@@ -136,6 +154,7 @@ task proguardAgain(type: proguard.gradle.ProGuardTask) {
 	
 	// prevent members from being renamed
 	keepclassmembers(allowshrinking:true, allowoptimization:true, 'class * { *; }')
+	keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
 
 	dontwarn 'com.unascribed.sup.lib.**'
 	
@@ -203,6 +222,17 @@ task amendClassPrivacy {
 				if (amend) {
 					clazz.access &= ~Opcodes.ACC_PUBLIC;
 					clazz.access &= ~Opcodes.ACC_PROTECTED;
+				}
+				if (clazz.name == 'com/unascribed/sup/Util') {
+					clazz.methods.each {
+						if (it.name == '<clinit>') {
+							it.instructions.each {
+								if (it instanceof LdcInsnNode && it.cst instanceof String && it.cst == '${version}') {
+									it.cst = project.version;
+								}
+							}
+						}
+					}
 				}
 				ClassWriter cw = new ClassWriter(0);
 				clazz.accept(cw);

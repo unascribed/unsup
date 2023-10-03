@@ -5,7 +5,7 @@ import java.util.List;
 import java.util.Objects;
 
 import com.unascribed.sup.Creator;
-import com.unascribed.sup.HashFunction;
+import com.unascribed.sup.data.HashFunction;
 import com.unascribed.sup.json.AbstractManifest;
 import com.unascribed.sup.json.ManifestData;
 import com.unascribed.sup.json.OneLineJsonArray;

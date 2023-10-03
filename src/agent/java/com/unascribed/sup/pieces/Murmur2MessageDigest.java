@@ -1,9 +1,11 @@
-package com.unascribed.sup;
+package com.unascribed.sup.pieces;
 
 import java.io.ByteArrayOutputStream;
 import java.security.MessageDigest;
 
-class Murmur2MessageDigest extends MessageDigest {
+import com.unascribed.sup.util.Bases;
+
+public class Murmur2MessageDigest extends MessageDigest {
 	private static final int M32 = 0x5bd1e995;
 	private static final int R32 = 24;
 	// algorithm is seeded with the length :/
@@ -89,7 +91,7 @@ class Murmur2MessageDigest extends MessageDigest {
 	}
 	
 	public static String decToHex(String dec) {
-		return Util.toHexString(toByteArray((int)Long.parseLong(dec)));
+		return Bases.bytesToHex(toByteArray((int)Long.parseLong(dec)));
 	}
 	
 }

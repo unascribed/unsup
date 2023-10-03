@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.handler;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -10,12 +10,20 @@ import java.util.function.IntPredicate;
 import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParserException;
-import com.unascribed.sup.FlavorGroup.FlavorChoice;
+import com.unascribed.sup.Agent;
+import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
+import com.unascribed.sup.data.FlavorGroup;
+import com.unascribed.sup.data.HashFunction;
+import com.unascribed.sup.data.Version;
+import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
+import com.unascribed.sup.util.RequestHelper;
+import com.unascribed.sup.util.IntPredicates;
+import com.unascribed.sup.util.Iterables;
 
-class FormatHandlerUnsup extends FormatHandler {
+public class NativeHandler extends AbstractFormatHandler {
 	
 	protected static final String DEFAULT_HASH_FUNCTION = HashFunction.SHA2_256.name;
 
@@ -23,9 +31,9 @@ class FormatHandlerUnsup extends FormatHandler {
 		int code;
 	}
 	
-	static CheckResult check(URL src) throws IOException, JsonParserException {
+	public static CheckResult check(URL src) throws IOException, JsonParserException {
 		Agent.log("INFO", "Loading unsup-format manifest from "+src);
-		JsonObject manifest = IOHelper.loadJson(src, 32*K, new URL(src, "manifest.sig"));
+		JsonObject manifest = RequestHelper.loadJson(src, 32*K, new URL(src, "manifest.sig"));
 		checkManifestFlavor(manifest, "root", IntPredicates.equals(1));
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
 		if (!manifest.containsKey("versions")) throw new IOException("Manifest is missing versions field");
@@ -49,7 +57,7 @@ class FormatHandlerUnsup extends FormatHandler {
 				if (ele instanceof JsonObject) {
 					JsonObject obj = (JsonObject)ele;
 					JsonArray envs = obj.getArray("envs");
-					if (envs != null && !Util.iterableContains(envs, Agent.detectedEnv)) {
+					if (envs != null && !Iterables.contains(envs, Agent.detectedEnv)) {
 						continue;
 					}
 					String id = obj.getString("id");
@@ -77,7 +85,7 @@ class FormatHandlerUnsup extends FormatHandler {
 							c.name = c.id;
 							c.description = "";
 						}
-						if (Util.iterableContains(ourFlavors, c.id)) {
+						if (Iterables.contains(ourFlavors, c.id)) {
 							// a choice has already been made for this flavor
 							continue flavors;
 						}
@@ -102,7 +110,7 @@ class FormatHandlerUnsup extends FormatHandler {
 					if (ele instanceof JsonObject) {
 						JsonObject obj = (JsonObject)ele;
 						JsonArray envs = obj.getArray("envs");
-						if (envs != null && !Util.iterableContains(envs, Agent.detectedEnv)) {
+						if (envs != null && !Iterables.contains(envs, Agent.detectedEnv)) {
 							continue;
 						}
 						String id = obj.getString("id");
@@ -135,7 +143,7 @@ class FormatHandlerUnsup extends FormatHandler {
 			Agent.log("INFO", "Update available! We have nothing, they have "+theirVersion);
 			JsonObject bootstrap = null;
 			try {
-				bootstrap = IOHelper.loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
+				bootstrap = RequestHelper.loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
 			} catch (FileNotFoundException e) {
 				Agent.log("INFO", "Bootstrap manifest missing, will have to retrieve and collapse every update");
 			}
@@ -160,14 +168,14 @@ class FormatHandlerUnsup extends FormatHandler {
 					long size = file.getLong("size", -1);
 					if (size < 0) throw new IOException(path+" in files array has invalid or missing size");
 					if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
-					String urlStr = IOHelper.checkSchemeMismatch(src, file.getString("url"));
+					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!Util.iterableContains(envs, Agent.detectedEnv)) {
+					if (!Iterables.contains(envs, Agent.detectedEnv)) {
 						Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
 					JsonArray flavors = file.getArray("flavors");
-					if (flavors != null && !Util.iterablesIntersect(flavors, ourFlavors)) {
+					if (flavors != null && !Iterables.intersects(flavors, ourFlavors)) {
 						Agent.log("INFO", "Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
@@ -213,7 +221,7 @@ class FormatHandlerUnsup extends FormatHandler {
 			int updates = theirVersion.code-ourVersion.code;
 			for (int i = 0; i < updates; i++) {
 				int code = ourVersion.code+(i+1);
-				JsonObject ver = IOHelper.loadJson(new URL(src, "versions/"+code+".json"), 2*M, new URL(src, "versions/"+code+".sig"));
+				JsonObject ver = RequestHelper.loadJson(new URL(src, "versions/"+code+".json"), 2*M, new URL(src, "versions/"+code+".sig"));
 				checkManifestFlavor(ver, "update", IntPredicates.equals(1));
 				HashFunction func = HashFunction.byName(ver.getString("hash_function", DEFAULT_HASH_FUNCTION));
 				for (Object o : ver.getArray("changes")) {
@@ -235,14 +243,14 @@ class FormatHandlerUnsup extends FormatHandler {
 						Agent.log("WARN", path+" in changes array has same from and to hash/size? Ignoring");
 						continue;
 					}
-					String urlStr = IOHelper.checkSchemeMismatch(src, file.getString("url"));
+					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!Util.iterableContains(envs, Agent.detectedEnv)) {
+					if (!Iterables.contains(envs, Agent.detectedEnv)) {
 						Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
 					JsonArray flavors = file.getArray("flavors");
-					if (flavors != null && !Util.iterablesIntersect(flavors, ourFlavors)) {
+					if (flavors != null && !Iterables.intersects(flavors, ourFlavors)) {
 						Agent.log("INFO", "Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}

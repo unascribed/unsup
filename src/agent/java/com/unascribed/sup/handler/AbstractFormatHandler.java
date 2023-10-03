@@ -1,29 +1,34 @@
-package com.unascribed.sup;
+package com.unascribed.sup.handler;
 
 import java.net.URL;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
+import com.unascribed.sup.Agent;
+import com.unascribed.sup.PuppetHandler;
+import com.unascribed.sup.data.FlavorGroup;
+import com.unascribed.sup.data.HashFunction;
+import com.unascribed.sup.data.Version;
+import com.unascribed.sup.pieces.NullRejectingMap;
 
-abstract class FormatHandler {
+public abstract class AbstractFormatHandler {
 	
-	protected static final int K = 1024;
-	protected static final int M = K*1024;
+	public static final int K = 1024;
+	public static final int M = K*1024;
 	
-	protected static class FilePlan {
-		FileState state;
-		URL url;
-		URL fallbackUrl;
-		URL primerUrl;
-		boolean hostile;
-		boolean skip = false;
+	public static class FilePlan {
+		public FileState state;
+		public URL url;
+		public URL fallbackUrl;
+		public URL primerUrl;
+		public boolean hostile;
+		public boolean skip = false;
 	}
 	
-	protected static class FileState {
+	public static class FileState {
 		public static final FileState EMPTY = new FileState(null, null, 0);
 		
 		public final HashFunction func;
@@ -75,11 +80,11 @@ abstract class FormatHandler {
 		
 	}
 	
-	protected static class UpdatePlan<F extends FilePlan> {
-		final boolean isBootstrap;
-		final Map<String, F> files = Util.nullRejectingMap(new HashMap<>());
-		final Map<String, FileState> expectedState = Util.nullRejectingMap(new HashMap<>());
-		final JsonObject newState;
+	public static class UpdatePlan<F extends FilePlan> {
+		public final boolean isBootstrap;
+		public final Map<String, F> files = NullRejectingMap.create();
+		public final Map<String, FileState> expectedState = NullRejectingMap.create();
+		public final JsonObject newState;
 		
 		public UpdatePlan(boolean isBootstrap, JsonObject newState) {
 			this.isBootstrap = isBootstrap;
@@ -87,10 +92,10 @@ abstract class FormatHandler {
 		}
 	}
 	
-	protected static class CheckResult {
-		final Version ourVersion;
-		final Version theirVersion;
-		final UpdatePlan<?> plan;
+	public static class CheckResult {
+		public final Version ourVersion;
+		public final Version theirVersion;
+		public final UpdatePlan<?> plan;
 		
 		public CheckResult(Version ourVersion, Version theirVersion, UpdatePlan<?> plan) {
 			this.ourVersion = ourVersion;

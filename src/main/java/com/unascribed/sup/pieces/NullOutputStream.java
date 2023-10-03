@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.pieces;
 
 import java.io.IOException;
 import java.io.OutputStream;

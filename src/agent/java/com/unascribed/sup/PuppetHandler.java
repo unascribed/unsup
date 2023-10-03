@@ -20,10 +20,13 @@ import java.util.StringJoiner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
-class PuppetHandler {
+import com.unascribed.sup.data.FlavorGroup;
+import com.unascribed.sup.pieces.Latch;
+
+public class PuppetHandler {
 	
-	static Process puppet;
-	static OutputStream puppetOut;
+	public static Process puppet;
+	public static OutputStream puppetOut;
 	
 	private static String title;
 	private static int lastReportedProgress = 0;
@@ -34,15 +37,15 @@ class PuppetHandler {
 	
 	static final Latch doneAnimatingLatch = new Latch();
 
-	enum AlertMessageType { QUESTION, INFO, WARN, ERROR, NONE }
-	enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
-	enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
+	public enum AlertMessageType { QUESTION, INFO, WARN, ERROR, NONE }
+	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
+	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
 
-	static void destroy() {
+	public static void destroy() {
 		puppet.destroy();
 	}
 	
-	static void create() {
+	public static void create() {
 		Agent.log("INFO", "Attempting to summon a puppet for GUI feedback...");
 		out: {
 			URI uri;
@@ -179,7 +182,7 @@ class PuppetHandler {
 		}
 	}
 
-	static void setPuppetColorsFromConfig() {
+	public static void setPuppetColorsFromConfig() {
 		tellPuppet(":colorBackground="+Agent.config.get("colors.background", "000000"));
 		tellPuppet(":colorTitle="+Agent.config.get("colors.title", "FFFFFF"));
 		tellPuppet(":colorSubtitle="+Agent.config.get("colors.subtitle", "AAAAAA"));
@@ -192,7 +195,7 @@ class PuppetHandler {
 		tellPuppet(":colorButtonText="+Agent.config.get("colors.button_text", "FFFFFF"));
 	}
 
-	static void tellPuppet(String order) {
+	public static void tellPuppet(String order) {
 		if (puppetOut == null) return;
 		synchronized (puppetOut) {
 			try {
@@ -218,18 +221,18 @@ class PuppetHandler {
 		}
 	}
 
-	static void updateTitle(String title, boolean determinate) {
+	public static void updateTitle(String title, boolean determinate) {
 		PuppetHandler.title = title;
 		tellPuppet(":prog=0");
 		tellPuppet(":mode="+(determinate ? "det" : "ind"));
 		tellPuppet(":title="+title);
 	}
 
-	static void updateSubtitle(String subtitle) {
+	public static void updateSubtitle(String subtitle) {
 		tellPuppet(":subtitle="+subtitle);
 	}
 
-	static void updateProgress(int prog) {
+	public static void updateProgress(int prog) {
 		tellPuppet(":prog="+prog);
 		if (Math.abs(lastReportedProgress-prog) >= 100 || System.nanoTime()-lastReportedProgressTime > TimeUnit.SECONDS.toNanos(3)) {
 			lastReportedProgress = prog;
@@ -238,7 +241,7 @@ class PuppetHandler {
 		}
 	}
 
-	static AlertOption openAlert(String title, String body, AlertMessageType messageType, AlertOptionType optionType, AlertOption def) {
+	public static AlertOption openAlert(String title, String body, AlertMessageType messageType, AlertOptionType optionType, AlertOption def) {
 		if (puppetOut == null) {
 			return def;
 		} else {
@@ -251,7 +254,7 @@ class PuppetHandler {
 		}
 	}
 
-	static String openChoiceAlert(String title, String body, Collection<String> choices, String def) {
+	public static String openChoiceAlert(String title, String body, Collection<String> choices, String def) {
 		if (puppetOut == null) {
 			return def;
 		} else {
@@ -266,7 +269,7 @@ class PuppetHandler {
 		}
 	}
 	
-	static List<String> openFlavorSelectDialog(String title, String body, List<FlavorGroup> groups) {
+	public static List<String> openFlavorSelectDialog(String title, String body, List<FlavorGroup> groups) {
 		if (puppetOut == null) {
 			return new ArrayList<>();
 		} else {

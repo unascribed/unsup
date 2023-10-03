@@ -1,7 +1,8 @@
 .gradle
 /build
 /bin
-/run
+/run/*
+!/run/unsup.ini
 .classpath
 .project
 .settings

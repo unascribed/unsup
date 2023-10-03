@@ -1,10 +1,14 @@
-package com.unascribed.sup;
+package com.unascribed.sup.data;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
+
+import com.unascribed.sup.Agent;
+import com.unascribed.sup.pieces.Murmur2MessageDigest;
+import com.unascribed.sup.util.Bases;
 
 public enum HashFunction {
 	@Deprecated MD5("MD5", "MD5", 128, true),
@@ -46,7 +50,7 @@ public enum HashFunction {
 		this.sizeInBytes = (sizeInBits+7)/8;
 		this.sizeInHexChars = sizeInBytes*2;
 		this.insecure = insecure;
-		this.emptyHash = Util.toHexString(createMessageDigest().digest());
+		this.emptyHash = Bases.bytesToHex(createMessageDigest().digest());
 	}
 	
 	public MessageDigest createMessageDigest() {

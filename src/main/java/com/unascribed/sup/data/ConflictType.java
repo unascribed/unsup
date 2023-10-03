@@ -1,6 +1,6 @@
-package com.unascribed.sup;
+package com.unascribed.sup.data;
 
-enum ConflictType {
+public enum ConflictType {
 	NO_CONFLICT(null),
 	LOCAL_AND_REMOTE_CREATED("created by you and in this update"),
 	LOCAL_AND_REMOTE_CHANGED("changed by you and in this update"),

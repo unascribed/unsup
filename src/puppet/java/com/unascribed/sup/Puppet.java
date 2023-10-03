@@ -61,7 +61,10 @@ import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 import javax.swing.plaf.metal.MetalLookAndFeel;
 import javax.swing.plaf.metal.OceanTheme;
-import com.unascribed.sup.FlavorGroup.FlavorChoice;
+
+import com.unascribed.sup.data.FlavorGroup;
+import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
+import com.unascribed.sup.util.SwingHelper;
 
 /**
  * LWJGL3's GLFW is incompatible with AWT. If we initialize AWT pre-launch with our GUI tidbits,
@@ -69,9 +72,9 @@ import com.unascribed.sup.FlavorGroup.FlavorChoice;
  * process's sole purpose of existence is to allow us to interact with AWT at an arm's length and
  * exit once we're done using it.
  */
-class Puppet {
+public class Puppet {
 	
-	static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
+	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
 	private static JFrame frame;
 	private static JLabel title, subtitle;
 	private static JProgressBar prog;
@@ -93,7 +96,7 @@ class Puppet {
 	public static void main(String[] args) {
 		log("INFO", "Iä! Iä! Cthulhu fhtagn!");
 		
-		Util.fixSwing();
+		SwingHelper.fixSwing();
 		
 		MetalLookAndFeel.setCurrentTheme(new OceanTheme());
 		try {

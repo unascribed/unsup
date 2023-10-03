@@ -36,29 +36,39 @@ import java.util.concurrent.atomic.AtomicLong;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonWriter;
-import com.unascribed.sup.FormatHandler.CheckResult;
-import com.unascribed.sup.FormatHandler.FileState;
-import com.unascribed.sup.FormatHandler.FilePlan;
-import com.unascribed.sup.FormatHandler.UpdatePlan;
-import com.unascribed.sup.IOHelper.DownloadedFile;
-import com.unascribed.sup.IOHelper.Retry;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
-import com.unascribed.sup.QDIni.QDIniException;
+import com.unascribed.sup.data.ConflictType;
+import com.unascribed.sup.data.SourceFormat;
+import com.unascribed.sup.handler.PackwizHandler;
+import com.unascribed.sup.handler.NativeHandler;
+import com.unascribed.sup.handler.AbstractFormatHandler.CheckResult;
+import com.unascribed.sup.handler.AbstractFormatHandler.FilePlan;
+import com.unascribed.sup.handler.AbstractFormatHandler.FileState;
+import com.unascribed.sup.handler.AbstractFormatHandler.UpdatePlan;
+import com.unascribed.sup.pieces.ExceptableRunnable;
+import com.unascribed.sup.pieces.MemoryCookieJar;
+import com.unascribed.sup.pieces.NullPrintStream;
+import com.unascribed.sup.pieces.QDIni;
+import com.unascribed.sup.pieces.QDIni.QDIniException;
+import com.unascribed.sup.util.RequestHelper;
+import com.unascribed.sup.util.RequestHelper.DownloadedFile;
+import com.unascribed.sup.util.RequestHelper.Retry;
+import com.unascribed.sup.util.Strings;
 
 import net.i2p.crypto.eddsa.EdDSAPublicKey;
 import okhttp3.OkHttpClient;
 
-class Agent {
+public class Agent {
 
-	static final int EXIT_SUCCESS = 0;
-	static final int EXIT_CONFIG_ERROR = 1;
-	static final int EXIT_CONSISTENCY_ERROR = 2;
-	static final int EXIT_BUG = 3;
-	static final int EXIT_USER_REQUEST = 4;
+	public static final int EXIT_SUCCESS = 0;
+	public static final int EXIT_CONFIG_ERROR = 1;
+	public static final int EXIT_CONSISTENCY_ERROR = 2;
+	public static final int EXIT_BUG = 3;
+	public static final int EXIT_USER_REQUEST = 4;
 
-	static final boolean DEBUG = Boolean.getBoolean("unsup.debug");
+	public static final boolean DEBUG = Boolean.getBoolean("unsup.debug");
 	
 	static volatile boolean awaitingExit = false;
 	
@@ -67,20 +77,20 @@ class Agent {
 	private static boolean standalone;
 	public static boolean filesystemIsCaseSensitive;
 	
-	static List<ExceptableRunnable> cleanup = new ArrayList<>();
-	static QDIni config;
+	public static List<ExceptableRunnable> cleanup = new ArrayList<>();
+	public static QDIni config;
 	
-	static String detectedEnv;
-	static Set<String> validEnvs;
+	public static String detectedEnv;
+	public static Set<String> validEnvs;
 	
-	static EdDSAPublicKey publicKey;
+	public static EdDSAPublicKey publicKey;
 	
 	// read by the Unsup class when it loads
 	// be careful not to load that class until this is all initialized
 	public static String sourceVersion;
 	public static boolean updated;
 
-	static JsonObject state;
+	public static JsonObject state;
 
 	private static File stateFile;
 	
@@ -88,7 +98,7 @@ class Agent {
 	static final Object dangerMutex = new Object();
 	private static final SimpleDateFormat logDateFormat = new SimpleDateFormat("HH:mm:ss");
 	
-	static final OkHttpClient okhttp = new OkHttpClient.Builder()
+	public static final OkHttpClient okhttp = new OkHttpClient.Builder()
 			.connectTimeout(30, TimeUnit.SECONDS)
 			.readTimeout(15, TimeUnit.SECONDS)
 			.callTimeout(120, TimeUnit.SECONDS)
@@ -188,9 +198,9 @@ class Agent {
 			try {
 				CheckResult res = null;
 				if (fmt == SourceFormat.UNSUP) {
-					res = FormatHandlerUnsup.check(src);
+					res = NativeHandler.check(src);
 				} else if (fmt == SourceFormat.PACKWIZ) {
-					res = FormatHandlerPackwiz.check(src);
+					res = PackwizHandler.check(src);
 				}
 				if (res != null) {
 					sourceVersion = res.ourVersion.name;
@@ -212,7 +222,7 @@ class Agent {
 				PuppetHandler.tellPuppet(":subtitle=");
 			}
 			
-			if (awaitingExit) Util.blockForever();
+			if (awaitingExit) Agent.blockForever();
 
 			PuppetHandler.tellPuppet(":belay=openTimeout");
 			if (PuppetHandler.puppetOut != null) {
@@ -306,23 +316,23 @@ class Agent {
 				boolean normalConflict = false;
 				long size = dest.length();
 				if (from.hash == null) {
-					if (to.sizeMatches(size) && to.hash.equals(IOHelper.hash(to.func, dest))) {
+					if (to.sizeMatches(size) && to.hash.equals(RequestHelper.hash(to.func, dest))) {
 						log("INFO", path+" was created in this update and locally, but the local version matches the update. Skipping");
 						continue;
 					}
 					conflictType = ConflictType.LOCAL_AND_REMOTE_CREATED;
 				} else if (from.sizeMatches(size)) {
-					String hash = IOHelper.hash(from.func, dest);
+					String hash = RequestHelper.hash(from.func, dest);
 					if (from.hash.equals(hash)) {
 						log("INFO", path+" matches the expected from hash");
-					} else if (to.sizeMatches(size) && to.hash.equals(from.func == to.func ? hash : IOHelper.hash(to.func, dest))) {
+					} else if (to.sizeMatches(size) && to.hash.equals(from.func == to.func ? hash : RequestHelper.hash(to.func, dest))) {
 						log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
 						continue;
 					} else {
 						log("INFO", "CONFLICT: "+path+" doesn't match the expected from hash ("+hash+" != "+from.hash+")");
 						normalConflict = true;
 					}
-				} else if (to.sizeMatches(size) && to.hash.equals(IOHelper.hash(to.func, dest))) {
+				} else if (to.sizeMatches(size) && to.hash.equals(RequestHelper.hash(to.func, dest))) {
 					log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
 					continue;
 				} else {
@@ -426,7 +436,7 @@ class Agent {
 				}
 				try {
 					if (f.primerUrl != null) {
-						try (InputStream in = IOHelper.get(f.primerUrl, f.hostile)) {
+						try (InputStream in = RequestHelper.get(f.primerUrl, f.hostile)) {
 							byte[] buf = new byte[8192];
 							while (true) {
 								if (in.read(buf) == -1) break;
@@ -533,8 +543,8 @@ class Agent {
 	}
 
 	private static DownloadedFile downloadAndCheckHash(File tmp, AtomicLong progress, Runnable updateProgress, String path, FilePlan f, URL url, FileState to, long[] contributedProgress) throws IOException {
-		return IOHelper.withRetries(3, () -> {
-			DownloadedFile df = IOHelper.downloadToFile(url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
+		return RequestHelper.withRetries(3, () -> {
+			DownloadedFile df = RequestHelper.downloadToFile(url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
 					updateProgress, to.func, f.hostile);
 			if (!df.hash.equals(to.hash)) {
 				throw new Retry("Hash mismatch on downloaded file for "+path+" from "+url+" - expected "+to.hash+", got "+df.hash,
@@ -553,7 +563,8 @@ class Agent {
 		switch (host) {
 			case "modrinth.com":
 			case "cdn.modrinth.com":
-					return "Modrinth";
+			case "cdn-raw.modrinth.com":
+				return "Modrinth";
 			
 			case "mediafilez.forgecdn.net": case "mediafiles.forgecdn.net":
 			case "curseforge.com": case "www.curseforge.com":
@@ -660,7 +671,7 @@ class Agent {
 		if (config.getBoolean("recognize_nogui", false)) {
 			String cmd = System.getProperty("sun.java.command");
 			if (cmd != null) {
-				return Util.containsWholeWord(cmd, "nogui") || Util.containsWholeWord(cmd, "--nogui");
+				return Strings.containsWholeWord(cmd, "nogui") || Strings.containsWholeWord(cmd, "--nogui");
 			}
 		}
 		return false;
@@ -770,20 +781,20 @@ class Agent {
 		}
 	}
 	
-	static void exit(int code) {
+	public static void exit(int code) {
 		cleanup();
 		System.exit(code);
 	}
 	
-	static synchronized void log(String flavor, String msg) {
+	public static synchronized void log(String flavor, String msg) {
 		log(standalone ? "sync" : "agent", flavor, msg);
 	}
 	
-	static synchronized void log(String flavor, String msg, Throwable t) {
+	public static synchronized void log(String flavor, String msg, Throwable t) {
 		log(standalone ? "sync" : "agent", flavor, msg, t);
 	}
 	
-	static synchronized void log(String tag, String flavor, String msg, Throwable t) {
+	public static synchronized void log(String tag, String flavor, String msg, Throwable t) {
 		if ("DEBUG" != flavor || DEBUG) {
 			t.printStackTrace();
 		}
@@ -791,10 +802,24 @@ class Agent {
 		log(tag, flavor, msg);
 	}
 	
-	static synchronized void log(String tag, String flavor, String msg) {
+	public static synchronized void log(String tag, String flavor, String msg) {
 		String line = "["+logDateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
 		if ("DEBUG" != flavor || DEBUG) System.out.println(line);
 		logStream.println(line);
+	}
+
+	/* (non-Javadoc)
+	 * used in the agent to suspend the update flow at a safe point if we're waiting for a
+	 * System.exit due to the user closing the puppet dialog (the puppet handling is multithreaded,
+	 * and a mutex is used to ensure we don't kill the updater during a sensitive period that could
+	 * corrupt the directory state)
+	 */
+	public static void blockForever() {
+		while (true) {
+			try {
+				Thread.sleep(Integer.MAX_VALUE);
+			} catch (InterruptedException e) {}
+		}
 	}
 	
 }

@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.pieces;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.AbstractQueuedSynchronizer;

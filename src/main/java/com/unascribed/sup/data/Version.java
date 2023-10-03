@@ -1,8 +1,8 @@
-package com.unascribed.sup;
+package com.unascribed.sup.data;
 
 import com.grack.nanojson.JsonObject;
 
-class Version {
+public class Version {
 	public final String name;
 	public final int code;
 	
