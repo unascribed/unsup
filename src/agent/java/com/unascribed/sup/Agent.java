@@ -16,6 +16,7 @@ import java.nio.file.StandardCopyOption;
 import java.security.spec.X509EncodedKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Date;
 import java.util.EnumMap;
@@ -58,6 +59,8 @@ import com.unascribed.sup.util.RequestHelper.Retry;
 import com.unascribed.sup.util.Strings;
 
 import net.i2p.crypto.eddsa.EdDSAPublicKey;
+import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable;
+import net.i2p.crypto.eddsa.spec.EdDSAPublicKeySpec;
 import okhttp3.OkHttpClient;
 
 public class Agent {
@@ -84,6 +87,8 @@ public class Agent {
 	public static Set<String> validEnvs;
 	
 	public static EdDSAPublicKey publicKey;
+	public static boolean signifyFormat = false;
+	public static byte[] signifyKeyId;
 	
 	// read by the Unsup class when it loads
 	// be careful not to load that class until this is all initialized
@@ -158,8 +163,18 @@ public class Agent {
 					String line = config.get("public_key");
 					if (line.startsWith("ed25519 ")) {
 						publicKey = new EdDSAPublicKey(new X509EncodedKeySpec(Base64.getDecoder().decode(line.substring(8))));
+					} else if (line.startsWith("signify ")) {
+						byte[] data = Base64.getDecoder().decode(line.substring(8));
+						if (data.length > 2 && data[0] == 'E' && data[1] == 'd') {
+							signifyKeyId = Arrays.copyOfRange(data, 2, 10);
+							publicKey = new EdDSAPublicKey(new EdDSAPublicKeySpec(Arrays.copyOfRange(data, 10, data.length),
+									EdDSANamedCurveTable.ED_25519_CURVE_SPEC));
+							signifyFormat = true;
+						} else {
+							throw new IllegalArgumentException("Unknown signify key format");
+						}
 					} else {
-						throw new IllegalArgumentException("Unknown key kind, expected ed25519");
+						throw new IllegalArgumentException("Unknown key kind, expected ed25519 or signify");
 					}
 					cleanup.add(() -> publicKey = null);
 				} catch (Throwable t) {
