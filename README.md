@@ -4,15 +4,6 @@
 
 ***Un**a's **S**imple **Up**dater*
 
-**Note**: unsup is not quite complete, but it has been used to deploy and
-update multiple Minecraft modpacks across Forge and Fabric for multiple
-versions of Minecraft. The main missing piece right now is the Creator GUI;
-manifests must be [written by hand](https://git.sleeping.town/unascribed/unsup/wiki/Manifest-format).
-
-*As of 0.2.0*, you can also point the unsup agent at a Packwiz `pack.toml`.
-This is the recommended solution to deploying packs with unsup at the moment.
-The Creator may still get implemented to offer a GUI solution.
-
 unsup is a somewhat minimal implementation of a generic working directory
 syncer in Java. It supports running as a Java agent, to piggy-back off of the
 launch of another program.
@@ -32,7 +23,8 @@ an inconsistent or corrupted working directory.
 
 It does consistency validation on all downloads and on files before overwriting
 them, warning the user if they've changed something that has been updated. It
-has experimental support for Ed25519 signing of manifests for further security.
+additionally supports signing manifests using OpenBSD Signify for additional
+security.
 
 ## For Minecraft
 unsup's unique simplified design means it is compatible with **all launchers**,
@@ -40,9 +32,30 @@ from the vanilla launcher to MultiMC. Just add `-javaagent:unsup.jar` to the
 JVM arguments, and place `unsup.jar` and `unsup.ini` in the .minecraft
 directory.
 
+In Prism Launcher, you can utilize unsup as a "component" by importing
+[this JSON file](https://git.sleeping.town/Rewind/Upsilon/src/branch/mmc/patches/com.unascribed.unsup.json).
+This will allow Prism Launcher to download and manage unsup. MultiMC does
+not support Java agent components.
+
 It also has a built-in concept of *environments* and *flavors*, allowing it to
 be used to manage server installs rather than just clients, and allowing users
 to pick between multiple mutually incompatible mod sets.
+
+## Creating Packs
+You can either point unsup at a [Packwiz](https://packwiz.infra.link/) pack.toml (recommended),
+or write a native unsup manifest by hand. See [the wiki](https://git.sleeping.town/unascribed/unsup/wiki/Manifest-format) for info on the
+native manifest format. The Creator GUI is on hold, as Packwiz has become a
+de-facto standard for Minecraft modpacks.
+
+## Stability
+unsup has been used for modpacks on versions from 1.4.7 to 1.20.2, both client and server,
+and is known to work with Forge (both legacy and modern), Fabric, Quilt, and NeoForge. It
+has successfully powered many modpacks, from [small](https://git.sleeping.town/Rewind/Upsilon)
+to [large](https://github.com/ModFest/bc23-pack). Native manifest and Packwiz manifest
+support are both quite stable, and have been used extensively.
+
+Signing support is still somewhat experimental, and has not been deployed by anyone at
+large scale. That someone could be you — please let me know if it works well!
 
 ## GUI
 unsup has a minimal and elegant GUI that works everywhere (yes, including
