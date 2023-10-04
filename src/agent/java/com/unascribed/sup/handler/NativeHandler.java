@@ -12,6 +12,7 @@ import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParserException;
 import com.unascribed.sup.Agent;
 import com.unascribed.sup.PuppetHandler;
+import com.unascribed.sup.SysProps;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
@@ -202,7 +203,7 @@ public class NativeHandler extends AbstractFormatHandler {
 		if (theirVersion.code > ourVersion.code) {
 			if (!bootstrapping) {
 				Agent.log("INFO", "Update available! We have "+ourVersion+", they have "+theirVersion);
-				AlertOption updateResp = PuppetHandler.openAlert("Update available",
+				AlertOption updateResp = SysProps.DISABLE_RECONCILIATION ? AlertOption.YES : PuppetHandler.openAlert("Update available",
 						"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {

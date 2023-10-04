@@ -71,8 +71,6 @@ public class Agent {
 	public static final int EXIT_BUG = 3;
 	public static final int EXIT_USER_REQUEST = 4;
 
-	public static final boolean DEBUG = Boolean.getBoolean("unsup.debug");
-	
 	static volatile boolean awaitingExit = false;
 	
 	private static PrintStream logStream;
@@ -305,7 +303,7 @@ public class Agent {
 			}
 		}
 		log("DEBUG", unchanged.size()+" other file"+(unchanged.size() == 1 ? "" : "s")+" have not been changed.");
-		if (DEBUG) {
+		if (SysProps.DEBUG) {
 			log("DEBUG", "Sound good? You have 4 seconds to kill the process if not.");
 			try {
 				Thread.sleep(4000);
@@ -371,7 +369,9 @@ public class Agent {
 			}
 			if (conflictType != ConflictType.NO_CONFLICT) {
 				AlertOption resp;
-				if (conflictPreload.containsKey(conflictType)) {
+				if (SysProps.DISABLE_RECONCILIATION) {
+					resp = AlertOption.YES;
+				} else if (conflictPreload.containsKey(conflictType)) {
 					resp = conflictPreload.get(conflictType);
 				} else {
 					resp = PuppetHandler.openAlert("File conflict",
@@ -396,7 +396,7 @@ public class Agent {
 					exit(EXIT_USER_REQUEST);
 					return;
 				}
-				if (dest.exists()) {
+				if (dest.exists() && !SysProps.DISABLE_RECONCILIATION) {
 					moveAside.add(path);
 				}
 			}
@@ -571,7 +571,7 @@ public class Agent {
 
 	private static String describe(URL url) {
 		if (url == null) return "(null)";
-		if (DEBUG) return url.toString();
+		if (SysProps.DEBUG) return url.toString();
 		String host = url.getHost();
 		if (host == null) return "[null]";
 		if (host.isEmpty()) return url.toString();
@@ -681,7 +681,7 @@ public class Agent {
 	}
 
 	private static boolean determineNoGui() {
-		if (standalone) return !Boolean.getBoolean("unsup.guiInStandalone");
+		if (standalone) return !SysProps.GUI_IN_STANDALONE;
 		if (config.containsKey("no_gui")) return config.getBoolean("no_gui", false);
 		if (config.getBoolean("recognize_nogui", false)) {
 			String cmd = System.getProperty("sun.java.command");
@@ -810,7 +810,7 @@ public class Agent {
 	}
 	
 	public static synchronized void log(String tag, String flavor, String msg, Throwable t) {
-		if ("DEBUG" != flavor || DEBUG) {
+		if ("DEBUG" != flavor || SysProps.DEBUG) {
 			t.printStackTrace();
 		}
 		t.printStackTrace(logStream);
@@ -819,7 +819,7 @@ public class Agent {
 	
 	public static synchronized void log(String tag, String flavor, String msg) {
 		String line = "["+logDateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
-		if ("DEBUG" != flavor || DEBUG) System.out.println(line);
+		if ("DEBUG" != flavor || SysProps.DEBUG) System.out.println(line);
 		logStream.println(line);
 	}
 
