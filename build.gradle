@@ -5,12 +5,15 @@ buildscript {
 	}
 	dependencies {
 		classpath 'com.github.jengelman.gradle.plugins:shadow:6.1.0'
-		classpath 'org.ow2.asm:asm:9.0'
-		classpath 'org.ow2.asm:asm-tree:9.0'
-		classpath 'org.ow2.asm:asm-commons:9.0'
+		classpath 'org.ow2.asm:asm:9.6'
+		classpath 'org.ow2.asm:asm-tree:9.6'
+		classpath 'org.ow2.asm:asm-commons:9.6'
 		// just used for shrinking. i've used proguard a lot and trust it
-		classpath 'com.guardsquare:proguard-gradle:7.2.2'
+		classpath 'com.guardsquare:proguard-gradle:7.3.2'
 	}
+}
+plugins {
+	id 'com.github.ben-manes.versions' version '0.48.0'
 }
 
 import java.io.File;
@@ -33,7 +36,6 @@ import org.objectweb.asm.tree.LdcInsnNode;
 apply plugin: 'com.github.johnrengelman.shadow'
 apply plugin: 'java-library'
 apply plugin: 'maven-publish'
-
 
 group = 'com.unascribed'
 archivesBaseName = 'unsup'
@@ -63,16 +65,16 @@ configurations {
 }
 
 dependencies {
-	shade 'com.grack:nanojson:1.6'
+	shade 'com.grack:nanojson:1.8'
 	shade 'net.i2p.crypto:eddsa:0.3.0'
-	shade('com.squareup.okhttp3:okhttp:4.9.3') {
+	shade('com.squareup.okhttp3:okhttp:4.11.0') {
 		exclude group: 'org.jetbrains'
 		exclude module: 'kotlin-stdlib-common'
 	}
 	shade('com.moandjiezana.toml:toml4j:0.7.2') {
 		transitive = false
 	}
-	shade 'com.unascribed:flexver-java:1.1.0'
+	shade 'com.unascribed:flexver-java:1.1.1'
 }
 
 jar {
@@ -90,6 +92,14 @@ shadowJar {
 	}
 	from sourceSets.puppet.output
 	from sourceSets.agent.output
+}
+
+tasks.named("dependencyUpdates").configure {
+	gradleReleaseChannel = 'current'
+	revision = 'release'
+	rejectVersionIf {
+		it.candidate.version.contains("alpha") || it.candidate.version.contains("beta")
+	}
 }
 
 def pgLibJars = files(
