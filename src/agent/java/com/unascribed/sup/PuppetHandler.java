@@ -85,12 +85,20 @@ public class PuppetHandler {
 			} else {
 				Process p;
 				try {
-					p = new ProcessBuilder(java, "-cp", ourPath.getAbsolutePath(), "com.unascribed.sup.Puppet")
-						.start();
+					List<String> args = new ArrayList<>();
+					args.add(java);
+					args.add("-cp");
+					args.add(ourPath.getAbsolutePath());
+					args.add("com.unascribed.sup.Puppet");
+					Agent.log("DEBUG", "unsup location detected as "+ourPath);
+					Agent.log("DEBUG", "Java location detected as "+java);
+					Agent.log("DEBUG", "Puppet command: "+args);
+					ProcessBuilder bldr = new ProcessBuilder(args);
+					bldr.environment().put("_JAVA_AWT_WM_NONREPARENTING", "1");
+					bldr.environment().put("NO_AWT_MITSHM", "1");
+					p = bldr.start();
 				} catch (Throwable t) {
 					Agent.log("WARN", "Failed to summon a puppet.");
-					Agent.log("WARN", "unsup location detected as "+ourPath);
-					Agent.log("WARN", "Java location detected as "+java);
 					t.printStackTrace();
 					puppet = null;
 					break out;

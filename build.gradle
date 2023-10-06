@@ -85,21 +85,23 @@ jar {
 shadowJar {
 	classifier 'fat'
 	destinationDirectory.set(file('build/tmp'))
-	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver"].each {
+	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver", "org.objectweb"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it
 	}
 	from sourceSets.puppet.output
 	from sourceSets.agent.output
 }
 
+def pgLibJars = files(
+	System.properties["java.home"]+"/jmods/java.base.jmod", // everyone needs java base
+	System.properties["java.home"]+"/jmods/java.desktop.jmod", // used by the puppet
+	System.properties["java.home"]+"/jmods/java.management.jmod", // for the agent
+)
+
 task proguard(type: proguard.gradle.ProGuardTask) {
 	dependsOn shadowJar
 	injars shadowJar.archivePath
-	libraryjars files(
-		System.properties["java.home"]+"/jmods/java.base.jmod", // everyone needs java base
-		System.properties["java.home"]+"/jmods/java.desktop.jmod", // used by the puppet
-		System.properties["java.home"]+"/jmods/java.management.jmod", // for the agent
-	)
+	libraryjars pgLibJars
 	outjars 'build/tmp/proguard.jar'
 	
 	// releasing open source programs as obfuscated jars is bad praxis
@@ -141,11 +143,7 @@ task proguardAgain(type: proguard.gradle.ProGuardTask) {
 
 	dependsOn proguard
 	injars 'build/tmp/proguard.jar'
-	libraryjars files(
-		System.properties["java.home"]+"/jmods/java.base.jmod", // everyone needs java base
-		System.properties["java.home"]+"/jmods/java.desktop.jmod", // used by the puppet
-		System.properties["java.home"]+"/jmods/java.management.jmod", // for the agent
-	)
+	libraryjars pgLibJars
 	outjars 'build/tmp/proguard2.jar'
 	
 	dontoptimize

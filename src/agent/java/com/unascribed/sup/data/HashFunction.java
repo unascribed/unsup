@@ -67,7 +67,7 @@ public enum HashFunction {
 		HashFunction func = BY_NAME.get(name);
 		if (func != null && func.insecure && !func.hasWarned) {
 			func.hasWarned = true;
-			if (Agent.publicKey != null) {
+			if (Agent.packSig != null) {
 				Agent.log("WARN", "Using insecure hash function "+func+" for a signed manifest! This is a very bad idea!");
 			} else {
 				Agent.log("WARN", "Using insecure hash function "+func);

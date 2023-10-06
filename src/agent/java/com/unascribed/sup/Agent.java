@@ -7,17 +7,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
-import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.security.spec.X509EncodedKeySpec;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Base64;
 import java.util.Date;
 import java.util.EnumMap;
 import java.util.HashSet;
@@ -53,14 +49,12 @@ import com.unascribed.sup.pieces.MemoryCookieJar;
 import com.unascribed.sup.pieces.NullPrintStream;
 import com.unascribed.sup.pieces.QDIni;
 import com.unascribed.sup.pieces.QDIni.QDIniException;
+import com.unascribed.sup.signing.SigProvider;
 import com.unascribed.sup.util.RequestHelper;
 import com.unascribed.sup.util.RequestHelper.DownloadedFile;
 import com.unascribed.sup.util.RequestHelper.Retry;
 import com.unascribed.sup.util.Strings;
 
-import net.i2p.crypto.eddsa.EdDSAPublicKey;
-import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable;
-import net.i2p.crypto.eddsa.spec.EdDSAPublicKeySpec;
 import okhttp3.OkHttpClient;
 
 public class Agent {
@@ -84,9 +78,8 @@ public class Agent {
 	public static String detectedEnv;
 	public static Set<String> validEnvs;
 	
-	public static EdDSAPublicKey publicKey;
-	public static boolean signifyFormat = false;
-	public static byte[] signifyKeyId;
+	public static final SigProvider unsupSig = SigProvider.of("signify RWTSwM40VCzVER3YWt55m4Fvsg0sjZLEICikuU3cD91gR/2lii/jk67B");
+	public static SigProvider packSig;
 	
 	// read by the Unsup class when it loads
 	// be careful not to load that class until this is all initialized
@@ -108,12 +101,12 @@ public class Agent {
 			.cookieJar(new MemoryCookieJar())
 			.build();
 	
-	public static void main(String[] args) throws UnsupportedEncodingException {
+	public static void main(String[] args) {
 		standalone = true;
 		premain(args.length >= 1 ? args[0] : null);
 	}
 	
-	public static void premain(String arg) throws UnsupportedEncodingException {
+	public static void premain(String arg) {
 		long start = System.nanoTime();
 		try {
 			createLogStream();
@@ -158,23 +151,8 @@ public class Agent {
 			
 			if (config.containsKey("public_key")) {
 				try {
-					String line = config.get("public_key");
-					if (line.startsWith("ed25519 ")) {
-						publicKey = new EdDSAPublicKey(new X509EncodedKeySpec(Base64.getDecoder().decode(line.substring(8))));
-					} else if (line.startsWith("signify ")) {
-						byte[] data = Base64.getDecoder().decode(line.substring(8));
-						if (data.length > 2 && data[0] == 'E' && data[1] == 'd') {
-							signifyKeyId = Arrays.copyOfRange(data, 2, 10);
-							publicKey = new EdDSAPublicKey(new EdDSAPublicKeySpec(Arrays.copyOfRange(data, 10, data.length),
-									EdDSANamedCurveTable.ED_25519_CURVE_SPEC));
-							signifyFormat = true;
-						} else {
-							throw new IllegalArgumentException("Unknown signify key format");
-						}
-					} else {
-						throw new IllegalArgumentException("Unknown key kind, expected ed25519 or signify");
-					}
-					cleanup.add(() -> publicKey = null);
+					packSig = SigProvider.parse(config.get("public_key"));
+					cleanup.add(() -> packSig = null);
 				} catch (Throwable t) {
 					log("ERROR", "Config file error: public_key is not valid at "+config.getBlame("public_key")+"! Exiting.", t);
 					exit(EXIT_CONFIG_ERROR);
@@ -201,10 +179,9 @@ public class Agent {
 			
 			PuppetHandler.tellPuppet(":subtitle="+config.get("subtitle", ""));
 			// we don't want to flash a window on the screen if things aren't going slow, so we tell
-			// the puppet to wait 750ms before actually making the window visible, and assign an
-			// identifier to our order so we can belay it later if we finished before the timer
-			// expired
-			PuppetHandler.tellPuppet("[openTimeout]750:visible=true");
+			// the puppet to wait before actually making the window visible, and assign an id to our
+			// order so we can belay it later if we finished before the timer expired
+			PuppetHandler.tellPuppet("[openTimeout]1250:visible=true");
 
 			
 			PuppetHandler.updateTitle("Checking for updates...", false);

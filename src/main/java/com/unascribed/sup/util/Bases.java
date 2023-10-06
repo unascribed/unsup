@@ -26,4 +26,13 @@ public class Bases {
 		return new String(Base64.getDecoder().decode(b64), StandardCharsets.UTF_8);
 	}
 
+	public static String longToHex(long l) {
+		return intToHex((l>>32L)&0xFFFFFFFF)+intToHex(l&0xFFFFFFFF);
+	}
+
+	private static String intToHex(long i) {
+		// bad
+		return Long.toHexString((i&0xFFFFFFFFL)|0xF00000000L).substring(1);
+	}
+
 }

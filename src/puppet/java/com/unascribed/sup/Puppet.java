@@ -148,7 +148,9 @@ public class Puppet {
 				Runnable r;
 				switch (order) {
 					case "build": {
-						r = Puppet::buildUi;
+						r = invokeLater(() -> {
+							buildUi();
+						});
 						break;
 					}
 					case "colorBackground": colorBackground = new Color(Integer.parseInt(arg, 16)); continue;
@@ -190,9 +192,9 @@ public class Puppet {
 					}
 					case "visible": {
 						boolean b = Boolean.parseBoolean(arg);
-						r = () -> {
+						r = invokeLater(() -> {
 							frame.setVisible(b);
-						};
+						});
 						break;
 					}
 					case "exit": {
@@ -203,20 +205,16 @@ public class Puppet {
 					}
 					case "mode": {
 						if ("ind".equals(arg)) {
-							r = () -> {
-								SwingUtilities.invokeLater(() -> {
-									prog.setVisible(false);
-									prog.invalidate();
-								});
-							};
+							r = invokeLater(() -> {
+								prog.setVisible(false);
+								prog.invalidate();
+							});
 						} else if ("det".equals(arg)) {
-							r = () -> {
-								SwingUtilities.invokeLater(() -> {
-									prog.setVisible(true);
-									prog.setValue(0);
-									prog.invalidate();
-								});
-							};
+							r = invokeLater(() -> {
+								prog.setVisible(true);
+								prog.setValue(0);
+								prog.invalidate();
+							});
 						} else if ("done".equals(arg)) {
 							r = () -> {
 								if (!frame.isVisible()) {
@@ -237,28 +235,22 @@ public class Puppet {
 					}
 					case "prog": {
 						int i = Integer.parseInt(arg);
-						r = () -> {
-							SwingUtilities.invokeLater(() -> {
-								prog.setValue(i);
-								prog.repaint();
-							});
-						};
+						r = invokeLater(() -> {
+							prog.setValue(i);
+							prog.repaint();
+						});
 						break;
 					}
 					case "title": {
-						r = () -> {
-							SwingUtilities.invokeLater(() -> {
-								title.setText("<html><nobr>"+arg+"</nobr></html>");
-							});
-						};
+						r = invokeLater(() -> {
+							title.setText("<html><nobr>"+arg+"</nobr></html>");
+						});
 						break;
 					}
 					case "subtitle": {
-						r = () -> {
-							SwingUtilities.invokeLater(() -> {
-								subtitle.setText("<html><nobr>"+arg+"</nobr></html>");
-							});
-						};
+						r = invokeLater(() -> {
+							subtitle.setText("<html><nobr>"+arg+"</nobr></html>");
+						});
 						break;
 					}
 					case "alert": {
@@ -385,6 +377,12 @@ public class Puppet {
 		System.exit(0);
 	}
 	
+	private static Runnable invokeLater(Runnable r) {
+		return () -> {
+			SwingUtilities.invokeLater(r);
+		};
+	}
+
 	private static void log(String flavor, String msg) {
 		System.err.println(flavor+"|"+msg);
 	}

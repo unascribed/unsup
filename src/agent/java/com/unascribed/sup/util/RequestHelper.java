@@ -18,7 +18,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SignatureException;
 import java.util.Arrays;
-import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -32,7 +31,6 @@ import com.unascribed.sup.Agent;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.data.HashFunction;
 
-import net.i2p.crypto.eddsa.EdDSAEngine;
 import okhttp3.Request;
 import okhttp3.Response;
 
@@ -66,24 +64,13 @@ public class RequestHelper {
 		if (resp == null) {
 			throw new IOException(src+" is larger than "+(sizeLimit/K)+"K, refusing to continue downloading");
 		}
-		if (Agent.publicKey != null && sigUrl != null) {
+		if (Agent.packSig != null && sigUrl != null) {
 			try {
 				byte[] sigResp = downloadToMemory(sigUrl, 512);
-				if (Agent.signifyFormat) {
-					sigResp = Base64.getDecoder().decode(new String(sigResp, StandardCharsets.ISO_8859_1).split("\n")[1].trim());
-					if (sigResp.length < 2 || sigResp[0] != 'E' || sigResp[1] != 'd') {
-						throw new SignatureException("Signature is not in a known format");
-					}
-					byte[] keyId = Arrays.copyOfRange(sigResp, 2, 10);
-					if (!Arrays.equals(keyId, Agent.signifyKeyId)) {
-						throw new SignatureException("Manifest is signed with the wrong key (expected "+Bases.bytesToHex(Agent.signifyKeyId)+" but got "+Bases.bytesToHex(keyId)+")");
-					}
-					sigResp = Arrays.copyOfRange(sigResp, 10, sigResp.length);
-				}
-				EdDSAEngine engine = new EdDSAEngine();
-				engine.initVerify(Agent.publicKey);
-				if (!engine.verifyOneShot(resp, sigResp)) {
+				if (!Agent.packSig.verify(resp, sigResp)) {
 					throw new SignatureException("Signature is invalid");
+				} else {
+					Agent.log("DEBUG", "Signature for "+src+" (retrieved from "+sigUrl+") is valid");
 				}
 			} catch (Throwable t) {
 				throw new IOException("Failed to validate signature for "+src, t);
