@@ -19,7 +19,6 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -70,7 +69,6 @@ public class Agent {
 	private static PrintStream logStream;
 	
 	private static boolean standalone;
-	public static boolean filesystemIsCaseSensitive;
 	
 	public static List<ExceptableRunnable> cleanup = new ArrayList<>();
 	public static QDIni config;
@@ -111,7 +109,6 @@ public class Agent {
 		try {
 			createLogStream();
 			log("INFO", (standalone ? "Starting in standalone mode" : "Launch hijack successful")+". unsup v"+Util.VERSION);
-			detectFilesystemCaseSensitivity();
 			if (!loadConfig()) {
 				log("WARN", "Cannot find a config file, giving up.");
 				// by returning but not exiting, we yield control to the program whose launch we hijacked, if any
@@ -596,36 +593,6 @@ public class Agent {
 		} catch (Exception e) {
 			logStream = NullPrintStream.INSTANCE;
 			log("WARN", "Failed to open log file "+logFile);
-		}
-	}
-	
-	private static void detectFilesystemCaseSensitivity() {
-		try {
-			File tmp = File.createTempFile("UNSUP", "cAsE-SensitiVITY-teST");
-			File tmpLower = new File(tmp.getPath().toLowerCase(Locale.ROOT));
-			// we detect case sensitivity by checking if a lowercase version of our file path
-			// exists; however, it's possible that file already exists for some reason, so we
-			// delete the lowercased file if it exists and see if that caused our mixedcase file
-			// to be deleted too. if so, the filesystem must consider both names to be the same
-			// directory entry
-			if (tmpLower.exists()) {
-				if (tmpLower.delete() && !tmp.exists()) {
-					filesystemIsCaseSensitive = false;
-					log("INFO", "Filesystem is NOT case sensitive");
-				} else {
-					filesystemIsCaseSensitive = true;
-					log("INFO", "Filesystem is case sensitive, but looked case insensitive for a moment");
-				}
-			} else {
-				filesystemIsCaseSensitive = true;
-				log("INFO", "Filesystem is case sensitive");
-			}
-			if (tmp.exists()) {
-				tmp.delete();
-			}
-		} catch (IOException e1) {
-			log("INFO", "Failed to test if filesystem is case sensitive. Assuming it is.", e1);
-			filesystemIsCaseSensitive = true;
 		}
 	}
 	

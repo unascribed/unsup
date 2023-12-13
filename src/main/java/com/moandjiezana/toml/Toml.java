@@ -359,7 +359,7 @@ public class Toml {
     return entries;
   }
 
-  private class Entry implements Map.Entry<String, Object> {
+  private static class Entry implements Map.Entry<String, Object> {
     
     private final String key;
     private final Object value;

@@ -400,7 +400,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 						int i = (str.length()+1)/2;
 						String l = str.substring(0, i);
 						String r = str.substring(i);
-						while (r.startsWith("0")) r = r.substring(1);
+						while (r.startsWith("0") && r.length() > 1) r = r.substring(1);
 						f.url = new URL(String.format(Bases.b64ToString("aHR0cHM6Ly9tZWRpYWZpbGV6LmZvcmdlY2RuLm5ldC9maWxlcy8lcy8lcy8lcw=="),
 								l, r, metafile.getString(Bases.b64ToString("ZmlsZW5hbWU=")).replace("+", "%2B")));
 					} else {

@@ -146,7 +146,7 @@ public class PuppetHandler {
 				Agent.log("INFO", "Puppet is alive! Continuing.");
 				puppetOut = new BufferedOutputStream(puppet.getOutputStream(), 512);
 				Thread puppetThread = new Thread(() -> {
-					try {
+					try (BufferedReader br2 = br) {
 						while (true) {
 							String line = br.readLine();
 							if (line == null) return;
