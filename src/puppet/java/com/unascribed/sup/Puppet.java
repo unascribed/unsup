@@ -520,7 +520,7 @@ public class Puppet {
 		if (name != null) {
 			Object sel = pane.getValue();
 			String opt;
-			if (sel == null || sel == JOptionPane.UNINITIALIZED_VALUE) {
+			if (sel == null || sel == JOptionPane.UNINITIALIZED_VALUE || !(sel instanceof String)) {
 				opt = "closed";
 			} else {
 				opt = ((String)sel).toLowerCase(Locale.ROOT).replace(" ", "");
