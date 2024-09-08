@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
+import java.net.ConnectException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.UnknownHostException;
@@ -88,6 +89,9 @@ public class RequestHelper {
 			} catch (SocketTimeoutException e) {
 				throw new Retry("Connection to "+url.getHost()+" timed out",
 						SocketTimeoutException::new);
+			} catch (ConnectException e) {
+				throw new Retry("Connection to "+url.getHost()+" failed",
+						ConnectException::new);
 			}
 		});
 	}
@@ -166,6 +170,15 @@ public class RequestHelper {
 			} catch (UnknownHostException e) {
 				throw new Retry("DNS resolution of "+url.getHost()+" failed",
 						e);
+			} catch (ConnectException e) {
+				throw new Retry("Connection to "+url.getHost()+" failed",
+						ConnectException::new);
+			} catch (IOException e) {
+				if (e.getMessage() != null && e.getMessage().contains(" preface ")) {
+					throw new Retry(url.getHost()+" violated HTTP/2 protocol — weird VPN?",
+						e);
+				}
+				throw e;
 			}
 		});
 	}
