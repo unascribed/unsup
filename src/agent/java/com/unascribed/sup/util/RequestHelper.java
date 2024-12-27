@@ -119,7 +119,7 @@ public class RequestHelper {
 				JsonObject data = loadJson(new URL("https://product-details.mozilla.org/1.0/firefox_versions.json"), 4*K, null);
 				currentFirefoxVersion = data.getString("LATEST_FIREFOX_VERSION");
 			} catch (Throwable t) {
-				currentFirefoxVersion = "109.0";
+				currentFirefoxVersion = "133.0";
 			}
 			int firstDot = currentFirefoxVersion.indexOf('.');
 			if (firstDot != -1) {
@@ -136,8 +136,7 @@ public class RequestHelper {
 				Request.Builder reqbldr = new Request.Builder()
 						.url(url)
 						.header("User-Agent",
-								// not a mistake. the rv: is locked at 109 (and the trailer still updates, yes. it's weird.)
-								fhostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/"+currentFirefoxVersion
+								fhostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:"+currentFirefoxVersion+") Gecko/20100101 Firefox/"+currentFirefoxVersion
 								         : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
 							);
 				if (fhostile) {

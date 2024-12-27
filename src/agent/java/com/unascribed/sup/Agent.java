@@ -16,6 +16,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -85,6 +86,7 @@ public class Agent {
 	public static boolean updated;
 
 	public static JsonObject state;
+	public static Map<String, String> currentComponentVersions = new HashMap<>();
 
 	private static File stateFile;
 	
@@ -229,7 +231,6 @@ public class Agent {
 			
 			if (standalone) {
 				log("INFO", "Ran in standalone mode, no program will be started.");
-				log("INFO", "It is recommended you use unsup as a Java agent via -javaagent:unsup.jar to piggyback on another program's launch.");
 			} else {
 				log("INFO", "All done, handing over control.");
 				// poke the Unsup class so it loads and finalizes all of its values

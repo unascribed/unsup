@@ -5,13 +5,16 @@ import java.security.MessageDigest;
 
 import com.unascribed.sup.util.Bases;
 
-public class Murmur2MessageDigest extends MessageDigest {
+/**
+ * Implements CurseForge's variant of Murmur2, used for the hashes of particularly old files.
+ */
+public class Murmur2CFMessageDigest extends MessageDigest {
 	private static final int M32 = 0x5bd1e995;
 	private static final int R32 = 24;
 	// algorithm is seeded with the length :/
 	private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
 
-	public Murmur2MessageDigest() {
+	public Murmur2CFMessageDigest() {
 		super("Murmur2-CF");
 	}
 

@@ -520,6 +520,11 @@ public class Puppet {
 		if (name != null) {
 			Object sel = pane.getValue();
 			String opt;
+			/*
+			 * If you close a button-based JOptionPane without choosing an option, the value becomes
+			 * Integer.valueOf(JOptionPane.CLOSED_OPTION). The doc does not mention this, and in
+			 * fact asserts closing without choosing an option will yield null. Sigh...
+			 */
 			if (sel == null || sel == JOptionPane.UNINITIALIZED_VALUE || !(sel instanceof String)) {
 				opt = "closed";
 			} else {

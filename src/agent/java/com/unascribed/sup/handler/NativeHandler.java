@@ -4,6 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.IntPredicate;
@@ -165,10 +166,10 @@ public class NativeHandler extends AbstractFormatHandler {
 					if (path == null) throw new IOException("Entry in files array is missing path");
 					String hash = file.getString("hash");
 					if (hash == null) throw new IOException(path+" in files array is missing hash");
-					if (hash.length() != func.sizeInHexChars)  throw new IOException(path+" in files array hash "+hash+" is wrong length ("+hash.length()+" != "+func.sizeInHexChars+")");
+					if (hash.length() != func.sizeInHexChars())  throw new IOException(path+" in files array hash "+hash+" is wrong length ("+hash.length()+" != "+func.sizeInHexChars()+")");
 					long size = file.getLong("size", -1);
 					if (size < 0) throw new IOException(path+" in files array has invalid or missing size");
-					if (size == 0 && !hash.equals(func.emptyHash)) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash+")");
+					if (size == 0 && !hash.equals(func.emptyHash())) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash()+")");
 					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
 					if (!Iterables.contains(envs, Agent.detectedEnv)) {
@@ -208,7 +209,7 @@ public class NativeHandler extends AbstractFormatHandler {
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
 					Agent.log("INFO", "Ignoring update by user choice.");
-					return new CheckResult(ourVersion, theirVersion, null);
+					return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 				}
 			}
 			UpdatePlan<FileToDownloadWithCode> plan = new UpdatePlan<>(bootstrapping, newState);
@@ -231,15 +232,15 @@ public class NativeHandler extends AbstractFormatHandler {
 					String path = file.getString("path");
 					if (path == null) throw new IOException("Entry in changes array is missing path");
 					String fromHash = file.getString("from_hash");
-					if (fromHash != null && fromHash.length() != func.sizeInHexChars)  throw new IOException(path+" in changes array from_hash "+fromHash+" is wrong length ("+fromHash.length()+" != "+func.sizeInHexChars+")");
+					if (fromHash != null && fromHash.length() != func.sizeInHexChars())  throw new IOException(path+" in changes array from_hash "+fromHash+" is wrong length ("+fromHash.length()+" != "+func.sizeInHexChars()+")");
 					long fromSize = file.getLong("from_size", -1);
 					if (fromSize < 0) throw new IOException(path+" in changes array has invalid or missing from_size");
-					if (fromSize == 0 && (fromHash != null && !fromHash.equals(func.emptyHash))) throw new IOException(path+" from in changes array is empty file, but hash isn't the empty hash or null ("+fromHash+" != "+func.emptyHash+")");
+					if (fromSize == 0 && (fromHash != null && !fromHash.equals(func.emptyHash()))) throw new IOException(path+" from in changes array is empty file, but hash isn't the empty hash or null ("+fromHash+" != "+func.emptyHash()+")");
 					String toHash = file.getString("to_hash");
-					if (toHash != null && toHash.length() != func.sizeInHexChars)  throw new IOException(path+" in changes array to_hash "+toHash+" is wrong length ("+toHash.length()+" != "+func.sizeInHexChars+")");
+					if (toHash != null && toHash.length() != func.sizeInHexChars())  throw new IOException(path+" in changes array to_hash "+toHash+" is wrong length ("+toHash.length()+" != "+func.sizeInHexChars()+")");
 					long toSize = file.getLong("to_size", -1);
 					if (toSize < 0) throw new IOException(path+" in changes array has invalid or missing toSize");
-					if (toSize == 0 && (toHash != null && !toHash.equals(func.emptyHash))) throw new IOException(path+" to in changes array is empty file, but hash isn't the empty hash or null ("+toHash+" != "+func.emptyHash+")");
+					if (toSize == 0 && (toHash != null && !toHash.equals(func.emptyHash()))) throw new IOException(path+" to in changes array is empty file, but hash isn't the empty hash or null ("+toHash+" != "+func.emptyHash()+")");
 					if (fromSize == toSize && Objects.equals(fromHash, toHash)) {
 						Agent.log("WARN", path+" in changes array has same from and to hash/size? Ignoring");
 						continue;
@@ -288,15 +289,15 @@ public class NativeHandler extends AbstractFormatHandler {
 					}
 				}
 			}
-			return new CheckResult(ourVersion, theirVersion, plan);
+			return new CheckResult(ourVersion, theirVersion, plan, Collections.emptyMap());
 		} else if (bootstrapPlan != null) {
-			return new CheckResult(ourVersion, theirVersion, bootstrapPlan);
+			return new CheckResult(ourVersion, theirVersion, bootstrapPlan, Collections.emptyMap());
 		} else if (ourVersion.code > theirVersion.code) {
 			Agent.log("INFO", "Remote version is older than local version, doing nothing");
-			return new CheckResult(ourVersion, theirVersion, null);
+			return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 		} else {
 			Agent.log("INFO", "We appear to be up-to-date. Nothing to do");
-			return new CheckResult(ourVersion, theirVersion, null);
+			return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 		}
 	}
 

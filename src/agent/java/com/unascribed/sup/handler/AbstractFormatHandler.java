@@ -96,11 +96,13 @@ public abstract class AbstractFormatHandler {
 		public final Version ourVersion;
 		public final Version theirVersion;
 		public final UpdatePlan<?> plan;
+		public final Map<String, String> componentVersions;
 		
-		public CheckResult(Version ourVersion, Version theirVersion, UpdatePlan<?> plan) {
+		public CheckResult(Version ourVersion, Version theirVersion, UpdatePlan<?> plan, Map<String, String> componentVersions) {
 			this.ourVersion = ourVersion;
 			this.theirVersion = theirVersion;
 			this.plan = plan;
+			this.componentVersions = componentVersions;
 		}
 	}
 	

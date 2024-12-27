@@ -29,7 +29,7 @@ import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.data.HashFunction;
 import com.unascribed.sup.data.Version;
 import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
-import com.unascribed.sup.pieces.Murmur2MessageDigest;
+import com.unascribed.sup.pieces.Murmur2CFMessageDigest;
 import com.unascribed.sup.util.Bases;
 import com.unascribed.sup.util.RequestHelper;
 import com.unascribed.sup.util.Iterables;
@@ -74,7 +74,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
 					Agent.log("INFO", "Ignoring update by user choice.");
-					return new CheckResult(ourVersion, theirVersion, null);
+					return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 				}
 			}
 			pwstate.put("lastIndexHash", indexDoublet);
@@ -378,7 +378,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				HashFunction thisFunc = parseFunc(download.getString("hash-format"));
 				String thisHash = download.getString("hash");
 				if (thisFunc == HashFunction.MURMUR2_CF) {
-					thisHash = Murmur2MessageDigest.decToHex(thisHash);
+					thisHash = Murmur2CFMessageDigest.decToHex(thisHash);
 				}
 				f.state = new FileState(thisFunc, thisHash, -1);
 				postState.put(path, f.state);
@@ -428,11 +428,11 @@ public class PackwizHandler extends AbstractFormatHandler {
 				lastState.put(en.getKey(), en.getValue().func+":"+en.getValue().hash);
 			}
 			pwstate.put("lastState", lastState);
-			return new CheckResult(ourVersion, theirVersion, plan);
+			return new CheckResult(ourVersion, theirVersion, plan, Collections.emptyMap());
 		} else {
 			Agent.log("INFO", "We appear to be up-to-date. Nothing to do");
 		}
-		return new CheckResult(ourVersion, ourVersion, null);
+		return new CheckResult(ourVersion, ourVersion, null, Collections.emptyMap());
 	}
 	
 	@SuppressWarnings("deprecation")
