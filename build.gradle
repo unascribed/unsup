@@ -25,7 +25,7 @@ import org.objectweb.asm.tree.LdcInsnNode;
 base {
 	group = 'com.unascribed'
 	archivesName = 'unsup'
-	version = '0.3.0-dev'
+	version = '0.3.0-pre1'
 }
 
 sourceCompatibility = targetCompatibility = 8
@@ -293,7 +293,7 @@ publishing {
 			if (project.hasProperty("unsup.signifyKey")) {
 				artifact(sigFile) {
 					builtBy sign
-					extension 'jar.asc'
+					extension 'jar.sig'
 				}
 			}
 		}

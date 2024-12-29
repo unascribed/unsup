@@ -194,6 +194,9 @@ public class Puppet {
 						boolean b = Boolean.parseBoolean(arg);
 						r = invokeLater(() -> {
 							frame.setVisible(b);
+							Dimension max = frame.getContentPane().getSize();
+							frame.getContentPane().setMaximumSize(max);
+							frame.getContentPane().getComponent(0).setMaximumSize(max);
 						});
 						break;
 					}
@@ -417,20 +420,22 @@ public class Puppet {
 		throbber.setForeground(colorProgress);
 		throbber.setMinimumSize(new Dimension(64, 64));
 		throbber.setPreferredSize(throbber.getMinimumSize());
+		throbber.setMaximumSize(throbber.getMinimumSize());
 		outer.add(throbber);
 		
 		Box inner = Box.createVerticalBox();
 		inner.setBorder(new EmptyBorder(8, 0, 0, 0));
-		inner.add(Box.createHorizontalGlue());
 		title = new JLabel("<html>Reticulating splines...</html>");
 		title.setForeground(colorTitle);
 		title.setFont(title.getFont().deriveFont(24f).deriveFont(Font.BOLD));
+		title.setAlignmentX(0);
 		inner.add(title);
 		subtitle = new JLabel("");
 		subtitle.setForeground(colorSubtitle);
 		subtitle.setFont(subtitle.getFont().deriveFont(14f).deriveFont(Font.PLAIN));
 		subtitle.setPreferredSize(new Dimension(448, 18));
 		subtitle.setMaximumSize(new Dimension(448, 18));
+		subtitle.setAlignmentX(0);
 		inner.add(subtitle);
 		inner.add(Box.createVerticalGlue());
 		Box inset = Box.createVerticalBox();
@@ -445,8 +450,10 @@ public class Puppet {
 		prog.setForeground(colorProgress);
 		prog.setBackground(colorProgressTrack);
 		prog.setBorderPainted(false);
-		prog.setMinimumSize(new Dimension(0, 6));
-		prog.setMaximumSize(new Dimension(32767, 6));
+		prog.setAlignmentX(0);
+		prog.setMinimumSize(new Dimension(440, 6));
+		prog.setPreferredSize(new Dimension(440, 6));
+		prog.setMaximumSize(new Dimension(440, 6));
 		prog.setMaximum(1000);
 		prog.setValue(500);
 		inset.add(prog);
@@ -457,7 +464,6 @@ public class Puppet {
 		outer.add(inner);
 		
 		frame.setContentPane(outer);
-		outer.setMaximumSize(frame.getSize());
 	}
 
 	protected static void fix(Graphics2D g2d) {
