@@ -19,6 +19,8 @@ public class JThrobber extends JComponent {
 		this.sched = sched;
 	}
 	
+	private long delayNs = 0;
+	
 	private long lastTimeAnimated = System.nanoTime();
 	
 	private final float spinSpeed = 230f;
@@ -145,16 +147,19 @@ public class JThrobber extends JComponent {
 		g2d.setColor(getForeground());
 		g2d.drawArc(((getWidth()-dia)/2)+2, ((getHeight()-dia)/2)+2, dia-4, dia-4, (int)from, (int)length);
 		if (isDisplayable()) {
-			int hz = 0;
-			try {
-				for (GraphicsDevice dev : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
-					hz = Math.max(hz, dev.getDisplayMode().getRefreshRate());
-				}
-			} catch (Throwable t) {}
-			if (hz < 30) hz = 30;
-			// Swing can only run so hard
-			if (hz > 240) hz = 240;
-			sched.schedule(Puppet.invokeLater(() -> repaint()), TimeUnit.SECONDS.toNanos(1)/hz, TimeUnit.NANOSECONDS);
+			if (delayNs == 0) {
+				int hz = 0;
+				try {
+					for (GraphicsDevice dev : GraphicsEnvironment.getLocalGraphicsEnvironment().getScreenDevices()) {
+						hz = Math.max(hz, dev.getDisplayMode().getRefreshRate());
+					}
+				} catch (Throwable t) {}
+				if (hz < 30) hz = 30;
+				// Swing can only run so hard
+				if (hz > 240) hz = 240;
+				delayNs = TimeUnit.SECONDS.toNanos(1)/hz;
+			}
+			sched.schedule(Puppet.invokeLater(() -> repaint()), delayNs, TimeUnit.NANOSECONDS);
 		}
 	}
 }
