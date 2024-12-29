@@ -12,6 +12,7 @@ import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParserException;
 import com.unascribed.sup.Agent;
+import com.unascribed.sup.Log;
 import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.SysProps;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
@@ -34,7 +35,7 @@ public class NativeHandler extends AbstractFormatHandler {
 	}
 	
 	public static CheckResult check(URL src) throws IOException, JsonParserException {
-		Agent.log("INFO", "Loading unsup-format manifest from "+src);
+		Log.info("Loading unsup-format manifest from "+src);
 		JsonObject manifest = RequestHelper.loadJson(src, 32*K, new URL(src, "manifest.sig"));
 		checkManifestFlavor(manifest, "root", IntPredicates.equals(1));
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
@@ -142,19 +143,19 @@ public class NativeHandler extends AbstractFormatHandler {
 		boolean bootstrapping = false;
 		if (ourVersion == null) {
 			bootstrapping = true;
-			Agent.log("INFO", "Update available! We have nothing, they have "+theirVersion);
+			Log.info("Update available! We have nothing, they have "+theirVersion);
 			JsonObject bootstrap = null;
 			try {
 				bootstrap = RequestHelper.loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
 			} catch (FileNotFoundException e) {
-				Agent.log("INFO", "Bootstrap manifest missing, will have to retrieve and collapse every update");
+				Log.info("Bootstrap manifest missing, will have to retrieve and collapse every update");
 			}
 			if (bootstrap != null) {
 				checkManifestFlavor(bootstrap, "bootstrap", IntPredicates.equals(1));
 				Version bootstrapVersion = Version.fromJson(bootstrap.getObject("version"));
 				if (bootstrapVersion == null) throw new IOException("Bootstrap manifest is missing version field");
 				if (bootstrapVersion.code < theirVersion.code) {
-					Agent.log("WARN", "Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
+					Log.warn("Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
 				}
 				HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
 				PuppetHandler.updateTitle("Bootstrapping...", false);
@@ -173,12 +174,12 @@ public class NativeHandler extends AbstractFormatHandler {
 					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
 					if (!Iterables.contains(envs, Agent.detectedEnv)) {
-						Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
+						Log.info("Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
 					JsonArray flavors = file.getArray("flavors");
 					if (flavors != null && !Iterables.intersects(flavors, ourFlavors)) {
-						Agent.log("INFO", "Skipping "+path+" as it's not eligible for our selected flavors");
+						Log.info("Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
 					URL fallbackUrl = new URL(src, blobPath(hash));
@@ -203,12 +204,12 @@ public class NativeHandler extends AbstractFormatHandler {
 		}
 		if (theirVersion.code > ourVersion.code) {
 			if (!bootstrapping) {
-				Agent.log("INFO", "Update available! We have "+ourVersion+", they have "+theirVersion);
+				Log.info("Update available! We have "+ourVersion+", they have "+theirVersion);
 				AlertOption updateResp = SysProps.DISABLE_RECONCILIATION ? AlertOption.YES : PuppetHandler.openAlert("Update available",
 						"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
-					Agent.log("INFO", "Ignoring update by user choice.");
+					Log.info("Ignoring update by user choice.");
 					return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 				}
 			}
@@ -242,18 +243,18 @@ public class NativeHandler extends AbstractFormatHandler {
 					if (toSize < 0) throw new IOException(path+" in changes array has invalid or missing toSize");
 					if (toSize == 0 && (toHash != null && !toHash.equals(func.emptyHash()))) throw new IOException(path+" to in changes array is empty file, but hash isn't the empty hash or null ("+toHash+" != "+func.emptyHash()+")");
 					if (fromSize == toSize && Objects.equals(fromHash, toHash)) {
-						Agent.log("WARN", path+" in changes array has same from and to hash/size? Ignoring");
+						Log.warn(path+" in changes array has same from and to hash/size? Ignoring");
 						continue;
 					}
 					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
 					if (!Iterables.contains(envs, Agent.detectedEnv)) {
-						Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
+						Log.info("Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
 					JsonArray flavors = file.getArray("flavors");
 					if (flavors != null && !Iterables.intersects(flavors, ourFlavors)) {
-						Agent.log("INFO", "Skipping "+path+" as it's not eligible for our selected flavors");
+						Log.info("Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
 					URL fallbackUrl = toHash == null ? null : new URL(src, blobPath(toHash));
@@ -272,7 +273,7 @@ public class NativeHandler extends AbstractFormatHandler {
 							}
 						} else if (!yappedAboutConsistency) {
 							yappedAboutConsistency = true;
-							Agent.log("WARN", "Cannot perform consistency check on multi-update due to mismatched hash functions");
+							Log.warn("Cannot perform consistency check on multi-update due to mismatched hash functions");
 						}
 						to.state = new FileState(func, toHash, toSize);
 						to.code = code;
@@ -293,10 +294,10 @@ public class NativeHandler extends AbstractFormatHandler {
 		} else if (bootstrapPlan != null) {
 			return new CheckResult(ourVersion, theirVersion, bootstrapPlan, Collections.emptyMap());
 		} else if (ourVersion.code > theirVersion.code) {
-			Agent.log("INFO", "Remote version is older than local version, doing nothing");
+			Log.info("Remote version is older than local version, doing nothing");
 			return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 		} else {
-			Agent.log("INFO", "We appear to be up-to-date. Nothing to do");
+			Log.info("We appear to be up-to-date. Nothing to do");
 			return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 		}
 	}

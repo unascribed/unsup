@@ -4,16 +4,16 @@ buildscript {
 		gradlePluginPortal()
 	}
 	dependencies {
-		classpath 'com.github.jengelman.gradle.plugins:shadow:6.1.0'
-		classpath 'org.ow2.asm:asm:9.6'
-		classpath 'org.ow2.asm:asm-tree:9.6'
-		classpath 'org.ow2.asm:asm-commons:9.6'
+		classpath 'com.gradleup.shadow:com.gradleup.shadow.gradle.plugin:8.3.5'
+		classpath 'org.ow2.asm:asm:9.7.1'
+		classpath 'org.ow2.asm:asm-tree:9.7.1'
+		classpath 'org.ow2.asm:asm-commons:9.7.1'
 		// just used for shrinking. i've used proguard a lot and trust it
-		classpath 'com.guardsquare:proguard-gradle:7.3.2'
+		classpath 'com.guardsquare:proguard-gradle:7.6.1'
 	}
 }
 plugins {
-	id 'com.github.ben-manes.versions' version '0.48.0'
+	id 'com.github.ben-manes.versions' version '0.51.0'
 }
 
 import java.io.File;
@@ -33,13 +33,15 @@ import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.LdcInsnNode;
 
-apply plugin: 'com.github.johnrengelman.shadow'
+apply plugin: 'com.gradleup.shadow'
 apply plugin: 'java-library'
 apply plugin: 'maven-publish'
 
-group = 'com.unascribed'
-archivesBaseName = 'unsup'
-version = '0.3.0-dev'
+base {
+	group = 'com.unascribed'
+	archivesName = 'unsup'
+	version = '0.3.0-dev'
+}
 
 sourceCompatibility = targetCompatibility = 8
 
@@ -65,9 +67,9 @@ configurations {
 }
 
 dependencies {
-	shade 'com.grack:nanojson:1.8'
+	shade 'com.grack:nanojson:1.9'
 	shade 'net.i2p.crypto:eddsa:0.3.0'
-	shade('com.squareup.okhttp3:okhttp:4.11.0') {
+	shade('com.squareup.okhttp3:okhttp:4.12.0') {
 		exclude group: 'org.jetbrains'
 		exclude module: 'kotlin-stdlib-common'
 	}
@@ -78,14 +80,14 @@ dependencies {
 }
 
 jar {
-	classifier 'slim'
+	archiveClassifier = 'slim'
 	destinationDirectory.set(file('build/tmp'))
 	from sourceSets.puppet.output
 	from sourceSets.agent.output
 }
 
 shadowJar {
-	classifier 'fat'
+	archiveClassifier = 'fat'
 	destinationDirectory.set(file('build/tmp'))
 	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver", "org.objectweb"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it

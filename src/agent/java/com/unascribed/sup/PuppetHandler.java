@@ -46,13 +46,13 @@ public class PuppetHandler {
 	}
 	
 	public static void create() {
-		Agent.log("INFO", "Attempting to summon a puppet for GUI feedback...");
+		Log.info("Attempting to summon a puppet for GUI feedback...");
 		out: {
 			URI uri;
 			try {
 				uri = Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI();
 			} catch (URISyntaxException e) {
-				Agent.log("WARN", "Failed to find our own JAR file or directory.");
+				Log.warn("Failed to find our own JAR file or directory.");
 				puppet = null;
 				break out;
 			}
@@ -60,7 +60,7 @@ public class PuppetHandler {
 			try {
 				ourPath = new File(uri);
 			} catch (IllegalArgumentException e) {
-				Agent.log("WARN", "Failed to find our own JAR file or directory.");
+				Log.warn("Failed to find our own JAR file or directory.");
 				puppet = null;
 				break out;
 			}
@@ -80,7 +80,7 @@ public class PuppetHandler {
 				}
 			}
 			if (java == null) {
-				Agent.log("WARN", "Failed to find Java. Looked in "+javaBin+", but can't find a known executable.");
+				Log.warn("Failed to find Java. Looked in "+javaBin+", but can't find a known executable.");
 				puppet = null;
 			} else {
 				Process p;
@@ -90,25 +90,25 @@ public class PuppetHandler {
 					args.add("-cp");
 					args.add(ourPath.getAbsolutePath());
 					args.add("com.unascribed.sup.Puppet");
-					Agent.log("DEBUG", "unsup location detected as "+ourPath);
-					Agent.log("DEBUG", "Java location detected as "+java);
-					Agent.log("DEBUG", "Puppet command: "+args);
+					Log.debug("unsup location detected as "+ourPath);
+					Log.debug("Java location detected as "+java);
+					Log.debug("Puppet command: "+args);
 					ProcessBuilder bldr = new ProcessBuilder(args);
 					bldr.environment().put("_JAVA_AWT_WM_NONREPARENTING", "1");
 					bldr.environment().put("NO_AWT_MITSHM", "1");
 					p = bldr.start();
 				} catch (Throwable t) {
-					Agent.log("WARN", "Failed to summon a puppet.");
+					Log.warn("Failed to summon a puppet.");
 					t.printStackTrace();
 					puppet = null;
 					break out;
 				}
-				Agent.log("INFO", "Dark spell successful. Puppet summoned.");
+				Log.info("Dark spell successful. Puppet summoned.");
 				puppet = p;
 			}
 		}
 		if (puppet == null) {
-			Agent.log("WARN", "Failed to summon a puppet. Continuing without a GUI.");
+			Log.warn("Failed to summon a puppet. Continuing without a GUI.");
 		} else {
 			Thread puppetErr = new Thread(() -> {
 				try (BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getErrorStream(), StandardCharsets.UTF_8))) {
@@ -117,7 +117,7 @@ public class PuppetHandler {
 						if (line == null) return;
 						if (line.contains("|")) {
 							int idx = line.indexOf('|');
-							Agent.log("puppet", line.substring(0, idx), line.substring(idx+1));
+							Log.log(line.substring(0, idx), "puppet", line.substring(idx+1));
 						} else {
 							System.err.println("puppet: "+line);
 						}
@@ -126,7 +126,7 @@ public class PuppetHandler {
 			}, "unsup puppet error printer");
 			puppetErr.setDaemon(true);
 			puppetErr.start();
-			Agent.log("INFO", "Waiting for the puppet to come to life...");
+			Log.info("Waiting for the puppet to come to life...");
 			BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getInputStream(), StandardCharsets.UTF_8));
 			String firstLine = null;
 			try {
@@ -135,15 +135,15 @@ public class PuppetHandler {
 				e.printStackTrace();
 			}
 			if (firstLine == null) {
-				Agent.log("WARN", "Puppet failed to come alive. Continuing without a GUI.");
+				Log.warn("Puppet failed to come alive. Continuing without a GUI.");
 				puppet.destroy();
 				puppet = null;
 			} else if (!"unsup puppet ready".equals(firstLine)) {
-				Agent.log("WARN", "Puppet sent unexpected hello line \""+firstLine+"\". (Expected \"unsup puppet ready\") Continuing without a GUI.");
+				Log.warn("Puppet sent unexpected hello line \""+firstLine+"\". (Expected \"unsup puppet ready\") Continuing without a GUI.");
 				puppet.destroy();
 				puppet = null;
 			} else {
-				Agent.log("INFO", "Puppet is alive! Continuing.");
+				Log.info("Puppet is alive! Continuing.");
 				puppetOut = new BufferedOutputStream(puppet.getOutputStream(), 512);
 				Thread puppetThread = new Thread(() -> {
 					try (BufferedReader br2 = br) {
@@ -151,13 +151,13 @@ public class PuppetHandler {
 							String line = br.readLine();
 							if (line == null) return;
 							if (line.equals("closeRequested")) {
-								Agent.log("INFO", "User closed puppet window! Exiting...");
+								Log.info("User closed puppet window! Exiting...");
 								Agent.awaitingExit = true;
 								long start = System.nanoTime();
 								synchronized (Agent.dangerMutex) {
 									long diff = System.nanoTime()-start;
 									if (diff > TimeUnit.MILLISECONDS.toNanos(500)) {
-										Agent.log("INFO", "Uninterruptible operations finished, exiting!");
+										Log.info("Uninterruptible operations finished, exiting!");
 									}
 									puppet.destroy();
 									if (!puppet.waitFor(1, TimeUnit.SECONDS)) {
@@ -179,7 +179,7 @@ public class PuppetHandler {
 							} else if (line.equals("doneAnimating")) {
 								doneAnimatingLatch.release();
 							} else {
-								Agent.log("WARN", "Unknown line from puppet: "+line);
+								Log.warn("Unknown line from puppet: "+line);
 							}
 						}
 					} catch (IOException | InterruptedException e) {}
@@ -221,7 +221,7 @@ public class PuppetHandler {
 				puppetOut.flush();
 			} catch (IOException e) {
 				e.printStackTrace();
-				Agent.log("WARN", "IO error while talking to puppet. Killing and continuing without GUI.");
+				Log.warn("IO error while talking to puppet. Killing and continuing without GUI.");
 				puppet.destroyForcibly();
 				puppet = null;
 				puppetOut = null;
@@ -245,7 +245,7 @@ public class PuppetHandler {
 		if (Math.abs(lastReportedProgress-prog) >= 100 || System.nanoTime()-lastReportedProgressTime > TimeUnit.SECONDS.toNanos(3)) {
 			lastReportedProgress = prog;
 			lastReportedProgressTime = System.nanoTime();
-			Agent.log("INFO", title+" "+(prog/10)+"%");
+			Log.info(title+" "+(prog/10)+"%");
 		}
 	}
 

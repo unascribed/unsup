@@ -10,6 +10,4 @@ import java.lang.annotation.Target;
 @Documented
 @Retention(CLASS)
 @Target(TYPE)
-public @interface PublicInAgent {
-
-}
+public @interface PublicInAgent {}

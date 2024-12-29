@@ -7,18 +7,19 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 import com.unascribed.sup.Agent;
+import com.unascribed.sup.Log;
 import com.unascribed.sup.pieces.Murmur2CFMessageDigest;
 import com.unascribed.sup.util.Bases;
 
 public enum HashFunction {
-	@Deprecated MD5("MD5", "MD5", 128, true),
-	@Deprecated SHA1("SHA-1", "SHA-1", 160, true),
+	MD5("MD5", "MD5", 128, true),
+	SHA1("SHA-1", "SHA-1", 160, true),
 	SHA2_256("SHA-2 256", "SHA-256", 256, false),
 	SHA2_384("SHA-2 384", "SHA-384", 384, false),
 	SHA2_512("SHA-2 512", "SHA-512", 512, false),
 	SHA2_512_256("SHA-2 512/256", "SHA-512/256", 256, false),
 
-	@Deprecated MURMUR2_CF("Murmur2-CF", Murmur2CFMessageDigest::new, 32, true),
+	MURMUR2_CF("Murmur2-CF", Murmur2CFMessageDigest::new, 32, true),
 	;
 	
 	private static final Map<String, HashFunction> BY_NAME = new HashMap<>();
@@ -57,7 +58,7 @@ public enum HashFunction {
 			emptyHash = Bases.bytesToHex(createMessageDigest().digest());
 			unsupported = false;
 		} catch (UnsupportedOperationException e) {
-			Agent.log("WARN", "This JRE does not support "+name);
+			Log.warn("This JRE does not support "+name);
 			emptyHash = "?????";
 			unsupported = true;
 		}
@@ -106,9 +107,9 @@ public enum HashFunction {
 		if (func != null && func.insecure() && !func.hasWarned) {
 			func.hasWarned = true;
 			if (Agent.packSig != null) {
-				Agent.log("WARN", "Using insecure hash function "+func+" for a signed manifest! This is a very bad idea!");
+				Log.warn("Using insecure hash function "+func+" for a signed manifest! This is a very bad idea!");
 			} else {
-				Agent.log("WARN", "Using insecure hash function "+func);
+				Log.warn("Using insecure hash function "+func);
 			}
 		}
 		return func;

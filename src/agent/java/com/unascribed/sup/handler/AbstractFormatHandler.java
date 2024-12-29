@@ -8,6 +8,7 @@ import java.util.Map;
 import com.grack.nanojson.JsonArray;
 import com.grack.nanojson.JsonObject;
 import com.unascribed.sup.Agent;
+import com.unascribed.sup.Log;
 import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.data.HashFunction;
@@ -115,10 +116,10 @@ public abstract class AbstractFormatHandler {
 			} else {
 				for (FlavorGroup grp : unpickedGroups) {
 					if (grp.defChoice != null) {
-						Agent.log("INFO", "Selecting default choice "+grp.defChoiceName+" for flavor group "+grp.name);
+						Log.info("Selecting default choice "+grp.defChoiceName+" for flavor group "+grp.name);
 						ourFlavors.add(grp.defChoice);
 					} else {
-						Agent.log("ERROR", "No choice provided for flavor group "+grp.name+" ("+grp.id+")");
+						Log.error("No choice provided for flavor group "+grp.name+" ("+grp.id+")");
 						Agent.exit(Agent.EXIT_CONFIG_ERROR);
 						return null;
 					}

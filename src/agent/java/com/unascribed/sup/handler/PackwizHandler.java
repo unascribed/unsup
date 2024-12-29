@@ -20,6 +20,8 @@ import com.grack.nanojson.JsonObject;
 import com.moandjiezana.toml.Toml;
 import com.unascribed.flexver.FlexVerComparator;
 import com.unascribed.sup.Agent;
+import com.unascribed.sup.Log;
+import com.unascribed.sup.MMCUpdater;
 import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.SysProps;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
@@ -52,7 +54,29 @@ public class PackwizHandler extends AbstractFormatHandler {
 			throw new IOException("Malformed pack.toml: [index] table is missing");
 		HashFunction indexFunc = parseFunc(indexMeta.getString("hash-format"));
 		String indexDoublet = indexFunc+":"+indexMeta.getString("hash");
-		boolean actualUpdate = !indexDoublet.equals(pwstate.getString("lastIndexHash"));
+		boolean hasIndexUpdate = !indexDoublet.equals(pwstate.getString("lastIndexHash"));
+		Map<String, String> theirVers = Collections.emptyMap();
+		boolean hasComponentUpdate = false;
+		if (!MMCUpdater.currentComponentVersions.isEmpty()) {
+			theirVers = new HashMap<>();
+			for (Map.Entry<String, Object> en : pack.getTable("versions").entrySet()) {
+				List<String> exp = MMCUpdater.componentShortnames.get(en.getKey());
+				if (exp != null) {
+					for (String s : exp) {
+						theirVers.put(s, String.valueOf(en.getValue()));
+					}
+				} else {
+					theirVers.put(en.getKey(), String.valueOf(en.getValue()));
+				}
+			}
+			for (Map.Entry<String, String> en : theirVers.entrySet()) {
+				String ours = MMCUpdater.currentComponentVersions.get(en.getKey());
+				if (ours != null && !ours.equals(en.getValue())) {
+					hasComponentUpdate = true;
+				}
+			}
+		}
+		boolean actualUpdate = hasIndexUpdate || hasComponentUpdate;
 		if (SysProps.PACKWIZ_CHANGE_FLAVORS || actualUpdate) {
 			if (ourVersion == null) {
 				ourVersion = new Version("null", 0);
@@ -62,7 +86,11 @@ public class PackwizHandler extends AbstractFormatHandler {
 			pwstate = new JsonObject(pwstate);
 			newState.put("packwiz", pwstate);
 			
-			Agent.log("INFO", "Update available - our index state is "+pwstate.getString("lastIndexHash")+", theirs is "+indexDoublet);
+			if (hasIndexUpdate) {
+				Log.info("Update available - our index state is "+pwstate.getString("lastIndexHash")+", theirs is "+indexDoublet);
+			} else {
+				Log.info("Update available - only components have changed");
+			}
 			String interlude = " from "+ourVersion.name+" to "+theirVersion.name;
 			if (ourVersion.name.equals(theirVersion.name)) {
 				interlude = "";
@@ -73,7 +101,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 						"<b>An update"+interlude+" is available!</b><br/>Do you want to install it?",
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
-					Agent.log("INFO", "Ignoring update by user choice.");
+					Log.info("Ignoring update by user choice.");
 					return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
 				}
 			}
@@ -123,7 +151,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 							String groupId = en.getKey();
 							String side = group.getString("side");
 							if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
-								Agent.log("INFO", "Skipping flavor group "+groupId+" as it's not eligible for env "+Agent.detectedEnv);
+								Log.info("Skipping flavor group "+groupId+" as it's not eligible for env "+Agent.detectedEnv);
 								continue;
 							}
 							String groupName = group.getString("name", groupId);
@@ -137,6 +165,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 								for (Object o : group.getList("choices")) {
 									String id, name, description;
 									if (o instanceof Map) {
+										@SuppressWarnings("unchecked")
 										Map<String, Object> choice = (Map<String, Object>)o;
 										id = String.valueOf(choice.get("id"));
 										name = String.valueOf(choice.getOrDefault("name", id));
@@ -280,7 +309,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				String metafileDoublet = (func+":"+hash);
 				metafileState.put(path, metafileDoublet);
 				if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
-					Agent.log("INFO", "Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
+					Log.info("Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 					continue;
 				}
 				path = path.replace("\\", "/");
@@ -356,9 +385,9 @@ public class PackwizHandler extends AbstractFormatHandler {
 					throw new AssertionError(e);
 				}
 				
-				Agent.log("DEBUG", "Flavors for "+mf.name+": "+metafileFlavors.get(mf.name));
+				Log.debug("Flavors for "+mf.name+": "+metafileFlavors.get(mf.name));
 				if (!Iterables.intersects(metafileFlavors.get(mf.name), ourFlavors)) {
-					Agent.log("INFO", "Skipping "+mf.target+" as it's not eligible for our selected flavors");
+					Log.info("Skipping "+mf.target+" as it's not eligible for our selected flavors");
 					continue;
 				}
 				
@@ -428,14 +457,13 @@ public class PackwizHandler extends AbstractFormatHandler {
 				lastState.put(en.getKey(), en.getValue().func+":"+en.getValue().hash);
 			}
 			pwstate.put("lastState", lastState);
-			return new CheckResult(ourVersion, theirVersion, plan, Collections.emptyMap());
+			return new CheckResult(ourVersion, theirVersion, plan, theirVers);
 		} else {
-			Agent.log("INFO", "We appear to be up-to-date. Nothing to do");
+			Log.info("We appear to be up-to-date. Nothing to do");
 		}
 		return new CheckResult(ourVersion, ourVersion, null, Collections.emptyMap());
 	}
 	
-	@SuppressWarnings("deprecation")
 	static HashFunction parseFunc(String str) {
 		switch (str) {
 			case "md5": return HashFunction.MD5;

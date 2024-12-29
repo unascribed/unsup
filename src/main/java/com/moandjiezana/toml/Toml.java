@@ -105,7 +105,7 @@ public class Toml {
       throw new RuntimeException(e);
     } finally {
       try {
-        bufferedReader.close();
+        if (bufferedReader != null) bufferedReader.close();
       } catch (IOException e) {}
     }
     return this;
@@ -114,7 +114,7 @@ public class Toml {
   /**
    * Populates the current Toml instance with values from otherToml.
    *
-   * @param otherToml
+   * 
    * @return this instance
    */
   public Toml read(Toml otherToml) {
@@ -334,7 +334,7 @@ public class Toml {
   }
   
   /**
-   * @return a {@link Set} of Map.Entry instances. Modifications to the {@link Set} are not reflected in this Toml instance. Entries are immutable, so {@link Map.Entry#setValue(Object)} throws an UnsupportedOperationException.
+   * @return a {@link Set} of Map.Entry instances. Modifications to the {@link Set} are not reflected in this Toml instance. Entries are immutable, so {@link java.util.Map.Entry#setValue(Object)} throws an UnsupportedOperationException.
    */
   public Set<Map.Entry<String,Object>> entrySet() {
     Set<Map.Entry<String, Object>> entries = new LinkedHashSet<Map.Entry<String, Object>>();

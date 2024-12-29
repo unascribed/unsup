@@ -377,7 +377,7 @@ public class Puppet {
 		System.exit(0);
 	}
 	
-	private static Runnable invokeLater(Runnable r) {
+	static Runnable invokeLater(Runnable r) {
 		return () -> {
 			SwingUtilities.invokeLater(r);
 		};
@@ -393,6 +393,7 @@ public class Puppet {
 		frame.setSize(512, 128);
 		frame.setLocationRelativeTo(null);
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
+		frame.setResizable(false);
 		frame.addWindowListener(new WindowAdapter() {
 			private boolean closeAlreadyAttempted = false;
 			
@@ -456,6 +457,7 @@ public class Puppet {
 		outer.add(inner);
 		
 		frame.setContentPane(outer);
+		outer.setMaximumSize(frame.getSize());
 	}
 
 	protected static void fix(Graphics2D g2d) {

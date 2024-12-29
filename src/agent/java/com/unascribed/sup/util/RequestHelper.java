@@ -29,6 +29,7 @@ import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonParserException;
 import com.moandjiezana.toml.Toml;
 import com.unascribed.sup.Agent;
+import com.unascribed.sup.Log;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.data.HashFunction;
 
@@ -55,7 +56,7 @@ public class RequestHelper {
 			ok = "http".equals(parsed.getProtocol()) || "https".equals(parsed.getProtocol());
 		}
 		if (!ok) {
-			Agent.log("WARN", "Ignoring custom URL with bad scheme "+parsed.getProtocol());
+			Log.warn("Ignoring custom URL with bad scheme "+parsed.getProtocol());
 		}
 		return ok ? url : null;
 	}
@@ -71,7 +72,7 @@ public class RequestHelper {
 				if (!Agent.packSig.verify(resp, sigResp)) {
 					throw new SignatureException("Signature is invalid");
 				} else {
-					Agent.log("DEBUG", "Signature for "+src+" (retrieved from "+sigUrl+") is valid");
+					Log.debug("Signature for "+src+" (retrieved from "+sigUrl+") is valid");
 				}
 			} catch (Throwable t) {
 				throw new IOException("Failed to validate signature for "+src, t);
@@ -195,6 +196,7 @@ public class RequestHelper {
 		T call() throws E, Retry;
 	}
 	
+	@SuppressWarnings("unchecked")
 	public static <T, E extends Throwable> T withRetries(int tries, RetryCallable<T, E> call) throws E {
 		int secs = 1;
 		while (true) {
@@ -204,7 +206,7 @@ public class RequestHelper {
 				return call.call();
 			} catch (Retry r) {
 				if (canRetry) {
-					Agent.log("WARN", r.getMessage()+". Trying again in "+secs+" second"+(secs == 1 ? "" : "s")
+					Log.warn(r.getMessage()+". Trying again in "+secs+" second"+(secs == 1 ? "" : "s")
 							+", "+(tries == 0 ? "final retry" : tries+" retr"+(tries == 1 ? "y" : "ies")+" left"));
 					try {
 						TimeUnit.SECONDS.sleep(secs);

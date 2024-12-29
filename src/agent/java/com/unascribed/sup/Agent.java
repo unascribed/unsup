@@ -5,18 +5,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.PrintStream;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -46,7 +41,6 @@ import com.unascribed.sup.handler.AbstractFormatHandler.FileState;
 import com.unascribed.sup.handler.AbstractFormatHandler.UpdatePlan;
 import com.unascribed.sup.pieces.ExceptableRunnable;
 import com.unascribed.sup.pieces.MemoryCookieJar;
-import com.unascribed.sup.pieces.NullPrintStream;
 import com.unascribed.sup.pieces.QDIni;
 import com.unascribed.sup.pieces.QDIni.QDIniException;
 import com.unascribed.sup.signing.SigProvider;
@@ -67,9 +61,7 @@ public class Agent {
 
 	static volatile boolean awaitingExit = false;
 	
-	private static PrintStream logStream;
-	
-	private static boolean standalone;
+	static boolean standalone;
 	
 	public static List<ExceptableRunnable> cleanup = new ArrayList<>();
 	public static QDIni config;
@@ -84,15 +76,14 @@ public class Agent {
 	// be careful not to load that class until this is all initialized
 	public static String sourceVersion;
 	public static boolean updated;
+	
+	private static boolean updatedComponents;
 
 	public static JsonObject state;
-	public static Map<String, String> currentComponentVersions = new HashMap<>();
-
 	private static File stateFile;
 	
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
 	static final Object dangerMutex = new Object();
-	private static final SimpleDateFormat logDateFormat = new SimpleDateFormat("HH:mm:ss");
 	
 	public static final OkHttpClient okhttp = new OkHttpClient.Builder()
 			.connectTimeout(30, TimeUnit.SECONDS)
@@ -109,17 +100,17 @@ public class Agent {
 	public static void premain(String arg) {
 		long start = System.nanoTime();
 		try {
-			createLogStream();
-			log("INFO", (standalone ? "Starting in standalone mode" : "Launch hijack successful")+". unsup v"+Util.VERSION);
+			Log.init();
+			Log.info((standalone ? "Starting in standalone mode" : "Launch hijack successful")+". unsup v"+Util.VERSION);
 			if (!loadConfig()) {
-				log("WARN", "Cannot find a config file, giving up.");
+				Log.warn("Cannot find a config file, giving up.");
 				// by returning but not exiting, we yield control to the program whose launch we hijacked, if any
 				return;
 			}
 			checkRequiredKeys("version", "source_format", "source");
 			int version = config.getInt("version", -1);
 			if (version != 1) {
-				log("ERROR", "Config file error: Unknown version "+version+" at "+config.getBlame("version")+"! Exiting.");
+				Log.error("Config file error: Unknown version "+version+" at "+config.getBlame("version")+"! Exiting.");
 				exit(EXIT_CONFIG_ERROR);
 				return;
 			}
@@ -138,7 +129,7 @@ public class Agent {
 			try {
 				src = new URL(config.get("source"));
 			} catch (MalformedURLException e) {
-				log("ERROR", "Config error: source URL is malformed! "+e.getMessage()+". Exiting.");
+				Log.error("Config error: source URL is malformed! "+e.getMessage()+". Exiting.");
 				exit(EXIT_CONFIG_ERROR);
 				return;
 			}
@@ -153,10 +144,14 @@ public class Agent {
 					packSig = SigProvider.parse(config.get("public_key"));
 					cleanup.add(() -> packSig = null);
 				} catch (Throwable t) {
-					log("ERROR", "Config file error: public_key is not valid at "+config.getBlame("public_key")+"! Exiting.", t);
+					Log.error("Config file error: public_key is not valid at "+config.getBlame("public_key")+"! Exiting.", t);
 					exit(EXIT_CONFIG_ERROR);
 					return;
 				}
+			}
+			
+			if (config.getBoolean("update_mmc_pack", false)) {
+				MMCUpdater.scan();
 			}
 			
 			stateFile = new File(".unsup-state.json");
@@ -164,7 +159,7 @@ public class Agent {
 				try (InputStream in = new FileInputStream(stateFile)) {
 					state = JsonParser.object().from(in);
 				} catch (Exception e) {
-					log("ERROR", "Couldn't load state file! Exiting.", e);
+					Log.error("Couldn't load state file! Exiting.", e);
 					exit(EXIT_CONSISTENCY_ERROR);
 					return;
 				}
@@ -198,12 +193,12 @@ public class Agent {
 					}
 				}
 			} catch (Throwable t) {
-				log("WARN", "Error while updating", t);
+				Log.warn("Error while updating", t);
 				PuppetHandler.tellPuppet(":expedite=openTimeout");
 				if (PuppetHandler.openAlert("unsup error",
 						"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
 						PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
-					log("INFO", "User cancelled error dialog! Exiting.");
+					Log.info("User cancelled error dialog! Exiting.");
 					exit(EXIT_USER_REQUEST);
 					return;
 				}
@@ -211,28 +206,35 @@ public class Agent {
 				PuppetHandler.tellPuppet(":subtitle=");
 			}
 			
+			if (updatedComponents) {
+				PuppetHandler.openAlert("unsup notice",
+						"<b>A component update was applied.</b><br/>The game must be restarted — no errors have occurred, just launch the game again.",
+						PuppetHandler.AlertMessageType.INFO, AlertOptionType.OK, AlertOption.OK);
+				exit(EXIT_SUCCESS);
+			}
+			
 			if (awaitingExit) Agent.blockForever();
 
 			PuppetHandler.tellPuppet(":belay=openTimeout");
 			if (PuppetHandler.puppetOut != null) {
-				log("INFO", "Waiting for puppet to complete done animation...");
+				Log.info("Waiting for puppet to complete done animation...");
 				PuppetHandler.tellPuppet(":title=All done");
 				PuppetHandler.tellPuppet(":mode=done");
 				PuppetHandler.doneAnimatingLatch.await();
 			}
 			PuppetHandler.tellPuppet(":exit");
 			if (PuppetHandler.puppet != null) {
-				log("INFO", "Waiting for puppet to exit...");
+				Log.info("Waiting for puppet to exit...");
 				if (!PuppetHandler.puppet.waitFor(2, TimeUnit.SECONDS)) {
-					log("WARN", "Tired of waiting, killing the puppet.");
+					Log.warn("Tired of waiting, killing the puppet.");
 					PuppetHandler.puppet.destroyForcibly();
 				}
 			}
 			
 			if (standalone) {
-				log("INFO", "Ran in standalone mode, no program will be started.");
+				Log.info("Ran in standalone mode, no program will be started.");
 			} else {
-				log("INFO", "All done, handing over control.");
+				Log.info("All done, handing over control.");
 				// poke the Unsup class so it loads and finalizes all of its values
 				if (Unsup.SOURCE_VERSION != null) Unsup.SOURCE_VERSION.toString();
 				String cmd = System.getProperty("sun.java.command");
@@ -244,47 +246,53 @@ public class Agent {
 				}
 			}
 		} catch (QDIniException e) {
-			log("ERROR", "Config file error: "+e.getMessage()+"! Exiting.");
+			Log.error("Config file error: "+e.getMessage()+"! Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return;
 		} catch (InterruptedException e) {
 			throw new AssertionError(e);
 		} finally {
-			log("INFO", "Finished after "+TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)+"ms.");
+			Log.info("Finished after "+TimeUnit.NANOSECONDS.toMillis(System.nanoTime()-start)+"ms.");
 			cleanup();
 		}
 	}
-	
+
 	// "step" methods, called only once, exist to turn premain() into a logical overview that can be
 	// drilled down into as necessary
 	
 	private static void applyUpdate(CheckResult res) throws IOException {
 		UpdatePlan<?> plan = res.plan;
 		boolean bootstrapping = plan.isBootstrap;
-		log("DEBUG", "Alright, so here's what I'm thinking:");
+		Log.debug("Alright, so here's what I'm thinking:");
 		Set<String> unchanged = new HashSet<>(plan.expectedState.keySet());
 		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 			unchanged.remove(en.getKey());
 			FileState from = plan.expectedState.get(en.getKey());
 			FilePlan to = en.getValue();
-			log("DEBUG", "- "+en.getKey()+" is currently "+ponder(from));
-			log("DEBUG", "  It has been changed to "+ponder(to.state));
+			Log.debug("- "+en.getKey()+" is currently "+ponder(from));
+			Log.debug("  It has been changed to "+ponder(to.state));
 			if (to.url != null) {
 				if (to.fallbackUrl != null) {
-					log("DEBUG", "  I'll be grabbing that from "+to.url+" (or "+to.fallbackUrl+" if that doesn't work)");
+					Log.debug("  I'll be grabbing that from "+to.url+" (or "+to.fallbackUrl+" if that doesn't work)");
 				} else {
-					log("DEBUG", "  I'll be grabbing that from "+to.url);
+					Log.debug("  I'll be grabbing that from "+to.url);
 				}
 			}
 		}
-		log("DEBUG", unchanged.size()+" other file"+(unchanged.size() == 1 ? "" : "s")+" have not been changed.");
+		Log.debug(unchanged.size()+" other file"+(unchanged.size() == 1 ? "" : "s")+" have not been changed.");
+		for (Map.Entry<String, String> en : res.componentVersions.entrySet()) {
+			String ours = MMCUpdater.currentComponentVersions.get(en.getKey());
+			if (ours != null && !ours.equals(en.getValue())) {
+				Log.debug("Component "+en.getKey()+" will be updated from "+ours+" to "+en.getValue());
+			}
+		}
 		if (SysProps.DEBUG) {
-			log("DEBUG", "Sound good? You have 4 seconds to kill the process if not.");
+			Log.debug("Sound good? You have 4 seconds to kill the process if not.");
 			try {
 				Thread.sleep(4000);
 			} catch (InterruptedException e) {
 			}
-			log("DEBUG", "Continuing.");
+			Log.debug("Continuing.");
 		}
 		long progressDenom = 1;
 		File wd = new File("");
@@ -305,26 +313,26 @@ public class Agent {
 				long size = dest.length();
 				if (from.hash == null) {
 					if (to.sizeMatches(size) && to.hash.equals(RequestHelper.hash(to.func, dest))) {
-						log("INFO", path+" was created in this update and locally, but the local version matches the update. Skipping");
+						Log.info(path+" was created in this update and locally, but the local version matches the update. Skipping");
 						continue;
 					}
 					conflictType = ConflictType.LOCAL_AND_REMOTE_CREATED;
 				} else if (from.sizeMatches(size)) {
 					String hash = RequestHelper.hash(from.func, dest);
 					if (from.hash.equals(hash)) {
-						log("INFO", path+" matches the expected from hash");
+						Log.info(path+" matches the expected from hash");
 					} else if (to.sizeMatches(size) && to.hash.equals(from.func == to.func ? hash : RequestHelper.hash(to.func, dest))) {
-						log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
+						Log.info(path+" matches the expected to hash, so has already been updated locally. Skipping");
 						continue;
 					} else {
-						log("INFO", "CONFLICT: "+path+" doesn't match the expected from hash ("+hash+" != "+from.hash+")");
+						Log.info("CONFLICT: "+path+" doesn't match the expected from hash ("+hash+" != "+from.hash+")");
 						normalConflict = true;
 					}
 				} else if (to.sizeMatches(size) && to.hash.equals(RequestHelper.hash(to.func, dest))) {
-					log("INFO", path+" matches the expected to hash, so has already been updated locally. Skipping");
+					Log.info(path+" matches the expected to hash, so has already been updated locally. Skipping");
 					continue;
 				} else {
-					log("INFO", "CONFLICT: "+path+" doesn't match the expected from size ("+size+" != "+from.size+")");
+					Log.info("CONFLICT: "+path+" doesn't match the expected from size ("+size+" != "+from.size+")");
 					normalConflict = true;
 				}
 				if (normalConflict) {
@@ -336,7 +344,7 @@ public class Agent {
 				}
 			} else {
 				if (to.hash == null) {
-					log("INFO", path+" was deleted in this update, but it's already missing locally. Skipping");
+					Log.info(path+" was deleted in this update, but it's already missing locally. Skipping");
 					continue;
 				} else if (from.hash != null) {
 					conflictType = ConflictType.LOCAL_DELETED_REMOTE_CHANGED;
@@ -367,7 +375,7 @@ public class Agent {
 					f.skip = true;
 					continue;
 				} else if (resp == AlertOption.CANCEL) {
-					log("INFO", "User cancelled error dialog! Exiting.");
+					Log.info("User cancelled error dialog! Exiting.");
 					exit(EXIT_USER_REQUEST);
 					return;
 				}
@@ -412,7 +420,7 @@ public class Agent {
 			String path = en.getKey();
 			FilePlan f = en.getValue();
 			if (f.skip) {
-				log("INFO", "Skipping download of "+path);
+				Log.info("Skipping download of "+path);
 				continue;
 			}
 			FileState to = f.state;
@@ -437,14 +445,14 @@ public class Agent {
 					DownloadedFile df;
 					long[] contributedProgress = {0};
 					try {
-						log("INFO", "Downloading "+path+" from "+describe(f.url));
+						Log.info("Downloading "+path+" from "+describe(f.url));
 						df = downloadAndCheckHash(tmp, progress, updateProgress, path, f, f.url, to, contributedProgress);
 						if (to.size == -1) progress.incrementAndGet();
 					} catch (Throwable t) {
 						if (f.fallbackUrl != null) {
 							progress.addAndGet(-contributedProgress[0]);
 							contributedProgress[0] = 0;
-							log("WARN", "Failed to download "+path+" from specified URL, trying again from "+describe(f.fallbackUrl), t);
+							Log.warn("Failed to download "+path+" from specified URL, trying again from "+describe(f.fallbackUrl), t);
 							df = downloadAndCheckHash(tmp, progress, updateProgress, path, f, f.fallbackUrl, to, contributedProgress);
 							if (to.size == -1) progress.incrementAndGet();
 						} else {
@@ -503,7 +511,7 @@ public class Agent {
 				}
 				if (to.size == 0) {
 					if (to.hash == null) {
-						log("INFO", "Deleting "+path);
+						Log.info("Deleting "+path);
 						Files.deleteIfExists(destPath);
 					} else if (dest.exists()) {
 						try (FileOutputStream fos = new FileOutputStream(dest)) {
@@ -513,6 +521,7 @@ public class Agent {
 						dest.createNewFile();
 					}
 				} else {
+					assert df != null;
 					Files.move(df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
 				}
 			}
@@ -520,7 +529,12 @@ public class Agent {
 			state.put("current_version", res.theirVersion.toJson());
 			saveState();
 		}
-		log("INFO", "Update successful!");
+		try {
+			updatedComponents = MMCUpdater.apply(res.componentVersions);
+		} catch (Throwable t) {
+			Log.warn("Failed to apply component updates", t);
+		}
+		Log.info("Update successful!");
 		updated = true;
 	}
 
@@ -567,35 +581,6 @@ public class Agent {
 			default: return host;
 		}
 	}
-
-	private static void createLogStream() {
-		File logTarget = new File("logs");
-		if (!logTarget.isDirectory()) {
-			logTarget = new File(".");
-		}
-		File logFile = new File(logTarget, "unsup.log");
-		File oldLogFile = new File(logTarget, "unsup.log.1");
-		File olderLogFile = new File(logTarget, "unsup.log.2");
-		// intentionally ignoring exceptional return here
-		// don't really care if any of it fails
-		if (logFile.exists()) {
-			if (oldLogFile.exists()) {
-				if (olderLogFile.exists()) {
-					olderLogFile.delete();
-				}
-				oldLogFile.renameTo(olderLogFile);
-			}
-			logFile.renameTo(oldLogFile);
-		}
-		try {
-			OutputStream logOut = new FileOutputStream(logFile);
-			cleanup.add(logOut::close);
-			logStream = new PrintStream(logOut, true, "UTF-8");
-		} catch (Exception e) {
-			logStream = NullPrintStream.INSTANCE;
-			log("WARN", "Failed to open log file "+logFile);
-		}
-	}
 	
 	private static boolean loadConfig() {
 		File configFile = new File("unsup.ini");
@@ -603,14 +588,14 @@ public class Agent {
 			try {
 				config = QDIni.load(configFile);
 				cleanup.add(() -> config = null);
-				log("INFO", "Found and loaded unsup.ini. What secrets does it hold?");
+				Log.info("Found and loaded unsup.ini. What secrets does it hold?");
 			} catch (Exception e) {
-				log("ERROR", "Found unsup.ini, but couldn't parse it! Exiting.", e);
+				Log.error("Found unsup.ini, but couldn't parse it! Exiting.", e);
 				exit(EXIT_CONFIG_ERROR);
 			}
 			return true;
 		} else {
-			log("WARN", "No config file found? Doing nothing.");
+			Log.warn("No config file found? Doing nothing.");
 			return false;
 		}
 	}
@@ -618,7 +603,7 @@ public class Agent {
 	private static void checkRequiredKeys(String... requiredKeys) {
 		for (String req : requiredKeys) {
 			if (!config.containsKey(req)) {
-				log("ERROR", "Config file error: "+req+" is required, but was not defined! Exiting.");
+				Log.error("Config file error: "+req+" is required, but was not defined! Exiting.");
 				exit(EXIT_CONFIG_ERROR);
 				return;
 			}
@@ -639,7 +624,7 @@ public class Agent {
 
 	private static void detectEnv(String forcedEnv) {
 		if (standalone && forcedEnv == null) {
-			log("ERROR", "Cannot sync an env-based config in standalone mode unless an argument is given specifying the env! Exiting.");
+			Log.error("Cannot sync an env-based config in standalone mode unless an argument is given specifying the env! Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
@@ -668,32 +653,32 @@ public class Agent {
 			}
 		}
 		if (foundEnvs.isEmpty()) {
-			log("ERROR", "use_envs is true, but found no env declarations! Exiting.");
+			Log.error("use_envs is true, but found no env declarations! Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		if (ourEnv == null) {
-			log("ERROR", "use_envs is true, and we found no env markers! Checked for the following markers:");
+			Log.error("use_envs is true, and we found no env markers! Checked for the following markers:");
 			for (String s : checkedMarkers) {
-				log("ERROR", "- "+s);
+				Log.error("- "+s);
 			}
-			log("ERROR", "Exiting.");
+			Log.error("Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		if (!foundEnvs.contains(ourEnv)) {
-			log("ERROR", "Invalid env specified: \""+ourEnv+"\"! Valid envs:");
+			Log.error("Invalid env specified: \""+ourEnv+"\"! Valid envs:");
 			for (String s : foundEnvs) {
-				log("ERROR", "- "+s);
+				Log.error("- "+s);
 			}
-			log("ERROR", "Exiting.");
+			Log.error("Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return;
 		}
 		if (standalone) {
-			log("INFO", "Declared env is "+ourEnv);
+			Log.info("Declared env is "+ourEnv);
 		} else {
-			log("INFO", "Detected env is "+ourEnv);
+			Log.info("Detected env is "+ourEnv);
 		}
 		detectedEnv = ourEnv;
 		validEnvs = foundEnvs;
@@ -705,7 +690,7 @@ public class Agent {
 	private static QDIni mergePreset(QDIni config, String presetName) {
 		URL u = Agent.class.getClassLoader().getResource("com/unascribed/sup/presets/"+presetName+".ini");
 		if (u == null) {
-			log("ERROR", "Config file error: Preset "+presetName+" not found at "+config.getBlame("preset")+"! Exiting.");
+			Log.error("Config file error: Preset "+presetName+" not found at "+config.getBlame("preset")+"! Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return null;
 		}
@@ -713,7 +698,7 @@ public class Agent {
 			QDIni preset = QDIni.load("<preset "+presetName+">", in);
 			config = preset.merge(config);
 		} catch (IOException e) {
-			log("ERROR", "Failed to load preset "+presetName+"! Exiting.", e);
+			Log.error("Failed to load preset "+presetName+"! Exiting.", e);
 			exit(EXIT_CONFIG_ERROR);
 			return null;
 		}
@@ -744,28 +729,6 @@ public class Agent {
 	public static void exit(int code) {
 		cleanup();
 		System.exit(code);
-	}
-	
-	public static synchronized void log(String flavor, String msg) {
-		log(standalone ? "sync" : "agent", flavor, msg);
-	}
-	
-	public static synchronized void log(String flavor, String msg, Throwable t) {
-		log(standalone ? "sync" : "agent", flavor, msg, t);
-	}
-	
-	public static synchronized void log(String tag, String flavor, String msg, Throwable t) {
-		if ("DEBUG" != flavor || SysProps.DEBUG) {
-			t.printStackTrace();
-		}
-		t.printStackTrace(logStream);
-		log(tag, flavor, msg);
-	}
-	
-	public static synchronized void log(String tag, String flavor, String msg) {
-		String line = "["+logDateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
-		if ("DEBUG" != flavor || SysProps.DEBUG) System.out.println(line);
-		logStream.println(line);
 	}
 
 	/* (non-Javadoc)

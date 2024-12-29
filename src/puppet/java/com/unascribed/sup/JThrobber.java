@@ -3,6 +3,7 @@ package com.unascribed.sup;
 import java.awt.BasicStroke;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -143,7 +144,8 @@ public class JThrobber extends JComponent {
 		g2d.setColor(getForeground());
 		g2d.drawArc(((getWidth()-dia)/2)+2, ((getHeight()-dia)/2)+2, dia-4, dia-4, (int)from, (int)length);
 		if (isDisplayable()) {
-			sched.schedule(() -> repaint(), 15, TimeUnit.MILLISECONDS);
+			int hz = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().getDisplayMode().getRefreshRate();
+			sched.schedule(Puppet.invokeLater(() -> repaint()), TimeUnit.SECONDS.toNanos(1)/hz, TimeUnit.NANOSECONDS);
 		}
 	}
 }
