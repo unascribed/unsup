@@ -1,0 +1,14 @@
+{
+    "formatVersion": 1,
+    "jarMods": [
+        {
+            "MMC-displayname": "liteloader_1.4.7_00",
+            "MMC-filename": "liteloader_1.4.7_00.jar",
+            "MMC-hint": "local",
+            "name": "com.mumfrey:liteloader:1.4.7_00"
+        }
+    ],
+    "name": "LiteLoader",
+    "uid": "com.mumfrey.liteloader",
+    "version": "1.4.7_00"
+}
