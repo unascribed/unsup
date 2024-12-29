@@ -7,12 +7,13 @@ import javax.swing.JPopupMenu;
 public class SwingHelper {
 
 	public static void fixSwing() {
-		// enable a bunch of nice things that are off by default for legacy compat
-		// use OpenGL if possible
-		System.setProperty("sun.java2d.opengl", "true");
-		// do not use DirectX, it's buggy. software is better if OGL support is missing
+		// potential workaround for strange rendering bugs? i don't fucking know man
+		System.setProperty("sun.java2d.opengl", "false");
 		System.setProperty("sun.java2d.d3d", "false");
 		System.setProperty("sun.java2d.noddraw", "true");
+		
+		// enable a bunch of nice things that are off by default for legacy compat
+		
 		// force font antialiasing
 		System.setProperty("awt.useSystemAAFontSettings", "on");
 		System.setProperty("swing.aatext", "true");
