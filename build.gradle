@@ -1,19 +1,8 @@
-buildscript {
-	repositories {
-		mavenCentral()
-		gradlePluginPortal()
-	}
-	dependencies {
-		classpath 'com.gradleup.shadow:com.gradleup.shadow.gradle.plugin:8.3.5'
-		classpath 'org.ow2.asm:asm:9.7.1'
-		classpath 'org.ow2.asm:asm-tree:9.7.1'
-		classpath 'org.ow2.asm:asm-commons:9.7.1'
-		// just used for shrinking. i've used proguard a lot and trust it
-		classpath 'com.guardsquare:proguard-gradle:7.6.1'
-	}
-}
 plugins {
 	id 'com.github.ben-manes.versions' version '0.51.0'
+	id 'com.gradleup.shadow' version '8.3.5'
+	id 'java-library'
+	id 'maven-publish'
 }
 
 import java.io.File;
@@ -32,10 +21,6 @@ import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.tree.AnnotationNode;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.tree.LdcInsnNode;
-
-apply plugin: 'com.gradleup.shadow'
-apply plugin: 'java-library'
-apply plugin: 'maven-publish'
 
 base {
 	group = 'com.unascribed'
