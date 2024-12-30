@@ -205,23 +205,21 @@ public class Agent {
 			} finally {
 				PuppetHandler.tellPuppet(":subtitle=");
 			}
-			
+
+			if (awaitingExit) Agent.blockForever();
+
+			PuppetHandler.tellPuppet(":belay=openTimeout");
 			if (updatedComponents) {
 				PuppetHandler.openAlert("unsup notice",
 						"<b>A component update was applied.</b><br/>The game must be restarted — no errors have occurred, just launch the game again.",
 						PuppetHandler.AlertMessageType.INFO, AlertOptionType.OK, AlertOption.OK);
-				exit(EXIT_SUCCESS);
-			}
-			
-			if (awaitingExit) Agent.blockForever();
-
-			PuppetHandler.tellPuppet(":belay=openTimeout");
-			if (PuppetHandler.puppetOut != null) {
+			} else if (PuppetHandler.puppetOut != null) {
 				Log.info("Waiting for puppet to complete done animation...");
 				PuppetHandler.tellPuppet(":title=All done");
 				PuppetHandler.tellPuppet(":mode=done");
 				PuppetHandler.doneAnimatingLatch.await();
 			}
+			
 			PuppetHandler.tellPuppet(":exit");
 			if (PuppetHandler.puppet != null) {
 				Log.info("Waiting for puppet to exit...");
@@ -231,7 +229,10 @@ public class Agent {
 				}
 			}
 			
-			if (standalone) {
+			if (updatedComponents) {
+				Log.info("A component update has been applied - exiting for game restart.");
+				exit(EXIT_SUCCESS);
+			} else if (standalone) {
 				Log.info("Ran in standalone mode, no program will be started.");
 			} else {
 				Log.info("All done, handing over control.");
@@ -528,11 +529,11 @@ public class Agent {
 			state = plan.newState;
 			state.put("current_version", res.theirVersion.toJson());
 			saveState();
-		}
-		try {
-			updatedComponents = MMCUpdater.apply(res.componentVersions);
-		} catch (Throwable t) {
-			Log.warn("Failed to apply component updates", t);
+			try {
+				updatedComponents = MMCUpdater.apply(res.componentVersions);
+			} catch (Throwable t) {
+				Log.warn("Failed to apply component updates", t);
+			}
 		}
 		Log.info("Update successful!");
 		updated = true;
