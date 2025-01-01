@@ -1,5 +1,6 @@
 package com.unascribed.sup.handler;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -143,69 +144,75 @@ public class PackwizHandler extends AbstractFormatHandler {
 			JsonArray ourFlavors = Agent.state.getArray("flavors");
 			if (ourFlavors == null) ourFlavors = new JsonArray();
 			if (pack.containsTable("versions") && pack.getTable("versions").containsPrimitive("unsup")) {
-				unsup = RequestHelper.loadToml(new URL(src, "unsup.toml"), 64*K, null);
-				if (unsup.containsTable("flavor_groups")) {
-					flavors: for (Map.Entry<String, Object> en : unsup.getTable("flavor_groups").entrySet()) {
-						if (en.getValue() instanceof Toml) {
-							Toml group = (Toml)en.getValue();
-							String groupId = en.getKey();
-							String side = group.getString("side");
-							if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
-								Log.info("Skipping flavor group "+groupId+" as it's not eligible for env "+Agent.detectedEnv);
-								continue;
-							}
-							String groupName = group.getString("name", groupId);
-							String groupDescription = group.getString("description", "No description");
-							String defChoice = Agent.config.get("flavors."+groupId);
-							FlavorGroup grp = new FlavorGroup();
-							grp.id = groupId;
-							grp.name = groupName;
-							grp.description = groupDescription;
-							if (group.containsTableArray("choices")) {
-								for (Object o : group.getList("choices")) {
-									String id, name, description;
-									if (o instanceof Map) {
-										@SuppressWarnings("unchecked")
-										Map<String, Object> choice = (Map<String, Object>)o;
-										id = String.valueOf(choice.get("id"));
-										name = String.valueOf(choice.getOrDefault("name", id));
-										description = String.valueOf(choice.getOrDefault("description", ""));
-									} else {
-										id = String.valueOf(o);
-										name = id;
-										description = "";
-									}
-									if (!SysProps.PACKWIZ_CHANGE_FLAVORS && Iterables.contains(ourFlavors, id)) {
-										// a choice has already been made for this flavor
-										continue flavors;
-									}
-									FlavorGroup.FlavorChoice c = new FlavorGroup.FlavorChoice();
-									c.id = id;
-									c.name = name;
-									c.description = description;
-									c.def = SysProps.PACKWIZ_CHANGE_FLAVORS ? Iterables.contains(ourFlavors, id) : id.equals(defChoice);
-									if (c.def) {
-										grp.defChoice = c.id;
-										grp.defChoiceName = c.name;
-									}
-									grp.choices.add(c);
+				try {
+					unsup = RequestHelper.loadToml(new URL(src, "unsup.toml"), 64*K, null);
+				} catch (FileNotFoundException e) {
+					Log.debug("unsup is in the versions table, but there's no unsup.toml");
+				}
+				if (unsup != null) {
+					if (unsup.containsTable("flavor_groups")) {
+						flavors: for (Map.Entry<String, Object> en : unsup.getTable("flavor_groups").entrySet()) {
+							if (en.getValue() instanceof Toml) {
+								Toml group = (Toml)en.getValue();
+								String groupId = en.getKey();
+								String side = group.getString("side");
+								if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
+									Log.info("Skipping flavor group "+groupId+" as it's not eligible for env "+Agent.detectedEnv);
+									continue;
 								}
+								String groupName = group.getString("name", groupId);
+								String groupDescription = group.getString("description", "No description");
+								String defChoice = Agent.config.get("flavors."+groupId);
+								FlavorGroup grp = new FlavorGroup();
+								grp.id = groupId;
+								grp.name = groupName;
+								grp.description = groupDescription;
+								if (group.containsTableArray("choices")) {
+									for (Object o : group.getList("choices")) {
+										String id, name, description;
+										if (o instanceof Map) {
+											@SuppressWarnings("unchecked")
+											Map<String, Object> choice = (Map<String, Object>)o;
+											id = String.valueOf(choice.get("id"));
+											name = String.valueOf(choice.getOrDefault("name", id));
+											description = String.valueOf(choice.getOrDefault("description", ""));
+										} else {
+											id = String.valueOf(o);
+											name = id;
+											description = "";
+										}
+										if (!SysProps.PACKWIZ_CHANGE_FLAVORS && Iterables.contains(ourFlavors, id)) {
+											// a choice has already been made for this flavor
+											continue flavors;
+										}
+										FlavorGroup.FlavorChoice c = new FlavorGroup.FlavorChoice();
+										c.id = id;
+										c.name = name;
+										c.description = description;
+										c.def = SysProps.PACKWIZ_CHANGE_FLAVORS ? Iterables.contains(ourFlavors, id) : id.equals(defChoice);
+										if (c.def) {
+											grp.defChoice = c.id;
+											grp.defChoiceName = c.name;
+										}
+										grp.choices.add(c);
+									}
+								}
+								unpickedGroups.add(grp);
 							}
-							unpickedGroups.add(grp);
 						}
 					}
-				}
-				if (unsup.containsTable("metafile")) {
-					for (Map.Entry<String, Object> en : unsup.getTable("metafile").entrySet()) {
-						if (en.getValue() instanceof Toml) {
-							Toml t = (Toml)en.getValue();
-							if (t.contains("flavors")) {
-								if (t.containsTableArray("flavors")) {
-									metafileFlavors.put(en.getKey(), t.getList("flavors").stream()
-											.map(String::valueOf)
-											.collect(Collectors.toList()));
-								} else {
-									metafileFlavors.put(en.getKey(), Collections.singletonList(t.getString("flavors")));
+					if (unsup.containsTable("metafile")) {
+						for (Map.Entry<String, Object> en : unsup.getTable("metafile").entrySet()) {
+							if (en.getValue() instanceof Toml) {
+								Toml t = (Toml)en.getValue();
+								if (t.contains("flavors")) {
+									if (t.containsTableArray("flavors")) {
+										metafileFlavors.put(en.getKey(), t.getList("flavors").stream()
+												.map(String::valueOf)
+												.collect(Collectors.toList()));
+									} else {
+										metafileFlavors.put(en.getKey(), Collections.singletonList(t.getString("flavors")));
+									}
 								}
 							}
 						}
@@ -385,8 +392,9 @@ public class PackwizHandler extends AbstractFormatHandler {
 					throw new AssertionError(e);
 				}
 				
-				Log.debug("Flavors for "+mf.name+": "+metafileFlavors.get(mf.name));
-				if (!Iterables.intersects(metafileFlavors.get(mf.name), ourFlavors)) {
+				List<String> mfFlavors = metafileFlavors.get(mf.name);
+				Log.debug("Flavors for "+mf.name+": "+mfFlavors);
+				if (mfFlavors != null && !Iterables.intersects(mfFlavors, ourFlavors)) {
 					Log.info("Skipping "+mf.target+" as it's not eligible for our selected flavors");
 					continue;
 				}
