@@ -204,6 +204,34 @@ public class MMCUpdater {
 							Log.warn("Failed to save MultiMC pack JSON", e);
 						}
 						try {
+							/*
+							 * Every time MultiMC loads the mmc-pack.json, it will immediately write
+							 * back to it after 5 seconds. It will always load the JSON right before
+							 * launching the game, so this means if it takes less than 5 seconds for
+							 * a component update to apply, MMC will proceed to clobber it if the
+							 * player does not restart the game within the remaining 5 second window.
+							 * 
+							 * This does not apply to components that are in the patches/ directory,
+							 * just the mmc-pack.json.
+							 *
+							 * So just wait 6 seconds to ensure MMC's timer has expired by the time
+							 * we modify the file.
+							 * 
+							 * Relevant code from MultiMC (launcher/minecraft/PackProfile.cpp):
+							 *    PackProfile::PackProfile(MinecraftInstance* instance) : QAbstractListModel()
+							 *    {
+							 *        d.reset(new PackProfileData);
+							 *        d->m_instance = instance;
+							 *        d->m_saveTimer.setSingleShot(true);
+							 *        d->m_saveTimer.setInterval(5000);
+							 *        d->interactionDisabled = instance->isRunning();
+							 *        connect(d->m_instance, &BaseInstance::runningStatusChanged, this, &PackProfile::disableInteraction);
+							 *        connect(&d->m_saveTimer, &QTimer::timeout, this, &PackProfile::save_internal);
+							 *    }
+							 */
+							try {
+								Thread.sleep(6000);
+							} catch (InterruptedException e) {}
 							Files.move(mmcPackFTmp.toPath(), mmcPackF.toPath(), StandardCopyOption.REPLACE_EXISTING);
 							anyChanges = true;
 						} catch (IOException e) {
