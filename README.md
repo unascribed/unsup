@@ -32,14 +32,18 @@ from the vanilla launcher to MultiMC. Just add `-javaagent:unsup.jar` to the
 JVM arguments, and place `unsup.jar` and `unsup.ini` in the .minecraft
 directory.
 
-In Prism Launcher, you can utilize unsup as a "component" by importing
-[this JSON file](https://git.sleeping.town/Rewind/Upsilon/src/branch/mmc/patches/com.unascribed.unsup.json).
-This will allow Prism Launcher to download and manage unsup. MultiMC does
-not support Java agent components.
+In Prism Launcher, you can utilize unsup as a "component" by importing the
+`com.unascribed.unsup.json` from the latest release. This will allow Prism
+Launcher to download and manage unsup. MultiMC does not support Java agent
+components.
 
 It also has a built-in concept of *environments* and *flavors*, allowing it to
 be used to manage server installs rather than just clients, and allowing users
 to pick between multiple mutually incompatible mod sets.
+
+As of 0.3.0, unsup is also capable of updating MultiMC's "components", including
+unsup itself if it is added as one. This means you can update mod loaders or
+Minecraft itself.
 
 ## Creating Packs
 You can either point unsup at a [Packwiz](https://packwiz.infra.link/) pack.toml (recommended),
