@@ -207,10 +207,12 @@ public class MMCUpdater {
 							/*
 							 * Whenever MultiMC updates the mmc-pack.json, it waits 5 seconds before
 							 * writing the changes, probably to avoid writing to it too many times.
-							 * For whatever reason, every time the game is launched this timer goes
-							 * off. So, this means if it takes less than 5 seconds for a component
-							 * update to apply, MMC will proceed to clobber it if the player does
-							 * not restart the game within the remaining 5 second window.
+							 * Loading component data counts as "changing" the file, and launching
+							 * the game loads the component data. So, this means if it takes less
+							 * than 5 seconds for a component update to apply, MMC will proceed to
+							 * clobber it if the player does not restart the game within the
+							 * remaining 5 second window, which would result in another component
+							 * re-read.
 							 * 
 							 * This does not apply to components that are in the patches/ directory,
 							 * just the mmc-pack.json.
