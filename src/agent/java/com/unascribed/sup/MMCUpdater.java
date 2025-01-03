@@ -215,7 +215,10 @@ public class MMCUpdater {
 							 * re-read.
 							 * 
 							 * This does not apply to components that are in the patches/ directory,
-							 * just the mmc-pack.json.
+							 * just the mmc-pack.json. packwiz-installer is unaffected as it's a
+							 * pre-launch command rather than a Java agent. (unsup could be used as
+							 * a pre-launch command via standalone mode, but the Java agent approach
+							 * makes it non-launcher-specific.)
 							 *
 							 * So just wait 5½ seconds to ensure MMC's timer has expired by the time
 							 * we modify the file.

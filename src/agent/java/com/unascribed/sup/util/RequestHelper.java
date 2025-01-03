@@ -24,6 +24,9 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 import java.util.function.LongConsumer;
+
+import javax.net.ssl.SSLException;
+
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonParserException;
@@ -173,6 +176,12 @@ public class RequestHelper {
 			} catch (ConnectException e) {
 				throw new Retry("Connection to "+url.getHost()+" failed",
 						ConnectException::new);
+			} catch (SSLException e) {
+				if (e.getMessage() != null && e.getMessage().contains(" unrecognized ")) {
+					throw new Retry(url.getHost()+" violated TLS protocol — weird VPN?",
+						e);
+				}
+				throw e;
 			} catch (IOException e) {
 				if (e.getMessage() != null && e.getMessage().contains(" preface ")) {
 					throw new Retry(url.getHost()+" violated HTTP/2 protocol — weird VPN?",
