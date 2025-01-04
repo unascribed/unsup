@@ -91,38 +91,7 @@ public class Agent {
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
 	static final Object dangerMutex = new Object();
 	
-	public static final OkHttpClient okhttp;
-	static {
-		try {
-			OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
-				.connectTimeout(30, TimeUnit.SECONDS)
-				.readTimeout(15, TimeUnit.SECONDS)
-				.callTimeout(120, TimeUnit.SECONDS)
-				.build();
-			List<InetAddress> quad9Hosts = Arrays.asList(
-				InetAddress.getByName("9.9.9.10"),
-				InetAddress.getByName("2620:fe::10"),
-				InetAddress.getByName("149.112.112.10"),
-				InetAddress.getByName("2620:fe::fe:10")
-			);
-			okhttp = bootstrapOkhttp.newBuilder()
-				.cookieJar(new MemoryCookieJar())
-				.dns(new DnsOverHttps.Builder()
-						.url(HttpUrl.parse("https://dns10.quad9.net/dns-query"))
-						.systemDns(str -> {
-							switch (str) {
-								case "dns10.quad9.net": return quad9Hosts;
-								default: return Dns.SYSTEM.lookup(str);
-							}
-						})
-						.client(bootstrapOkhttp)
-						.build())
-				.build();
-		} catch (UnknownHostException e) {
-			// not a possible throw for a well-formed IP string
-			throw new AssertionError(e);
-		}
-	}
+	public static OkHttpClient okhttp;
 	
 	public static void main(String[] args) {
 		standalone = true;
@@ -208,7 +177,59 @@ public class Agent {
 			// the puppet to wait before actually making the window visible, and assign an id to our
 			// order so we can belay it later if we finished before the timer expired
 			PuppetHandler.tellPuppet("[openTimeout]1250:visible=true");
-
+			
+			Dns dns = Dns.SYSTEM;
+			OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
+				.connectTimeout(30, TimeUnit.SECONDS)
+				.readTimeout(15, TimeUnit.SECONDS)
+				.callTimeout(120, TimeUnit.SECONDS)
+				.build();
+			switch (config.get("dns", "system")) {
+				case "system":
+					Log.debug("Using system DNS for DNS queries");
+					dns = Dns.SYSTEM;
+					break;
+				case "quad9": {
+					List<InetAddress> quad9Hosts;
+					try {
+						quad9Hosts = Arrays.asList(
+							InetAddress.getByName("9.9.9.10"),
+							InetAddress.getByName("2620:fe::10"),
+							InetAddress.getByName("149.112.112.10"),
+							InetAddress.getByName("2620:fe::fe:10")
+						);
+					} catch (UnknownHostException e) {
+						// not a possible throw for a well-formed IP string
+						throw new AssertionError(e);
+					}
+					dns = new DnsOverHttps.Builder()
+							.url(HttpUrl.parse("https://dns10.quad9.net/dns-query"))
+							.bootstrapDnsHosts(quad9Hosts)
+							.client(bootstrapOkhttp)
+							.build();
+					Log.debug("Using Quad9 for DNS queries");
+					break;
+				}
+				default: {
+					String dnsStr = config.get("dns");
+					if (dnsStr.startsWith("https://")) {
+						dns = new DnsOverHttps.Builder()
+								.url(HttpUrl.parse(dnsStr))
+								.client(bootstrapOkhttp)
+								.build();
+						Log.debug("Using "+dnsStr+" for DNS queries");
+					} else {
+						Log.error("Config file error: dns is not valid at "+config.getBlame("dns")+" - expected 'system', 'quad9', or an HTTPS URL, but got '"+dnsStr+"'! Exiting.");
+						exit(EXIT_CONFIG_ERROR);
+						return;
+					}
+					break;
+				}
+			}
+			okhttp = bootstrapOkhttp.newBuilder()
+					.cookieJar(new MemoryCookieJar())
+					.dns(dns)
+					.build();
 			
 			PuppetHandler.updateTitle("Checking for updates...", false);
 			try {
@@ -744,8 +765,10 @@ public class Agent {
 				er.run();
 			} catch (Throwable t) {}
 		}
-		okhttp.dispatcher().executorService().shutdown();
-		okhttp.connectionPool().evictAll();
+		if (okhttp != null) {
+			okhttp.dispatcher().executorService().shutdown();
+			okhttp.connectionPool().evictAll();
+		}
 		cleanup = null;
 	}
 	
