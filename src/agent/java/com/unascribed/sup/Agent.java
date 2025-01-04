@@ -5,12 +5,15 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetAddress;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.UnknownHostException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -49,7 +52,10 @@ import com.unascribed.sup.util.RequestHelper.DownloadedFile;
 import com.unascribed.sup.util.RequestHelper.Retry;
 import com.unascribed.sup.util.Strings;
 
+import okhttp3.Dns;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
+import okhttp3.dnsoverhttps.DnsOverHttps;
 
 public class Agent {
 
@@ -85,12 +91,38 @@ public class Agent {
 	/** this mutex must be held while doing sensitive operations that shouldn't be interrupted */
 	static final Object dangerMutex = new Object();
 	
-	public static final OkHttpClient okhttp = new OkHttpClient.Builder()
-			.connectTimeout(30, TimeUnit.SECONDS)
-			.readTimeout(15, TimeUnit.SECONDS)
-			.callTimeout(120, TimeUnit.SECONDS)
-			.cookieJar(new MemoryCookieJar())
-			.build();
+	public static final OkHttpClient okhttp;
+	static {
+		try {
+			OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
+				.connectTimeout(30, TimeUnit.SECONDS)
+				.readTimeout(15, TimeUnit.SECONDS)
+				.callTimeout(120, TimeUnit.SECONDS)
+				.build();
+			List<InetAddress> quad9Hosts = Arrays.asList(
+				InetAddress.getByName("9.9.9.10"),
+				InetAddress.getByName("2620:fe::10"),
+				InetAddress.getByName("149.112.112.10"),
+				InetAddress.getByName("2620:fe::fe:10")
+			);
+			okhttp = bootstrapOkhttp.newBuilder()
+				.cookieJar(new MemoryCookieJar())
+				.dns(new DnsOverHttps.Builder()
+						.url(HttpUrl.parse("https://dns10.quad9.net/dns-query"))
+						.systemDns(str -> {
+							switch (str) {
+								case "dns10.quad9.net": return quad9Hosts;
+								default: return Dns.SYSTEM.lookup(str);
+							}
+						})
+						.client(bootstrapOkhttp)
+						.build())
+				.build();
+		} catch (UnknownHostException e) {
+			// not a possible throw for a well-formed IP string
+			throw new AssertionError(e);
+		}
+	}
 	
 	public static void main(String[] args) {
 		standalone = true;
