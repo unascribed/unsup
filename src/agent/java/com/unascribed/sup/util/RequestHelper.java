@@ -178,17 +178,17 @@ public class RequestHelper {
 				throw new Retry("Connection to "+url.getHost()+" failed",
 						ConnectException::new);
 			} catch (SSLHandshakeException e) {
-				if (e.getMessage() != null && e.getMessage().contains(" path building failed ")) {
+				if (e.getCause() != null && e.getCause().getMessage() != null && e.getCause().getMessage().contains(" path building failed ")) {
 					throw new Retry(url.getHost()+" has an invalid TLS certificate — incorrect system time or broken antivirus?",
 						e);
 				}
-				throw e;
+				throw new IOException("Failed to retrieve "+url, e);
 			} catch (SSLException e) {
 				if (e.getMessage() != null && e.getMessage().contains(" unrecognized ")) {
 					throw new Retry(url.getHost()+" violated TLS protocol — weird VPN or parental controls?",
 						e);
 				}
-				throw e;
+				throw new IOException("Failed to retrieve "+url, e);
 			} catch (IOException e) {
 				if (e.getMessage() != null && e.getMessage().contains(" preface ")) {
 					throw new Retry(url.getHost()+" violated HTTP/2 protocol — weird VPN?",
