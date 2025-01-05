@@ -25,7 +25,7 @@ import org.objectweb.asm.tree.LdcInsnNode;
 base {
 	group = 'com.unascribed'
 	archivesName = 'unsup'
-	version = '0.3.0-pre5.test2'
+	version = '0.3.0-pre5.test3'
 }
 
 sourceCompatibility = targetCompatibility = 8
@@ -59,6 +59,9 @@ dependencies {
 		exclude module: 'kotlin-stdlib-common'
 	}
 	shade('com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0') {
+		transitive = false
+	}
+	shade('com.squareup.okhttp3:okhttp-tls:4.12.0') {
 		transitive = false
 	}
 	shade('com.moandjiezana.toml:toml4j:0.7.2') {
