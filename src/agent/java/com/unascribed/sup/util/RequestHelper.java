@@ -26,6 +26,7 @@ import java.util.function.Function;
 import java.util.function.LongConsumer;
 
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLHandshakeException;
 
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
@@ -176,9 +177,15 @@ public class RequestHelper {
 			} catch (ConnectException e) {
 				throw new Retry("Connection to "+url.getHost()+" failed",
 						ConnectException::new);
+			} catch (SSLHandshakeException e) {
+				if (e.getMessage() != null && e.getMessage().contains(" path building failed ")) {
+					throw new Retry(url.getHost()+" has an invalid TLS certificate — incorrect system time or broken antivirus?",
+						e);
+				}
+				throw e;
 			} catch (SSLException e) {
 				if (e.getMessage() != null && e.getMessage().contains(" unrecognized ")) {
-					throw new Retry(url.getHost()+" violated TLS protocol — weird VPN?",
+					throw new Retry(url.getHost()+" violated TLS protocol — weird VPN or parental controls?",
 						e);
 				}
 				throw e;
@@ -187,7 +194,7 @@ public class RequestHelper {
 					throw new Retry(url.getHost()+" violated HTTP/2 protocol — weird VPN?",
 						e);
 				}
-				throw e;
+				throw new IOException("Failed to retrieve "+url, e);
 			}
 		});
 	}
