@@ -221,7 +221,7 @@ public class Puppet {
 						} else if ("done".equals(arg)) {
 							r = () -> {
 								if (!frame.isVisible()) {
-									System.out.println("doneAnimating");
+									System.exit(0);
 									return;
 								}
 								SwingUtilities.invokeLater(() -> {

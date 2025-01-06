@@ -27,6 +27,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
@@ -110,17 +112,6 @@ public class Agent {
 				// by returning but not exiting, we yield control to the program whose launch we hijacked, if any
 				return;
 			}
-			checkRequiredKeys("version", "source_format", "source");
-			int version = config.getInt("version", -1);
-			if (version != 1) {
-				Log.error("Config file error: Unknown version "+version+" at "+config.getBlame("version")+"! Exiting.");
-				exit(EXIT_CONFIG_ERROR);
-				return;
-			}
-			config = mergePreset(config, "__global__");
-			if (config.containsKey("preset")) {
-				config = mergePreset(config, config.get("preset"));
-			}
 			if (config.getBoolean("use_envs", false)) {
 				detectEnv(config.get("force_env", arg));
 			}
@@ -173,100 +164,15 @@ public class Agent {
 			PuppetHandler.setPuppetColorsFromConfig();
 			
 			PuppetHandler.tellPuppet(":build");
-			
 			PuppetHandler.tellPuppet(":subtitle="+config.get("subtitle", ""));
 			// we don't want to flash a window on the screen if things aren't going slow, so we tell
 			// the puppet to wait before actually making the window visible, and assign an id to our
 			// order so we can belay it later if we finished before the timer expired
 			PuppetHandler.tellPuppet("[openTimeout]1250:visible=true");
 			
-			Dns dns = Dns.SYSTEM;
-			HandshakeCertificates certs = new HandshakeCertificates.Builder()
-					.addPlatformTrustedCertificates()
-					// ISRG Root X1
-					// not shipped by old Mojang Java (they're staying on some antique version for Intel Windows driver bs reasons)
-					.addTrustedCertificate(Certificates.decodeCertificatePem("-----BEGIN CERTIFICATE-----\nMIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\nTzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\ncmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\nWhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\nZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\nMTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\nh77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\nA5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\nT8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\nB5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\nB5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\nKBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\nOlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\njh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\nqHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\nrU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\nHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\nhkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\nubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\nNFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\nORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\nTkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\njNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\noyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\nmRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\nemyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n-----END CERTIFICATE-----"))
-					.build();
-			OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
-				.connectTimeout(30, TimeUnit.SECONDS)
-				.readTimeout(15, TimeUnit.SECONDS)
-				.callTimeout(120, TimeUnit.SECONDS)
-				.sslSocketFactory(certs.sslSocketFactory(), certs.trustManager())
-				.build();
-			switch (config.get("dns", "system")) {
-				case "system":
-					Log.debug("Using system DNS for DNS queries");
-					dns = Dns.SYSTEM;
-					break;
-				case "quad9": {
-					List<InetAddress> quad9Hosts;
-					try {
-						quad9Hosts = Arrays.asList(
-							InetAddress.getByName("9.9.9.10"),
-							InetAddress.getByName("2620:fe::10"),
-							InetAddress.getByName("149.112.112.10"),
-							InetAddress.getByName("2620:fe::fe:10")
-						);
-					} catch (UnknownHostException e) {
-						// not a possible throw for a well-formed IP string
-						throw new AssertionError(e);
-					}
-					dns = new DnsOverHttps.Builder()
-							.url(HttpUrl.parse("https://dns10.quad9.net/dns-query"))
-							.bootstrapDnsHosts(quad9Hosts)
-							.client(bootstrapOkhttp)
-							.build();
-					Log.debug("Using Quad9 for DNS queries");
-					break;
-				}
-				default: {
-					String dnsStr = config.get("dns");
-					if (dnsStr.startsWith("https://")) {
-						dns = new DnsOverHttps.Builder()
-								.url(HttpUrl.parse(dnsStr))
-								.client(bootstrapOkhttp)
-								.build();
-						Log.debug("Using "+dnsStr+" for DNS queries");
-					} else {
-						Log.error("Config file error: dns is not valid at "+config.getBlame("dns")+" - expected 'system', 'quad9', or an HTTPS URL, but got '"+dnsStr+"'! Exiting.");
-						exit(EXIT_CONFIG_ERROR);
-						return;
-					}
-					break;
-				}
-			}
-			okhttp = bootstrapOkhttp.newBuilder()
-					.cookieJar(new MemoryCookieJar())
-					.dns(dns)
-					.build();
+			setupOkHttp();
 			
-			PuppetHandler.updateTitle("Checking for updates...", false);
-			try {
-				CheckResult res = null;
-				if (fmt == SourceFormat.UNSUP) {
-					res = NativeHandler.check(src);
-				} else if (fmt == SourceFormat.PACKWIZ) {
-					res = PackwizHandler.check(src);
-				}
-				if (res != null) {
-					sourceVersion = res.ourVersion.name;
-					if (res.plan != null) {
-						applyUpdate(res);
-					}
-				}
-			} catch (Throwable t) {
-				Log.warn("Error while updating", t);
-				PuppetHandler.tellPuppet(":expedite=openTimeout");
-				if (PuppetHandler.openAlert("unsup error",
-						"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
-						PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
-					Log.info("User cancelled error dialog! Exiting.");
-					exit(EXIT_USER_REQUEST);
-					return;
-				}
-			} finally {
-				PuppetHandler.tellPuppet(":subtitle=");
-			}
+			checkForUpdate(fmt, src);
 
 			if (awaitingExit) Agent.blockForever();
 
@@ -279,13 +185,7 @@ public class Agent {
 				Log.info("Waiting for puppet to complete done animation...");
 				PuppetHandler.tellPuppet(":title=All done");
 				PuppetHandler.tellPuppet(":mode=done");
-				PuppetHandler.doneAnimatingLatch.await();
-			}
-			
-			PuppetHandler.tellPuppet(":exit");
-			if (PuppetHandler.puppet != null) {
-				Log.info("Waiting for puppet to exit...");
-				if (!PuppetHandler.puppet.waitFor(2, TimeUnit.SECONDS)) {
+				if (!PuppetHandler.puppet.waitFor(3, TimeUnit.SECONDS)) {
 					Log.warn("Tired of waiting, killing the puppet.");
 					PuppetHandler.puppet.destroyForcibly();
 				}
@@ -322,6 +222,212 @@ public class Agent {
 
 	// "step" methods, called only once, exist to turn premain() into a logical overview that can be
 	// drilled down into as necessary
+	
+	private static boolean loadConfig() {
+		File configFile = new File("unsup.ini");
+		if (configFile.exists()) {
+			try {
+				config = QDIni.load(configFile);
+				cleanup.add(() -> config = null);
+				Log.info("Found and loaded unsup.ini. What secrets does it hold?");
+			} catch (Exception e) {
+				Log.error("Found unsup.ini, but couldn't parse it! Exiting.", e);
+				exit(EXIT_CONFIG_ERROR);
+			}
+			checkRequiredKeys("version", "source_format", "source");
+			int version = config.getInt("version", -1);
+			if (version != 1) {
+				Log.error("Config file error: Unknown version "+version+" at "+config.getBlame("version")+"! Exiting.");
+				exit(EXIT_CONFIG_ERROR);
+				return false;
+			}
+			config = mergePreset(config, "__global__");
+			if (config.containsKey("preset")) {
+				config = mergePreset(config, config.get("preset"));
+			}
+			return true;
+		} else {
+			Log.warn("No config file found? Doing nothing.");
+			return false;
+		}
+	}
+	
+	private static void checkRequiredKeys(String... requiredKeys) {
+		for (String req : requiredKeys) {
+			if (!config.containsKey(req)) {
+				Log.error("Config file error: "+req+" is required, but was not defined! Exiting.");
+				exit(EXIT_CONFIG_ERROR);
+				return;
+			}
+		}
+	}
+	
+	private static boolean determineNoGui() {
+		if (standalone) return !SysProps.GUI_IN_STANDALONE;
+		if (config.containsKey("no_gui")) return config.getBoolean("no_gui", false);
+		if (config.getBoolean("recognize_nogui", false)) {
+			String cmd = System.getProperty("sun.java.command");
+			if (cmd != null) {
+				return Strings.containsWholeWord(cmd, "nogui") || Strings.containsWholeWord(cmd, "--nogui");
+			}
+		}
+		return false;
+	}
+
+	private static void detectEnv(String forcedEnv) {
+		if (standalone && forcedEnv == null) {
+			Log.error("Cannot sync an env-based config in standalone mode unless an argument is given specifying the env! Exiting.");
+			exit(EXIT_CONFIG_ERROR);
+			return;
+		}
+		Set<String> foundEnvs = new HashSet<>();
+		List<String> checkedMarkers = new ArrayList<>();
+		String ourEnv = forcedEnv;
+		for (String k : config.keySet()) {
+			if (k.startsWith("env.") && k.endsWith(".marker")) {
+				String env = k.substring(4, k.length()-7);
+				foundEnvs.add(env);
+				if (ourEnv == null) {
+					for (String possibility : config.getAll(k)) {
+						if (possibility.equals("*")) {
+							ourEnv = env;
+							break;
+						} else {
+							checkedMarkers.add(possibility);
+							try {
+								Class.forName(possibility, false, Agent.class.getClassLoader());
+								ourEnv = env;
+								break;
+							} catch (ClassNotFoundException e) {}
+						}
+					}
+				}
+			}
+		}
+		if (foundEnvs.isEmpty()) {
+			Log.error("use_envs is true, but found no env declarations! Exiting.");
+			exit(EXIT_CONFIG_ERROR);
+			return;
+		}
+		if (ourEnv == null) {
+			Log.error("use_envs is true, and we found no env markers! Checked for the following markers:");
+			for (String s : checkedMarkers) {
+				Log.error("- "+s);
+			}
+			Log.error("Exiting.");
+			exit(EXIT_CONFIG_ERROR);
+			return;
+		}
+		if (!foundEnvs.contains(ourEnv)) {
+			Log.error("Invalid env specified: \""+ourEnv+"\"! Valid envs:");
+			for (String s : foundEnvs) {
+				Log.error("- "+s);
+			}
+			Log.error("Exiting.");
+			exit(EXIT_CONFIG_ERROR);
+			return;
+		}
+		if (standalone) {
+			Log.info("Declared env is "+ourEnv);
+		} else {
+			Log.info("Detected env is "+ourEnv);
+		}
+		detectedEnv = ourEnv;
+		validEnvs = foundEnvs;
+		cleanup.add(() -> validEnvs = null);
+	}
+
+	private static void setupOkHttp() throws AssertionError {
+		Dns dns = Dns.SYSTEM;
+		HandshakeCertificates certs = new HandshakeCertificates.Builder()
+				.addPlatformTrustedCertificates()
+				// ISRG Root X1
+				// not shipped by old Mojang Java (they're staying on some antique version for Intel Windows driver bs reasons)
+				.addTrustedCertificate(Certificates.decodeCertificatePem("-----BEGIN CERTIFICATE-----\nMIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\nTzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\ncmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4\nWhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu\nZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY\nMTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc\nh77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+\n0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U\nA5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW\nT8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH\nB5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC\nB5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv\nKBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn\nOlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn\njh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw\nqHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI\nrU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV\nHRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq\nhkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL\nubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ\n3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK\nNFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5\nORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur\nTkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC\njNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc\noyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq\n4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA\nmRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d\nemyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n-----END CERTIFICATE-----"))
+				.build();
+		OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
+			.connectTimeout(30, TimeUnit.SECONDS)
+			.readTimeout(15, TimeUnit.SECONDS)
+			.callTimeout(120, TimeUnit.SECONDS)
+			.sslSocketFactory(certs.sslSocketFactory(), certs.trustManager())
+			.build();
+		switch (config.get("dns", "system")) {
+			case "system":
+				Log.debug("Using system DNS for DNS queries");
+				dns = Dns.SYSTEM;
+				break;
+			case "quad9": {
+				List<InetAddress> quad9Hosts;
+				try {
+					quad9Hosts = Arrays.asList(
+						InetAddress.getByName("9.9.9.10"),
+						InetAddress.getByName("2620:fe::10"),
+						InetAddress.getByName("149.112.112.10"),
+						InetAddress.getByName("2620:fe::fe:10")
+					);
+				} catch (UnknownHostException e) {
+					// not a possible throw for a well-formed IP string
+					throw new AssertionError(e);
+				}
+				dns = new DnsOverHttps.Builder()
+						.url(HttpUrl.parse("https://dns10.quad9.net/dns-query"))
+						.bootstrapDnsHosts(quad9Hosts)
+						.client(bootstrapOkhttp)
+						.build();
+				Log.debug("Using Quad9 for DNS queries");
+				break;
+			}
+			default: {
+				String dnsStr = config.get("dns");
+				if (dnsStr.startsWith("https://")) {
+					dns = new DnsOverHttps.Builder()
+							.url(HttpUrl.parse(dnsStr))
+							.client(bootstrapOkhttp)
+							.build();
+					Log.debug("Using "+dnsStr+" for DNS queries");
+				} else {
+					Log.error("Config file error: dns is not valid at "+config.getBlame("dns")+" - expected 'system', 'quad9', or an HTTPS URL, but got '"+dnsStr+"'! Exiting.");
+					exit(EXIT_CONFIG_ERROR);
+					return;
+				}
+				break;
+			}
+		}
+		okhttp = bootstrapOkhttp.newBuilder()
+				.cookieJar(new MemoryCookieJar())
+				.dns(dns)
+				.build();
+	}
+	
+	private static void checkForUpdate(SourceFormat fmt, URL src) {
+		PuppetHandler.updateTitle("Checking for updates...", false);
+		try {
+			CheckResult res = null;
+			if (fmt == SourceFormat.UNSUP) {
+				res = NativeHandler.check(src);
+			} else if (fmt == SourceFormat.PACKWIZ) {
+				res = PackwizHandler.check(src);
+			}
+			if (res != null) {
+				sourceVersion = res.ourVersion.name;
+				if (res.plan != null) {
+					applyUpdate(res);
+				}
+			}
+		} catch (Throwable t) {
+			Log.warn("Error while updating", t);
+			PuppetHandler.tellPuppet(":expedite=openTimeout");
+			if (PuppetHandler.openAlert("unsup error",
+					"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
+					PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
+				Log.info("User cancelled error dialog! Exiting.");
+				exit(EXIT_USER_REQUEST);
+				return;
+			}
+		} finally {
+			PuppetHandler.tellPuppet(":subtitle=");
+		}
+	}
 	
 	private static void applyUpdate(CheckResult res) throws IOException {
 		UpdatePlan<?> plan = res.plan;
@@ -601,6 +707,8 @@ public class Agent {
 		updated = true;
 	}
 
+	// helper methods, called more than once
+
 	private static String ponder(FileState state) {
 		if (state == null) return "[MISSING. STATE DATA IS INCOMPLETE OR CORRUPT]";
 		if (state.hash == null) {
@@ -621,134 +729,55 @@ public class Agent {
 		});
 	}
 
+	private static final Pattern domainPattern = Pattern.compile("(^|\\.)([^\\.]+\\.[^\\.]+)$");
+	
 	private static String describe(URL url) {
 		if (url == null) return "(null)";
 		if (SysProps.DEBUG) return url.toString();
 		String host = url.getHost();
 		if (host == null) return "[null]";
 		if (host.isEmpty()) return url.toString();
-		switch (host) {
+		Matcher m = domainPattern.matcher(host);
+		String domain;
+		if (m.find()) {
+			domain = m.group(2);
+		} else {
+			domain = host;
+		}
+		switch (domain) {
 			case "modrinth.com":
-			case "cdn.modrinth.com":
-			case "cdn-raw.modrinth.com":
 				return "Modrinth";
 			
-			case "mediafilez.forgecdn.net": case "mediafiles.forgecdn.net":
-			case "curseforge.com": case "www.curseforge.com":
-			case "edge.forgecdn.net":
+			case "forgecdn.net":
+			case "curseforge.com":
 				return "CurseForge";
 			
-			case "github.com": case "objects.githubusercontent.com":
+			case "github.com":
+			case "githubusercontent.com":
+			case "github.io":
 				return "GitHub";
+				
+			case "codeberg.org":
+				return "Codeberg";
+
+			case "planetminecraft.com":
+				return "Planet Minecraft";
+				
+			case "mcarchive.net":
+				return "MCArchive";
+			
+			case "archive.org":
+				return "Internet Archive";
+				
+			case "prismlauncher.org":
+				return "PrismLauncher";
+					
+			case "maven.org":
+				return "Maven Central";
 				
 			default: return host;
 		}
 	}
-	
-	private static boolean loadConfig() {
-		File configFile = new File("unsup.ini");
-		if (configFile.exists()) {
-			try {
-				config = QDIni.load(configFile);
-				cleanup.add(() -> config = null);
-				Log.info("Found and loaded unsup.ini. What secrets does it hold?");
-			} catch (Exception e) {
-				Log.error("Found unsup.ini, but couldn't parse it! Exiting.", e);
-				exit(EXIT_CONFIG_ERROR);
-			}
-			return true;
-		} else {
-			Log.warn("No config file found? Doing nothing.");
-			return false;
-		}
-	}
-	
-	private static void checkRequiredKeys(String... requiredKeys) {
-		for (String req : requiredKeys) {
-			if (!config.containsKey(req)) {
-				Log.error("Config file error: "+req+" is required, but was not defined! Exiting.");
-				exit(EXIT_CONFIG_ERROR);
-				return;
-			}
-		}
-	}
-
-	private static boolean determineNoGui() {
-		if (standalone) return !SysProps.GUI_IN_STANDALONE;
-		if (config.containsKey("no_gui")) return config.getBoolean("no_gui", false);
-		if (config.getBoolean("recognize_nogui", false)) {
-			String cmd = System.getProperty("sun.java.command");
-			if (cmd != null) {
-				return Strings.containsWholeWord(cmd, "nogui") || Strings.containsWholeWord(cmd, "--nogui");
-			}
-		}
-		return false;
-	}
-
-	private static void detectEnv(String forcedEnv) {
-		if (standalone && forcedEnv == null) {
-			Log.error("Cannot sync an env-based config in standalone mode unless an argument is given specifying the env! Exiting.");
-			exit(EXIT_CONFIG_ERROR);
-			return;
-		}
-		Set<String> foundEnvs = new HashSet<>();
-		List<String> checkedMarkers = new ArrayList<>();
-		String ourEnv = forcedEnv;
-		for (String k : config.keySet()) {
-			if (k.startsWith("env.") && k.endsWith(".marker")) {
-				String env = k.substring(4, k.length()-7);
-				foundEnvs.add(env);
-				if (ourEnv == null) {
-					for (String possibility : config.getAll(k)) {
-						if (possibility.equals("*")) {
-							ourEnv = env;
-							break;
-						} else {
-							checkedMarkers.add(possibility);
-							try {
-								Class.forName(possibility, false, Agent.class.getClassLoader());
-								ourEnv = env;
-								break;
-							} catch (ClassNotFoundException e) {}
-						}
-					}
-				}
-			}
-		}
-		if (foundEnvs.isEmpty()) {
-			Log.error("use_envs is true, but found no env declarations! Exiting.");
-			exit(EXIT_CONFIG_ERROR);
-			return;
-		}
-		if (ourEnv == null) {
-			Log.error("use_envs is true, and we found no env markers! Checked for the following markers:");
-			for (String s : checkedMarkers) {
-				Log.error("- "+s);
-			}
-			Log.error("Exiting.");
-			exit(EXIT_CONFIG_ERROR);
-			return;
-		}
-		if (!foundEnvs.contains(ourEnv)) {
-			Log.error("Invalid env specified: \""+ourEnv+"\"! Valid envs:");
-			for (String s : foundEnvs) {
-				Log.error("- "+s);
-			}
-			Log.error("Exiting.");
-			exit(EXIT_CONFIG_ERROR);
-			return;
-		}
-		if (standalone) {
-			Log.info("Declared env is "+ourEnv);
-		} else {
-			Log.info("Detected env is "+ourEnv);
-		}
-		detectedEnv = ourEnv;
-		validEnvs = foundEnvs;
-		cleanup.add(() -> validEnvs = null);
-	}
-
-	// helper methods, called more than once
 	
 	private static QDIni mergePreset(QDIni config, String presetName) {
 		URL u = Agent.class.getClassLoader().getResource("com/unascribed/sup/presets/"+presetName+".ini");

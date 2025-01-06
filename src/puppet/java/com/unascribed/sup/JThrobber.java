@@ -38,7 +38,6 @@ public class JThrobber extends JComponent {
 	
 	private boolean animateDone;
 	private long animateDoneTime;
-	private boolean animateDoneDone;
 	
 	public void animateDone() {
 		barMaxLength = 360;
@@ -80,9 +79,8 @@ public class JThrobber extends JComponent {
 				double a = 1-Math.sin((time/4000D)*(Math.PI/2));
 				int inset = (int)(8+((dia-8)*a));
 				g2d.fillOval(((getWidth()-dia)/2)+(inset/2), ((getHeight()-dia)/2)+(inset/2), dia-inset, dia-inset);
-			} else if (!animateDoneDone && time < -1000) {
-				animateDoneDone = true;
-				System.out.println("doneAnimating");
+			} else if (time < -1000) {
+				System.exit(0);
 			}
 			// ?????
 			int cX = (getWidth()/2)-(dia/15)-1;

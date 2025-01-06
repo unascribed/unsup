@@ -35,8 +35,6 @@ public class PuppetHandler {
 	private static Map<String, String> alertResults = new HashMap<>();
 	private static Map<String, Latch> alertWaiters = new HashMap<>();
 	
-	static final Latch doneAnimatingLatch = new Latch();
-
 	public enum AlertMessageType { QUESTION, INFO, WARN, ERROR, NONE }
 	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
 	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
@@ -176,8 +174,6 @@ public class PuppetHandler {
 										latch.release();
 									}
 								}
-							} else if (line.equals("doneAnimating")) {
-								doneAnimatingLatch.release();
 							} else {
 								Log.warn("Unknown line from puppet: "+line);
 							}
@@ -220,8 +216,10 @@ public class PuppetHandler {
 				puppetOut.write(0);
 				puppetOut.flush();
 			} catch (IOException e) {
-				e.printStackTrace();
-				Log.warn("IO error while talking to puppet. Killing and continuing without GUI.");
+				if (!Agent.awaitingExit) {
+					e.printStackTrace();
+					Log.warn("IO error while talking to puppet. Killing and continuing without GUI.");
+				}
 				puppet.destroyForcibly();
 				puppet = null;
 				puppetOut = null;
