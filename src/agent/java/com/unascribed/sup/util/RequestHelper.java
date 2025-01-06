@@ -9,11 +9,10 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
-import java.net.MalformedURLException;
 import java.net.SocketTimeoutException;
-import java.net.ConnectException;
+import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URL;
+import java.net.ConnectException;
 import java.net.UnknownHostException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -37,6 +36,7 @@ import com.unascribed.sup.Log;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.data.HashFunction;
 
+import okhttp3.HttpUrl;
 import okhttp3.Request;
 import okhttp3.Response;
 
@@ -47,25 +47,25 @@ public class RequestHelper {
 	
 	public static final long ONE_SECOND_IN_NANOS = TimeUnit.SECONDS.toNanos(1);
 	
-	public static String checkSchemeMismatch(URL src, String url) throws MalformedURLException {
+	public static String checkSchemeMismatch(URI src, String url) throws URISyntaxException {
 		if (url == null) return null;
-		URL parsed = new URL(url);
+		URI parsed = new URI(url);
 		boolean ok = false;
-		if (src.getProtocol().equals("file")) {
+		if (src.getScheme().equals("file")) {
 			// promoting from file to http is ok, as well as using files from files
-			ok = "http".equals(parsed.getProtocol()) || "https".equals(parsed.getProtocol())
-					|| "file".equals(parsed.getProtocol());
-		} else if ("http".equals(src.getProtocol()) || "https".equals(src.getProtocol())) {
+			ok = "http".equals(parsed.getScheme()) || "https".equals(parsed.getScheme())
+					|| "file".equals(parsed.getScheme());
+		} else if ("http".equals(src.getScheme()) || "https".equals(src.getScheme())) {
 			// going between http and https is ok
-			ok = "http".equals(parsed.getProtocol()) || "https".equals(parsed.getProtocol());
+			ok = "http".equals(parsed.getScheme()) || "https".equals(parsed.getScheme());
 		}
 		if (!ok) {
-			Log.warn("Ignoring custom URL with bad scheme "+parsed.getProtocol());
+			Log.warn("Ignoring custom URL with bad scheme "+parsed.getScheme());
 		}
 		return ok ? url : null;
 	}
 	
-	public static byte[] loadAndVerify(URL src, int sizeLimit, URL sigUrl) throws IOException {
+	public static byte[] loadAndVerify(URI src, int sizeLimit, URI sigUrl) throws IOException {
 		byte[] resp = downloadToMemory(src, sizeLimit);
 		if (resp == null) {
 			throw new IOException(src+" is larger than "+(sizeLimit/K)+"K, refusing to continue downloading");
@@ -85,7 +85,7 @@ public class RequestHelper {
 		return resp;
 	}
 
-	public static byte[] downloadToMemory(URL url, int sizeLimit) throws IOException {
+	public static byte[] downloadToMemory(URI url, int sizeLimit) throws IOException {
 		return withRetries(10, () -> {
 			try {
 				InputStream conn = get(url);
@@ -104,24 +104,20 @@ public class RequestHelper {
 	private static String currentFirefoxVersion;
 	private static final Set<String> alwaysHostile = new HashSet<>(Arrays.asList(Bases.b64ToString("YmV0YS5jdXJzZWZvcmdlLmNvbXx3d3cuY3Vyc2Vmb3JnZS5jb218Y3Vyc2Vmb3JnZS5jb218bWluZWNyYWZ0LmN1cnNlZm9yZ2UuY29tfG1lZGlhZmlsZXouZm9yZ2VjZG4ubmV0fG1lZGlhZmlsZXMuZm9yZ2VjZG4ubmV0fGZvcmdlY2RuLm5ldHxlZGdlLmZvcmdlY2RuLm5ldA==").split("\\|")));
 
-	public static InputStream get(URL url) throws IOException {
+	public static InputStream get(URI url) throws IOException {
 		return get(url, false);
 	}
 
-	public static InputStream get(URL url, boolean hostile) throws IOException {
-		if ("file".equals(url.getProtocol())) {
-			try {
-				return new FileInputStream(new File(url.toURI()));
-			} catch (URISyntaxException e) {
-				throw new IOException(e);
-			}
+	public static InputStream get(URI url, boolean hostile) throws IOException {
+		if ("file".equals(url.getScheme())) {
+			return new FileInputStream(new File(url));
 		}
 		if (!hostile && alwaysHostile.contains(url.getHost())) {
 			hostile = true;
 		}
 		if (hostile && currentFirefoxVersion == null) {
 			try {
-				JsonObject data = loadJson(new URL("https://product-details.mozilla.org/1.0/firefox_versions.json"), 4*K, null);
+				JsonObject data = loadJson(new URI("https://product-details.mozilla.org/1.0/firefox_versions.json"), 4*K, null);
 				currentFirefoxVersion = data.getString("LATEST_FIREFOX_VERSION");
 			} catch (Throwable t) {
 				currentFirefoxVersion = "133.0";
@@ -139,7 +135,7 @@ public class RequestHelper {
 		return RequestHelper.withRetries(10, () -> {
 			try {
 				Request.Builder reqbldr = new Request.Builder()
-						.url(url)
+						.url(HttpUrl.get(url))
 						.header("User-Agent",
 								fhostile ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:"+currentFirefoxVersion+") Gecko/20100101 Firefox/"+currentFirefoxVersion
 								         : "unsup/"+Util.VERSION+" (+https://git.sleeping.town/unascribed/unsup)"
@@ -189,6 +185,8 @@ public class RequestHelper {
 						e);
 				}
 				throw new IOException("Failed to retrieve "+url, e);
+			} catch (FileNotFoundException e) {
+				throw e;
 			} catch (IOException e) {
 				if (e.getMessage() != null && e.getMessage().contains(" preface ")) {
 					throw new Retry(url.getHost()+" violated HTTP/2 protocol — weird VPN?",
@@ -235,11 +233,11 @@ public class RequestHelper {
 		}
 	}
 	
-	public static String loadString(URL src, int sizeLimit, URL sigUrl) throws IOException {
+	public static String loadString(URI src, int sizeLimit, URI sigUrl) throws IOException {
 		return new String(loadAndVerify(src, sizeLimit, sigUrl), StandardCharsets.UTF_8);
 	}
 	
-	public static JsonObject loadJson(URL src, int sizeLimit, URL sigUrl) throws IOException, JsonParserException {
+	public static JsonObject loadJson(URI src, int sizeLimit, URI sigUrl) throws IOException, JsonParserException {
 		try {
 			return JsonParser.object().from(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
 		} catch (JsonParserException e) {
@@ -247,7 +245,7 @@ public class RequestHelper {
 		}
 	}
 	
-	public static Toml loadToml(URL src, int sizeLimit, URL sigUrl) throws IOException {
+	public static Toml loadToml(URI src, int sizeLimit, URI sigUrl) throws IOException {
 		try {
 			return new Toml().read(new ByteArrayInputStream(loadAndVerify(src, sizeLimit, sigUrl)));
 		} catch (IllegalStateException e) {
@@ -255,7 +253,7 @@ public class RequestHelper {
 		}
 	}
 	
-	public static Toml loadToml(URL src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
+	public static Toml loadToml(URI src, int sizeLimit, HashFunction func, String expectedHash) throws IOException {
 		byte[] data = downloadToMemory(src, sizeLimit);
 		if (data == null) throw new IOException("Size limit of "+(sizeLimit/K)+"K for "+src+" exceeded");
 		String hash = Bases.bytesToHex(func.createMessageDigest().digest(data));
@@ -274,7 +272,7 @@ public class RequestHelper {
 		}
 	}
 	
-	public static DownloadedFile downloadToFile(URL url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc, boolean hostile) throws IOException {
+	public static DownloadedFile downloadToFile(URI url, File dir, long size, LongConsumer addProgress, Runnable updateProgress, HashFunction hashFunc, boolean hostile) throws IOException {
 		File file = File.createTempFile("download", "", dir);
 		Agent.cleanup.add(file::delete);
 		return withRetries(10, () -> {

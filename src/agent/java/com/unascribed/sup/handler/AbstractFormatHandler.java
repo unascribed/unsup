@@ -1,6 +1,6 @@
 package com.unascribed.sup.handler;
 
-import java.net.URL;
+import java.net.URI;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -22,9 +22,9 @@ public abstract class AbstractFormatHandler {
 	
 	public static class FilePlan {
 		public FileState state;
-		public URL url;
-		public URL fallbackUrl;
-		public URL primerUrl;
+		public URI url;
+		public URI fallbackUrl;
+		public URI primerUrl;
 		public boolean hostile;
 		public boolean skip = false;
 	}

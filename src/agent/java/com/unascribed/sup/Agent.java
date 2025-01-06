@@ -6,7 +6,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
-import java.net.MalformedURLException;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
@@ -119,10 +120,10 @@ public class Agent {
 			boolean noGui = determineNoGui();
 			
 			SourceFormat fmt = config.getEnum("source_format", SourceFormat.class, null);
-			URL src;
+			URI src;
 			try {
-				src = new URL(config.get("source"));
-			} catch (MalformedURLException e) {
+				src = new URI(config.get("source"));
+			} catch (URISyntaxException e) {
 				Log.error("Config error: source URL is malformed! "+e.getMessage()+". Exiting.");
 				exit(EXIT_CONFIG_ERROR);
 				return;
@@ -399,7 +400,7 @@ public class Agent {
 				.build();
 	}
 	
-	private static void checkForUpdate(SourceFormat fmt, URL src) {
+	private static void checkForUpdate(SourceFormat fmt, URI src) {
 		PuppetHandler.updateTitle("Checking for updates...", false);
 		try {
 			CheckResult res = null;
@@ -717,7 +718,7 @@ public class Agent {
 		return state.toString();
 	}
 
-	private static DownloadedFile downloadAndCheckHash(File tmp, AtomicLong progress, Runnable updateProgress, String path, FilePlan f, URL url, FileState to, long[] contributedProgress) throws IOException {
+	private static DownloadedFile downloadAndCheckHash(File tmp, AtomicLong progress, Runnable updateProgress, String path, FilePlan f, URI url, FileState to, long[] contributedProgress) throws IOException {
 		return RequestHelper.withRetries(3, () -> {
 			DownloadedFile df = RequestHelper.downloadToFile(url, tmp, to.size, to.size == -1 ? l -> {} : l -> {contributedProgress[0]+=l;progress.addAndGet(l);},
 					updateProgress, to.func, f.hostile);
@@ -731,7 +732,7 @@ public class Agent {
 
 	private static final Pattern domainPattern = Pattern.compile("(^|\\.)([^\\.]+\\.[^\\.]+)$");
 	
-	private static String describe(URL url) {
+	private static String describe(URI url) {
 		if (url == null) return "(null)";
 		if (SysProps.DEBUG) return url.toString();
 		String host = url.getHost();

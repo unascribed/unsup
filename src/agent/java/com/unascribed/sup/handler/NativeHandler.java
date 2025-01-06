@@ -2,7 +2,8 @@ package com.unascribed.sup.handler;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -15,6 +16,7 @@ import com.unascribed.sup.Agent;
 import com.unascribed.sup.Log;
 import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.SysProps;
+import com.unascribed.sup.Util;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
@@ -34,9 +36,9 @@ public class NativeHandler extends AbstractFormatHandler {
 		int code;
 	}
 	
-	public static CheckResult check(URL src) throws IOException, JsonParserException {
+	public static CheckResult check(URI src) throws IOException, JsonParserException, URISyntaxException {
 		Log.info("Loading unsup-format manifest from "+src);
-		JsonObject manifest = RequestHelper.loadJson(src, 32*K, new URL(src, "manifest.sig"));
+		JsonObject manifest = RequestHelper.loadJson(src, 32*K, src.resolve("manifest.sig"));
 		checkManifestFlavor(manifest, "root", IntPredicates.equals(1));
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
 		if (!manifest.containsKey("versions")) throw new IOException("Manifest is missing versions field");
@@ -146,7 +148,7 @@ public class NativeHandler extends AbstractFormatHandler {
 			Log.info("Update available! We have nothing, they have "+theirVersion);
 			JsonObject bootstrap = null;
 			try {
-				bootstrap = RequestHelper.loadJson(new URL(src, "bootstrap.json"), 2*M, new URL(src, "bootstrap.sig"));
+				bootstrap = RequestHelper.loadJson(src.resolve("bootstrap.json"), 2*M, src.resolve("bootstrap.sig"));
 			} catch (FileNotFoundException e) {
 				Log.info("Bootstrap manifest missing, will have to retrieve and collapse every update");
 			}
@@ -182,12 +184,12 @@ public class NativeHandler extends AbstractFormatHandler {
 						Log.info("Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
-					URL fallbackUrl = new URL(src, blobPath(hash));
-					URL url;
+					URI fallbackUrl = src.resolve(Util.uriOfPath(blobPath(hash)));
+					URI url;
 					if (urlStr == null) {
 						url = fallbackUrl;
 					} else {
-						url = new URL(urlStr);
+						url = new URI(urlStr);
 					}
 					FileToDownloadWithCode ftd = new FileToDownloadWithCode();
 					ftd.state = new FileState(func, hash, size);
@@ -224,7 +226,8 @@ public class NativeHandler extends AbstractFormatHandler {
 			int updates = theirVersion.code-ourVersion.code;
 			for (int i = 0; i < updates; i++) {
 				int code = ourVersion.code+(i+1);
-				JsonObject ver = RequestHelper.loadJson(new URL(src, "versions/"+code+".json"), 2*M, new URL(src, "versions/"+code+".sig"));
+				JsonObject ver = RequestHelper.loadJson(src.resolve(Util.uriOfPath("versions/"+code+".json")), 2*M,
+						src.resolve(Util.uriOfPath("versions/"+code+".sig")));
 				checkManifestFlavor(ver, "update", IntPredicates.equals(1));
 				HashFunction func = HashFunction.byName(ver.getString("hash_function", DEFAULT_HASH_FUNCTION));
 				for (Object o : ver.getArray("changes")) {
@@ -257,12 +260,12 @@ public class NativeHandler extends AbstractFormatHandler {
 						Log.info("Skipping "+path+" as it's not eligible for our selected flavors");
 						continue;
 					}
-					URL fallbackUrl = toHash == null ? null : new URL(src, blobPath(toHash));
-					URL url;
+					URI fallbackUrl = toHash == null ? null : src.resolve(Util.uriOfPath(blobPath(toHash)));
+					URI url;
 					if (urlStr == null) {
 						url = fallbackUrl;
 					} else {
-						url = new URL(urlStr);
+						url = new URI(urlStr);
 					}
 					if (plan.files.containsKey(path)) {
 						FileToDownloadWithCode to = plan.files.get(path);

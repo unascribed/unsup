@@ -2,7 +2,8 @@ package com.unascribed.sup.handler;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,6 +26,7 @@ import com.unascribed.sup.Log;
 import com.unascribed.sup.MMCUpdater;
 import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.SysProps;
+import com.unascribed.sup.Util;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
@@ -39,9 +41,9 @@ import com.unascribed.sup.util.Iterables;
 
 public class PackwizHandler extends AbstractFormatHandler {
 	
-	public static CheckResult check(URL src) throws IOException {
+	public static CheckResult check(URI src) throws IOException, URISyntaxException {
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
-		Toml pack = RequestHelper.loadToml(src, 4*K, new URL(src, "unsup.sig"));
+		Toml pack = RequestHelper.loadToml(src, 4*K, src.resolve("unsup.sig"));
 		String fmt = pack.getString("pack-format");
 		if (!fmt.equals("unsup-packwiz") && (!fmt.startsWith("packwiz:") || FlexVerComparator.compare("packwiz:1.1.0", fmt) < 0))
 			throw new IOException("Cannot read unknown pack-format "+fmt);
@@ -109,7 +111,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 			pwstate.put("lastIndexHash", indexDoublet);
 			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 			PuppetHandler.updateSubtitle("Calculating update");
-			Toml index = RequestHelper.loadToml(new URL(src, indexMeta.getString("file")), 8*M,
+			Toml index = RequestHelper.loadToml(src.resolve(Util.uriOfPath(indexMeta.getString("file"))), 8*M,
 					indexFunc, indexMeta.getString("hash"));
 			Toml unsup = null;
 			List<FlavorGroup> unpickedGroups = new ArrayList<>();
@@ -145,7 +147,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 			if (ourFlavors == null) ourFlavors = new JsonArray();
 			if (pack.containsTable("versions") && pack.getTable("versions").containsPrimitive("unsup")) {
 				try {
-					unsup = RequestHelper.loadToml(new URL(src, "unsup.toml"), 64*K, null);
+					unsup = RequestHelper.loadToml(src.resolve("unsup.toml"), 64*K, null);
 				} catch (FileNotFoundException e) {
 					Log.debug("unsup is in the versions table, but there's no unsup.toml");
 				}
@@ -273,12 +275,12 @@ public class PackwizHandler extends AbstractFormatHandler {
 						continue;
 					}
 					metafileFutures.add(svc.submit(() -> {
-						return new Metafile(name, path, hash, RequestHelper.loadToml(new URL(src, path), 8*K, func, hash));
+						return new Metafile(name, path, hash, RequestHelper.loadToml(src.resolve(Util.uriOfPath(path)), 8*K, func, hash));
 					}));
 				} else {
 					FilePlan f = new FilePlan();
 					f.state = new FileState(func, hash, -1);
-					f.url = new URL(src, path.replace(" ", "%20"));
+					f.url = src.resolve(Util.uriOfPath(path));
 					toDelete.remove(path);
 					postState.put(path, f.state);
 					if (!plan.expectedState.containsKey(path)) {
@@ -426,7 +428,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				}
 				String url = download.getString("url");
 				if (url != null) {
-					f.url = new URL(url);
+					f.url = new URI(url);
 				} else {
 					String mode = download.getString("mode");
 					if (Bases.b64ToString("bWV0YWRhdGE6Y3Vyc2Vmb3JnZQ==").equals(mode)) {
@@ -438,8 +440,8 @@ public class PackwizHandler extends AbstractFormatHandler {
 						String l = str.substring(0, i);
 						String r = str.substring(i);
 						while (r.startsWith("0") && r.length() > 1) r = r.substring(1);
-						f.url = new URL(String.format(Bases.b64ToString("aHR0cHM6Ly9tZWRpYWZpbGV6LmZvcmdlY2RuLm5ldC9maWxlcy8lcy8lcy8lcw=="),
-								l, r, metafile.getString(Bases.b64ToString("ZmlsZW5hbWU=")).replace("+", "%2B")));
+						f.url = new URI(String.format(Bases.b64ToString("aHR0cHM6Ly9tZWRpYWZpbGV6LmZvcmdlY2RuLm5ldC9maWxlcy8lcy8lcy8="), l, r))
+								.resolve(Util.uriOfPath(metafile.getString(Bases.b64ToString("ZmlsZW5hbWU="))));
 					} else {
 						throw new IOException("Cannot update "+path+" - unrecognized download mode "+mode);
 					}
