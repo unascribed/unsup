@@ -1,46 +1,58 @@
 {
-    "components":[{
-        "cachedName":"LWJGL 2",
-        "cachedVersion":"2.9.4-nightly-20150209",
-        "cachedVolatile":true,
-        "dependencyOnly":true,
-        "uid":"org.lwjgl",
-        "version":"2.9.4-nightly-20150209"
-    },{
-        "cachedName":"Minecraft",
-        "cachedRequires":[{
-            "suggests":"2.9.4-nightly-20150209",
-            "uid":"org.lwjgl"
-        }],
-        "cachedVersion":"1.4.7",
-        "important":true,
-        "uid":"net.minecraft",
-        "version":"1.4.7"
-    },{
-        "cachedName":"ObjectWeb ASM",
-        "cachedVersion":"5.2",
-        "uid":"org.ow2.asm"
-    },{
-        "cachedName":"Forge",
-        "cachedRequires":[{
-            "equals":"1.4.7",
-            "uid":"net.minecraft"
-        }],
-        "cachedVersion":"6.6.2.534",
-        "uid":"net.minecraftforge",
-        "version":"6.6.2.534"
-    },{
-        "cachedName":"LiteLoader",
-        "cachedVersion":"1.4.7_00",
-        "uid":"com.mumfrey.liteloader"
-    },{
-        "cachedName":"NilLoader",
-        "cachedVersion":"1.2.2-pre5",
-        "uid":"com.unascribed.nilloader"
-    },{
-        "cachedName":"unsup",
-        "cachedVersion":"0.2.3",
-        "uid":"com.unascribed.unsup"
-    }],
-    "formatVersion":1
+    "components": [
+        {
+            "cachedName": "LWJGL 2",
+            "cachedVersion": "2.9.4-nightly-20150209",
+            "cachedVolatile": true,
+            "dependencyOnly": true,
+            "uid": "org.lwjgl",
+            "version": "2.9.4-nightly-20150209"
+        },
+        {
+            "cachedName": "Minecraft",
+            "cachedRequires": [
+                {
+                    "suggests": "2.9.4-nightly-20150209",
+                    "uid": "org.lwjgl"
+                }
+            ],
+            "cachedVersion": "1.4.7",
+            "important": true,
+            "uid": "net.minecraft",
+            "version": "1.4.7"
+        },
+        {
+            "cachedName": "ObjectWeb ASM",
+            "cachedVersion": "5.2",
+            "uid": "org.ow2.asm"
+        },
+        {
+            "cachedName": "Forge",
+            "cachedRequires": [
+                {
+                    "equals": "1.4.7",
+                    "uid": "net.minecraft"
+                }
+            ],
+            "cachedVersion": "6.6.2.534",
+            "uid": "net.minecraftforge",
+            "version": "6.6.2.534"
+        },
+        {
+            "cachedName": "LiteLoader",
+            "cachedVersion": "1.4.7_00",
+            "uid": "com.mumfrey.liteloader"
+        },
+        {
+            "cachedName": "NilLoader",
+            "cachedVersion": "1.2.2-pre5",
+            "uid": "com.unascribed.nilloader"
+        },
+        {
+            "cachedName": "unsup",
+            "cachedVersion": "0.2.3",
+            "uid": "com.unascribed.unsup"
+        }
+    ],
+    "formatVersion": 1
 }

@@ -229,7 +229,7 @@ public class Agent {
 			try {
 				config = QDIni.load(configFile);
 				cleanup.add(() -> config = null);
-				Log.info("Found and loaded unsup.ini. What secrets does it hold?");
+				Log.debug("Found and loaded unsup.ini. What secrets does it hold?");
 			} catch (Exception e) {
 				Log.error("Found unsup.ini, but couldn't parse it! Exiting.", e);
 				exit(EXIT_CONFIG_ERROR);
