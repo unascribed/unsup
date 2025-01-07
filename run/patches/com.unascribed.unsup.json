@@ -2,10 +2,10 @@
     "formatVersion": 1,
     "name": "unsup",
     "uid": "com.unascribed.unsup",
-    "version": "0.3.0-pre3",
+    "version": "0.3.0-rc2.pre1",
     "+agents": [
         {
-            "name": "com.unascribed:unsup:0.3.0-pre3",
+            "name": "com.unascribed:unsup:0.3.0-rc2.pre1",
             "url": "https://repo.sleeping.town"
         }
     ]

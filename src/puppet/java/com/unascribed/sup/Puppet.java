@@ -94,8 +94,6 @@ public class Puppet {
 	
 	
 	public static void main(String[] args) {
-		log("INFO", "Iä! Iä! Cthulhu fhtagn!");
-		
 		SwingHelper.fixSwing();
 		
 		MetalLookAndFeel.setCurrentTheme(new OceanTheme());

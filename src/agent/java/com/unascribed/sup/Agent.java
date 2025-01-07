@@ -490,7 +490,7 @@ public class Agent {
 				} else if (from.sizeMatches(size)) {
 					String hash = RequestHelper.hash(from.func, dest);
 					if (from.hash.equals(hash)) {
-						Log.info(path+" matches the expected from hash");
+						Log.debug(path+" matches the expected from hash");
 					} else if (to.sizeMatches(size) && to.hash.equals(from.func == to.func ? hash : RequestHelper.hash(to.func, dest))) {
 						Log.info(path+" matches the expected to hash, so has already been updated locally. Skipping");
 						continue;

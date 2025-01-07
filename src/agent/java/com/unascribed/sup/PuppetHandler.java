@@ -44,13 +44,12 @@ public class PuppetHandler {
 	}
 	
 	public static void create() {
-		Log.info("Attempting to summon a puppet for GUI feedback...");
 		out: {
 			URI uri;
 			try {
 				uri = Agent.class.getProtectionDomain().getCodeSource().getLocation().toURI();
 			} catch (URISyntaxException e) {
-				Log.warn("Failed to find our own JAR file or directory.");
+				Log.warn("Cannot summon Puppet: Failed to find our own JAR file or directory.");
 				puppet = null;
 				break out;
 			}
@@ -58,7 +57,7 @@ public class PuppetHandler {
 			try {
 				ourPath = new File(uri);
 			} catch (IllegalArgumentException e) {
-				Log.warn("Failed to find our own JAR file or directory.");
+				Log.warn("Cannot summon Puppet: Failed to find our own JAR file or directory.");
 				puppet = null;
 				break out;
 			}
@@ -78,7 +77,7 @@ public class PuppetHandler {
 				}
 			}
 			if (java == null) {
-				Log.warn("Failed to find Java. Looked in "+javaBin+", but can't find a known executable.");
+				Log.warn("Cannot summon Puppet: Failed to find Java. Looked in "+javaBin+", but can't find a known executable.");
 				puppet = null;
 			} else {
 				Process p;
@@ -101,12 +100,12 @@ public class PuppetHandler {
 					puppet = null;
 					break out;
 				}
-				Log.info("Dark spell successful. Puppet summoned.");
+				Log.debug("Dark spell successful. Puppet summoned.");
 				puppet = p;
 			}
 		}
 		if (puppet == null) {
-			Log.warn("Failed to summon a puppet. Continuing without a GUI.");
+			Log.warn("Failed to summon a Puppet. Continuing without a GUI.");
 		} else {
 			Thread puppetErr = new Thread(() -> {
 				try (BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getErrorStream(), StandardCharsets.UTF_8))) {
@@ -124,7 +123,7 @@ public class PuppetHandler {
 			}, "unsup puppet error printer");
 			puppetErr.setDaemon(true);
 			puppetErr.start();
-			Log.info("Waiting for the puppet to come to life...");
+			Log.debug("Waiting for the Puppet to come to life...");
 			BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getInputStream(), StandardCharsets.UTF_8));
 			String firstLine = null;
 			try {
@@ -141,7 +140,7 @@ public class PuppetHandler {
 				puppet.destroy();
 				puppet = null;
 			} else {
-				Log.info("Puppet is alive! Continuing.");
+				Log.debug("Puppet is alive! Continuing.");
 				puppetOut = new BufferedOutputStream(puppet.getOutputStream(), 512);
 				Thread puppetThread = new Thread(() -> {
 					try (BufferedReader br2 = br) {
