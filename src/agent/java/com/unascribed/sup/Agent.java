@@ -615,7 +615,11 @@ public class Agent {
 					DownloadedFile df;
 					long[] contributedProgress = {0};
 					try {
-						Log.info("Downloading "+path+" from "+describe(f.url));
+						if ("file".equals(f.url.getScheme())) {
+							Log.info("Copying "+path);
+						} else {
+							Log.info("Downloading "+path+" from "+describe(f.url));
+						}
 						df = downloadAndCheckHash(tmp, progress, updateProgress, path, f, f.url, to, contributedProgress);
 						if (to.size == -1) progress.incrementAndGet();
 					} catch (Throwable t) {
@@ -736,8 +740,7 @@ public class Agent {
 		if (url == null) return "(null)";
 		if (SysProps.DEBUG) return url.toString();
 		String host = url.getHost();
-		if (host == null) return "[null]";
-		if (host.isEmpty()) return url.toString();
+		if (host == null || host.isEmpty()) return url.toString();
 		Matcher m = domainPattern.matcher(host);
 		String domain;
 		if (m.find()) {

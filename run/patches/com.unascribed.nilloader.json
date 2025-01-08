@@ -2,10 +2,10 @@
     "formatVersion": 1,
     "name": "NilLoader",
     "uid": "com.unascribed.nilloader",
-    "version": "1.3.3",
+    "version": "1.3.4",
     "+agents": [
         {
-            "name": "com.unascribed:nilloader:1.3.3",
+            "name": "com.unascribed:nilloader:1.3.4",
             "realurl": "https://repo.sleeping.town",
             "url": "file:///home/una/.m2/repository"
         }
