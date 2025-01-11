@@ -38,7 +38,7 @@ import org.objectweb.asm.tree.LdcInsnNode;
 base {
 	group = 'com.unascribed'
 	archivesName = 'unsup'
-	version = '0.3.0-rc2.pre1'
+	version = '1.0-rc2'
 }
 
 sourceCompatibility = targetCompatibility = 8
@@ -65,21 +65,22 @@ configurations {
 }
 
 dependencies {
+
+	def shadeCis = {
+		shade(it) {
+			transitive = false
+		}
+	}
+
 	shade 'com.grack:nanojson:1.9'
 	shade 'net.i2p.crypto:eddsa:0.3.0'
 	shade('com.squareup.okhttp3:okhttp:4.12.0') {
 		exclude group: 'org.jetbrains'
 		exclude module: 'kotlin-stdlib-common'
 	}
-	shade('com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0') {
-		transitive = false
-	}
-	shade('com.squareup.okhttp3:okhttp-tls:4.12.0') {
-		transitive = false
-	}
-	shade('com.moandjiezana.toml:toml4j:0.7.2') {
-		transitive = false
-	}
+	shadeCis 'com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0'
+	shadeCis 'com.squareup.okhttp3:okhttp-tls:4.12.0'
+	shadeCis 'com.moandjiezana.toml:toml4j:0.7.2'
 	shade 'com.unascribed:flexver-java:1.1.1'
 }
 

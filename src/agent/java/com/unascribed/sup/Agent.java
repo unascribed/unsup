@@ -11,6 +11,7 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.UnknownHostException;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
@@ -404,10 +405,13 @@ public class Agent {
 		PuppetHandler.updateTitle("Checking for updates...", false);
 		try {
 			CheckResult res = null;
+			Log.debug("Retrieving from "+src+" in "+fmt+" format");
 			if (fmt == SourceFormat.UNSUP) {
 				res = NativeHandler.check(src);
 			} else if (fmt == SourceFormat.PACKWIZ) {
 				res = PackwizHandler.check(src);
+			} else {
+				throw new AssertionError();
 			}
 			if (res != null) {
 				sourceVersion = res.ourVersion.name;
@@ -678,7 +682,13 @@ public class Agent {
 				File dest = new File(path);
 				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
 					throw new IOException("Refusing to download to a file outside of working directory");
-				Path destPath = dest.toPath();
+				Path destPath;
+				try {
+					destPath = dest.toPath();
+				} catch (InvalidPathException e) {
+					Log.error("Destination file path "+dest+" is not valid on this OS/filesystem/charset combination!", e);
+					continue;
+				}
 				if (dest.getParentFile() != null) Files.createDirectories(dest.getParentFile().toPath());
 				if (moveAside.contains(path)) {
 					Files.move(destPath, destPath.resolveSibling(destPath.getFileName().toString()+".orig"), StandardCopyOption.REPLACE_EXISTING);

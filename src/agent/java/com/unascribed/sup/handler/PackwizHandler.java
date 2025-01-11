@@ -4,6 +4,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -395,7 +396,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				}
 				
 				List<String> mfFlavors = metafileFlavors.get(mf.name);
-				Log.debug("Flavors for "+mf.name+": "+mfFlavors);
+				if (mfFlavors != null) Log.debug("Flavors for "+mf.name+": "+mfFlavors);
 				if (mfFlavors != null && !Iterables.intersects(mfFlavors, ourFlavors)) {
 					Log.info("Skipping "+mf.target+" as it's not eligible for our selected flavors");
 					continue;
@@ -441,7 +442,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 						String r = str.substring(i);
 						while (r.startsWith("0") && r.length() > 1) r = r.substring(1);
 						f.url = new URI(String.format(Bases.b64ToString("aHR0cHM6Ly9tZWRpYWZpbGV6LmZvcmdlY2RuLm5ldC9maWxlcy8lcy8lcy8="), l, r))
-								.resolve(Util.uriOfPath(metafile.getString(Bases.b64ToString("ZmlsZW5hbWU="))));
+								.resolve(URLEncoder.encode(metafile.getString(Bases.b64ToString("ZmlsZW5hbWU=")), "UTF-8"));
 					} else {
 						throw new IOException("Cannot update "+path+" - unrecognized download mode "+mode);
 					}
