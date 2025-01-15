@@ -173,8 +173,7 @@ public class Agent {
 			PuppetHandler.tellPuppet("[openTimeout]1250:visible=true");
 			
 			setupOkHttp();
-			
-			checkForUpdate(fmt, src);
+			checkForUpdate(fmt, src, SysProps.DISABLE_RECONCILIATION, false);
 
 			if (awaitingExit) Agent.blockForever();
 
@@ -401,24 +400,49 @@ public class Agent {
 				.build();
 	}
 	
-	private static void checkForUpdate(SourceFormat fmt, URI src) {
+	private static boolean checkForUpdate(SourceFormat fmt, URI src, boolean autoaccept, boolean reentering) {
 		PuppetHandler.updateTitle("Checking for updates...", false);
 		try {
 			CheckResult res = null;
-			Log.debug("Retrieving from "+src+" in "+fmt+" format");
-			if (fmt == SourceFormat.UNSUP) {
-				res = NativeHandler.check(src);
-			} else if (fmt == SourceFormat.PACKWIZ) {
-				res = PackwizHandler.check(src);
+			if ("merge".equals(src.getScheme())) {
+				Log.warn("Using an experimental feature: Manifest merging");
+				JsonObject realState = state;
+				JsonObject mergeStates = realState.getObject("mergeStates");
+				if (mergeStates == null) {
+					mergeStates = new JsonObject();
+					realState.put("mergeStates", mergeStates);
+				}
+				for (String s : src.getRawSchemeSpecificPart().split(";")) {
+					JsonObject thisState = mergeStates.getObject(s, new JsonObject());
+					state = thisState;
+					if (checkForUpdate(fmt, new URI(s), autoaccept, true)) {
+						// if the user has accepted an update, then accept the rest of them implicitly
+						autoaccept = true;
+					}
+					mergeStates.put(s, state);
+				}
+				state = realState;
+				saveState();
+				return true;
 			} else {
-				throw new AssertionError();
+				Log.debug("Retrieving from "+src+" in "+fmt+" format");
+				if (fmt == SourceFormat.UNSUP) {
+					res = NativeHandler.check(src, autoaccept);
+				} else if (fmt == SourceFormat.PACKWIZ) {
+					res = PackwizHandler.check(src, autoaccept);
+				} else {
+					throw new AssertionError();
+				}
 			}
 			if (res != null) {
 				sourceVersion = res.ourVersion.name;
 				if (res.plan != null) {
 					applyUpdate(res);
+					if (!reentering) saveState();
+					return true;
 				}
 			}
+			return false;
 		} catch (Throwable t) {
 			Log.warn("Error while updating", t);
 			PuppetHandler.tellPuppet(":expedite=openTimeout");
@@ -427,8 +451,8 @@ public class Agent {
 					PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
 				Log.info("User cancelled error dialog! Exiting.");
 				exit(EXIT_USER_REQUEST);
-				return;
 			}
+			return false;
 		} finally {
 			PuppetHandler.tellPuppet(":subtitle=");
 		}
@@ -711,7 +735,6 @@ public class Agent {
 			}
 			state = plan.newState;
 			state.put("current_version", res.theirVersion.toJson());
-			saveState();
 			try {
 				updatedComponents = MMCUpdater.apply(res.componentVersions);
 			} catch (Throwable t) {

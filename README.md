@@ -41,7 +41,7 @@ It also has a built-in concept of *environments* and *flavors*, allowing it to
 be used to manage server installs rather than just clients, and allowing users
 to pick between multiple mutually incompatible mod sets.
 
-As of 0.3.0, unsup is also capable of updating MultiMC's "components", including
+As of 1.0, unsup is also capable of updating MultiMC's "components", including
 unsup itself if it is added as one. This means you can update mod loaders or
 Minecraft itself.
 

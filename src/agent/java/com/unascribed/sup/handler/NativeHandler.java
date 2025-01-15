@@ -15,7 +15,6 @@ import com.grack.nanojson.JsonParserException;
 import com.unascribed.sup.Agent;
 import com.unascribed.sup.Log;
 import com.unascribed.sup.PuppetHandler;
-import com.unascribed.sup.SysProps;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
@@ -36,7 +35,7 @@ public class NativeHandler extends AbstractFormatHandler {
 		int code;
 	}
 	
-	public static CheckResult check(URI src) throws IOException, JsonParserException, URISyntaxException {
+	public static CheckResult check(URI src, boolean autoaccept) throws IOException, JsonParserException, URISyntaxException {
 		Log.info("Loading unsup-format manifest from "+src);
 		JsonObject manifest = RequestHelper.loadJson(src, 32*K, src.resolve("manifest.sig"));
 		checkManifestFlavor(manifest, "root", IntPredicates.equals(1));
@@ -207,12 +206,14 @@ public class NativeHandler extends AbstractFormatHandler {
 		if (theirVersion.code > ourVersion.code) {
 			if (!bootstrapping) {
 				Log.info("Update available! We have "+ourVersion+", they have "+theirVersion);
-				AlertOption updateResp = SysProps.DISABLE_RECONCILIATION ? AlertOption.YES : PuppetHandler.openAlert("Update available",
-						"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
-						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
-				if (updateResp == AlertOption.NO) {
-					Log.info("Ignoring update by user choice.");
-					return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
+				if (!autoaccept) {
+					AlertOption updateResp = PuppetHandler.openAlert("Update available",
+							"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
+							AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
+					if (updateResp == AlertOption.NO) {
+						Log.info("Ignoring update by user choice.");
+						return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());
+					}
 				}
 			}
 			UpdatePlan<FileToDownloadWithCode> plan = new UpdatePlan<>(bootstrapping, newState);

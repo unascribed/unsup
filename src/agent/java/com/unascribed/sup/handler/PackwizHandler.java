@@ -42,7 +42,7 @@ import com.unascribed.sup.util.Iterables;
 
 public class PackwizHandler extends AbstractFormatHandler {
 	
-	public static CheckResult check(URI src) throws IOException, URISyntaxException {
+	public static CheckResult check(URI src, boolean autoaccept) throws IOException, URISyntaxException {
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
 		Toml pack = RequestHelper.loadToml(src, 4*K, src.resolve("unsup.sig"));
 		String fmt = pack.getString("pack-format");
@@ -100,8 +100,8 @@ public class PackwizHandler extends AbstractFormatHandler {
 				interlude = "";
 			}
 			boolean bootstrapping = !pwstate.containsKey("lastIndexHash");
-			if (!bootstrapping && actualUpdate) {
-				AlertOption updateResp = SysProps.DISABLE_RECONCILIATION ? AlertOption.YES : PuppetHandler.openAlert("Update available",
+			if (!bootstrapping && actualUpdate && !autoaccept) {
+				AlertOption updateResp = PuppetHandler.openAlert("Update available",
 						"<b>An update"+interlude+" is available!</b><br/>Do you want to install it?",
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
