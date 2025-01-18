@@ -1,10 +1,9 @@
 .gradle
 /build
 /bin
-/run/minecraft/*
-!/run/minecraft/unsup.ini
 .classpath
 .project
 .settings
 out
 .idea
+/run
