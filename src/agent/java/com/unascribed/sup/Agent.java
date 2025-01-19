@@ -344,6 +344,8 @@ public class Agent {
 				// certs not shipped by old Mojang Java (they're staying on some antique version for Intel Windows driver bs reasons)
 				.addTrustedCertificate(CACerts.ISRG_ROOT_X1) // Let's Encrypt
 				.addTrustedCertificate(CACerts.USERTRUST_ECC) // Sectigo (GitHub)
+				.addTrustedCertificate(CACerts.AMAZON_ROOT_CA_1) // CurseForge
+				.addTrustedCertificate(CACerts.GTS_ROOT_R4) // Modrinth
 				.build();
 		OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
 			.connectTimeout(30, TimeUnit.SECONDS)
