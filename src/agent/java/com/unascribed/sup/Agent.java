@@ -695,44 +695,56 @@ public class Agent {
 		PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
 		synchronized (dangerMutex) {
 			PuppetHandler.updateSubtitle("Applying changes. Do not force close the updater.");
-			for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
-				String path = en.getKey();
-				FilePlan f = en.getValue();
-				FileState to = f.state;
-				DownloadedFile df = downloads.get(f);
-				if (df == null && to.size != 0) {
-					// Conflict dialog was rejected, skip this file.
-					continue;
-				}
-				File dest = new File(path);
-				if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
-					throw new IOException("Refusing to download to a file outside of working directory");
-				Path destPath;
-				try {
-					destPath = dest.toPath();
-				} catch (InvalidPathException e) {
-					Log.error("Destination file path "+dest+" is not valid on this OS/filesystem/charset combination!", e);
-					continue;
-				}
-				if (dest.getParentFile() != null) Files.createDirectories(dest.getParentFile().toPath());
-				if (moveAside.contains(path)) {
-					Files.move(destPath, destPath.resolveSibling(destPath.getFileName().toString()+".orig"), StandardCopyOption.REPLACE_EXISTING);
-				}
-				if (to.size == 0) {
-					if (to.hash == null) {
-						Log.info("Deleting "+path);
-						Files.deleteIfExists(destPath);
-					} else if (dest.exists()) {
-						try (FileOutputStream fos = new FileOutputStream(dest)) {
-							// open and then immediately close the file to overwrite it with nothing
-						}
-					} else {
-						dest.createNewFile();
+			for (int pass = 0; pass < 2; pass++) {
+				for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
+					String path = en.getKey();
+					FilePlan f = en.getValue();
+					FileState to = f.state;
+					DownloadedFile df = downloads.get(f);
+					if (df == null && to.size != 0) {
+						// Conflict dialog was rejected, skip this file.
+						continue;
 					}
-				} else {
-					assert df != null;
-					Files.move(df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
-				}
+					File dest = new File(path);
+					if (!dest.getAbsolutePath().startsWith(wd.getAbsolutePath()+File.separator))
+						throw new IOException("Refusing to download to a file outside of working directory");
+					Path destPath;
+					try {
+						destPath = dest.toPath();
+					} catch (InvalidPathException e) {
+						if (pass == 0) Log.error("Destination file path "+dest+" is not valid on this OS/filesystem/charset combination!", e);
+						continue;
+					}
+					if (pass == 1 && dest.getParentFile() != null) Files.createDirectories(dest.getParentFile().toPath());
+					if (pass == 0 && moveAside.contains(path)) {
+						Log.debug("Displacing "+path);
+						Files.move(destPath, destPath.resolveSibling(destPath.getFileName().toString()+".orig"), StandardCopyOption.REPLACE_EXISTING);
+					}
+					if (to.size == 0) {
+						if (to.hash == null) {
+							if (pass == 0 && Files.exists(destPath)) {
+								Log.info("Deleting "+path);
+								Files.delete(destPath);
+							}
+						} else if (dest.exists()) {
+							if (pass == 1) {
+								Log.debug("Blanking "+path);
+								try (FileOutputStream fos = new FileOutputStream(dest)) {
+									// open and then immediately close the file to overwrite it with nothing
+								}
+							}
+						} else {
+							if (pass == 1) {
+								Log.debug("Touching "+path);
+								dest.createNewFile();
+							}
+						}
+					} else if (pass == 1) {
+						Log.debug("Applying "+path);
+						assert df != null;
+						Files.move(df.file.toPath(), destPath, StandardCopyOption.REPLACE_EXISTING);
+					}
+			}
 			}
 			state = plan.newState;
 			state.put("current_version", res.theirVersion.toJson());
