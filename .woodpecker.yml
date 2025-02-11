@@ -13,16 +13,6 @@ steps:
       from_secret: maven_password
   commands:
   - gradle --no-daemon clean build publish -Punsup.ci
-- name: release
-  image: woodpeckerci/plugin-release
-  settings:
-    files:
-      - 'build/libs/*'
-    api_key:
-      from_secret: forgejo_key
-    prerelease: true
-    overwrite: true
-    title: 'Dev Snapshot'
 
 
 when:
