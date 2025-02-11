@@ -79,7 +79,8 @@ public class Puppet {
 	private static JLabel title, subtitle;
 	private static JProgressBar prog;
 	private static JThrobber throbber;
-	private static Image logo;
+	private static Image logo, logoLowres;
+	private static List<Image> logos;
 	
 	private static Color colorBackground = Color.BLACK;
 	private static Color colorTitle = Color.WHITE;
@@ -105,6 +106,10 @@ public class Puppet {
 		}
 		
 		logo = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup.png"));
+		logoLowres = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup-16.png"));
+		logos = new ArrayList<>();
+		logos.add(logo);
+		logos.add(logoLowres);
 		
 		System.out.println("unsup puppet ready");
 		
@@ -390,7 +395,7 @@ public class Puppet {
 	
 	private static void buildUi() {
 		frame = new JFrame("unsup v"+Util.VERSION);
-		frame.setIconImage(logo);
+		frame.setIconImages(logos);
 		frame.setSize(512, 128);
 		frame.setLocationRelativeTo(null);
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
@@ -508,7 +513,7 @@ public class Puppet {
 	}
 	
 	private static void configureOptionDialog(JOptionPane pane, JDialog dialog) {
-		dialog.setIconImage(logo);
+		dialog.setIconImages(logos);
 		dialog.setModal(true);
 		dialog.setBackground(colorBackground);
 		dialog.setForeground(colorDialog);
@@ -563,7 +568,7 @@ public class Puppet {
 	
 	private static void openFlavorDialog(String name, List<FlavorGroup> groups) {
 		JDialog dialog = new JDialog(frame != null && frame.isVisible() ? frame : null, "Select flavors");
-		dialog.setIconImage(logo);
+		dialog.setIconImages(logos);
 		dialog.setModal(true);
 		dialog.setBackground(colorBackground);
 		dialog.setForeground(colorDialog);

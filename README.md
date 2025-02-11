@@ -64,7 +64,7 @@ large scale. That someone could be you — please let me know if it works well!
 ## GUI
 unsup has a minimal and elegant GUI that works everywhere (yes, including
 macOS) and can have all of its colors customized to make it fit in with your
-branding. It ships with a dark theme with teal accents.
+branding. It ships with a dark theme with minty accents.
 
 ![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/bootstrapping.png)
 
