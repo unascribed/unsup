@@ -1,4 +1,0 @@
-rootProject.name = 'unsup-creator'
-
-include 'unsup'
-project(':unsup').projectDir = rootProject.projectDir.getParentFile()
