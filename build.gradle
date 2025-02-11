@@ -12,8 +12,8 @@ buildscript {
 }
 
 plugins {
-	id 'com.github.ben-manes.versions' version '0.51.0'
-	id 'com.gradleup.shadow' version '8.3.5'
+	id 'com.github.ben-manes.versions' version '0.52.0'
+	id 'com.gradleup.shadow' version '8.3.6'
 	id 'java-library'
 	id 'maven-publish'
 }
@@ -38,7 +38,7 @@ import org.objectweb.asm.tree.LdcInsnNode;
 base {
 	group = 'com.unascribed'
 	archivesName = 'unsup'
-	version = '1.0'
+	version = '1.1'+(project.hasProperty("unsup.ci") ? '-SNAPSHOT' : '')
 }
 
 sourceCompatibility = targetCompatibility = 8
@@ -286,6 +286,17 @@ if (project.hasProperty("unsup.signifyKey")) {
 		commandLine 'signify', '-S', '-s', project.getProperty("unsup.signifyKey"), '-m', proguardJar.archivePath.absolutePath, '-x', sigFile.absolutePath
 		standardInput pipe
 	}
+} else if (project.hasProperty("unsup.ci")) {
+	task sign(type: Exec) {
+		doFirst {
+			file('/tmp/signify.sec').text = System.getenv("SIGNIFY_KEY")
+		}
+		dependsOn proguardJar
+		inputs.file proguardJar.archivePath
+		outputs.file sigFile
+		commandLine 'signify', '-S', '-s', '/tmp/signify.sec', '-m', proguardJar.archivePath.absolutePath, '-x', sigFile.absolutePath
+		standardInput new java.io.ByteArrayInputStream(System.getenv("SIGNIFY_PASSWORD").getBytes("UTF-8"))
+	}
 }
 
 publishing {
@@ -296,6 +307,14 @@ publishing {
 				credentials {
 					username project.hasProperty("publish-username") ? project.getProperty("publish-username") : null
 					password project.hasProperty("publish-password") ? project.getProperty("publish-password") : null
+				}
+			}
+		} else if (project.hasProperty("unsup.ci")) {
+			maven {
+				url "https://repo-api.sleeping.town/"
+				credentials {
+					username System.getenv("MAVEN_USERNAME")
+					password System.getenv("MAVEN_PASSWORD")
 				}
 			}
 		}
@@ -310,7 +329,7 @@ publishing {
 			version = project.version
 
 			artifact proguardJar
-			if (project.hasProperty("unsup.signifyKey")) {
+			if (project.hasProperty("unsup.ci") || project.hasProperty("unsup.signifyKey")) {
 				artifact(sigFile) {
 					builtBy sign
 					extension 'jar.sig'

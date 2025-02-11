@@ -1,0 +1,20 @@
+steps:
+- name: Build
+  image: gradle:8.12.1-jdk21
+  environment:
+    TERM: dumb
+    SIGNIFY_KEY:
+      from_secret: signify_key
+    SIGNIFY_PASSWORD:
+      from_secret: signify_password
+    MAVEN_USERNAME:
+      from_secret: maven_username
+    MAVEN_PASSWORD:
+      from_secret: maven_password
+  commands:
+  - gradle --no-daemon clean build publish -Punsup.ci
+
+when:
+  - branch: "trunk"
+    event: push
+  - event: manual
