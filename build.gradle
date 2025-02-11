@@ -294,7 +294,7 @@ if (project.hasProperty("unsup.signifyKey")) {
 		dependsOn proguardJar
 		inputs.file proguardJar.archivePath
 		outputs.file sigFile
-		commandLine 'signify', '-S', '-s', '/tmp/signify.sec', '-m', proguardJar.archivePath.absolutePath, '-x', sigFile.absolutePath
+		commandLine './.ci/signify-openbsd', '-S', '-s', '/tmp/signify.sec', '-m', proguardJar.archivePath.absolutePath, '-x', sigFile.absolutePath
 		standardInput new java.io.ByteArrayInputStream(System.getenv("SIGNIFY_PASSWORD").getBytes("UTF-8"))
 	}
 }
