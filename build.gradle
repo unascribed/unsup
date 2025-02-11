@@ -289,7 +289,7 @@ if (project.hasProperty("unsup.signifyKey")) {
 } else if (project.hasProperty("unsup.ci")) {
 	task sign(type: Exec) {
 		doFirst {
-			file('/tmp/signify.sec').text = System.getenv("SIGNIFY_KEY")
+			file('/tmp/signify.sec').text = System.getenv("SIGNIFY_KEY")+'\n'
 		}
 		dependsOn proguardJar
 		inputs.file proguardJar.archivePath
