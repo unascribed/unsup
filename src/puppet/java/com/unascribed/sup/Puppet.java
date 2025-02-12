@@ -21,6 +21,8 @@ import javax.annotation.NotNull;
 import com.unascribed.sup.SysProps.PuppetMode;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
+import com.unascribed.sup.opengl.GLPuppet;
+import com.unascribed.sup.swing.SwingPuppet;
 
 public class Puppet {
 	
@@ -31,14 +33,15 @@ public class Puppet {
 		boolean didOverride = false;
 		PuppetDelegate delTmp = null;
 		if (mode == PuppetMode.AUTO) {
-			if (System.getProperty("javax.accessibility.assistive_technologies") != null) {
+			if (System.getProperty("javax.accessibility.assistive_technologies") != null
+					|| System.getProperty("assistive_technologies") != null) {
 				log("INFO", "Forcing Swing puppet as assistive technologies may be present");
 				mode = PuppetMode.SWING;
 				didOverride = true;
 			}
 		}
 		if (didOverride) {
-			log("INFO", "Pass -Dunsup.forcePuppetImplementation=opengl to override");
+			log("INFO", "Pass -Dunsup.puppetMode=opengl to override");
 		}
 		if (mode == PuppetMode.AUTO || mode == PuppetMode.OPENGL) {
 			Throwable error = null;
@@ -46,6 +49,7 @@ public class Puppet {
 				delTmp = GLPuppet.start();
 				if (delTmp != null) {
 					log("DEBUG", "Initialized OpenGL puppet");
+					log("DEBUG", "Pass -Dunsup.puppetMode=swing to override");
 				}
 			} catch (Throwable t) {
 				error = t;
@@ -293,7 +297,6 @@ public class Puppet {
 		log(flavor, msg);
 	}
 	
-
 	public static void reportCloseRequest() {
 		System.out.println("closeRequested");
 	}

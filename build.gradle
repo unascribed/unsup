@@ -46,6 +46,7 @@ sourceCompatibility = targetCompatibility = 8
 repositories { 
 	mavenCentral()
 	maven { url 'https://repo.sleeping.town' }
+	maven { url 'https://repo.unascribed.com' }
 }
 
 sourceSets {
@@ -86,7 +87,7 @@ dependencies {
 	shadeCis 'com.moandjiezana.toml:toml4j:0.7.2'
 	shade 'com.unascribed:flexver-java:1.1.1'
 	
-	lwjgl(it, '3.3.6', 'glfw', 'opengl')
+	lwjgl(it, '3.3.6', 'glfw', 'opengl', 'freetype')
 }
 
 jar {
@@ -100,7 +101,7 @@ shadowJar {
 	archiveClassifier = 'fat'
 	destinationDirectory.set(file('build/tmp'))
 	configurations = [project.configurations.shade]
-	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver", "org.objectweb"].each {
+	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver", "org.objectweb", "me.saharnooby"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it
 	}
 	from sourceSets.puppet.output

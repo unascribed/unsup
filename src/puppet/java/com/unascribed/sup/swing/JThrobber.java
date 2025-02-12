@@ -1,4 +1,4 @@
-package com.unascribed.sup;
+package com.unascribed.sup.swing;
 
 import java.awt.BasicStroke;
 import java.awt.Graphics;
@@ -11,6 +11,8 @@ import java.util.concurrent.TimeUnit;
 
 import javax.swing.JComponent;
 import javax.swing.SwingUtilities;
+
+import com.unascribed.sup.Puppet;
 
 public class JThrobber extends JComponent {
 	

@@ -80,6 +80,18 @@ public class PuppetHandler {
 			"lwjgl-opengl-3.3.6-natives-windows-x86.jar",
 			"lwjgl-opengl-3.3.6-natives-windows.jar",
 			"lwjgl-opengl-3.3.6.jar",
+			"lwjgl-freetype-3.3.6-natives-freebsd.jar",
+			"lwjgl-freetype-3.3.6-natives-linux-arm32.jar",
+			"lwjgl-freetype-3.3.6-natives-linux-arm64.jar",
+			"lwjgl-freetype-3.3.6-natives-linux-ppc64le.jar",
+			"lwjgl-freetype-3.3.6-natives-linux-riscv64.jar",
+			"lwjgl-freetype-3.3.6-natives-linux.jar",
+			"lwjgl-freetype-3.3.6-natives-macos-arm64.jar",
+			"lwjgl-freetype-3.3.6-natives-macos.jar",
+			"lwjgl-freetype-3.3.6-natives-windows-arm64.jar",
+			"lwjgl-freetype-3.3.6-natives-windows-x86.jar",
+			"lwjgl-freetype-3.3.6-natives-windows.jar",
+			"lwjgl-freetype-3.3.6.jar",
 	};
 	
 	private static final String[] copyableProps = {
@@ -148,18 +160,13 @@ public class PuppetHandler {
 					if (SysProps.PUPPET_MODE != PuppetMode.SWING) {
 						File tmp = new File(".unsup-tmp/natives");
 						tmp.mkdirs();
-						byte[] buf = new byte[16384];
 						for (String s : cpJars) {
 							URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s);
 							if (url != null) {
 								File out = new File(tmp, s);
 								try (FileOutputStream fos = new FileOutputStream(out);
 										InputStream is = url.openStream()) {
-									while (true) {
-										int read = is.read(buf);
-										if (read < 0) break;
-										fos.write(buf, 0, read);
-									}
+									Util.copy(is, fos);
 								}
 								out.deleteOnExit();
 								cp.add(out.getAbsolutePath());

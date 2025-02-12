@@ -1,21 +1,35 @@
-package com.unascribed.sup;
+package com.unascribed.sup.swing;
 
 import java.awt.BasicStroke;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontFormatException;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.Image;
+import java.awt.Point;
 import java.awt.RenderingHints;
-import java.awt.Toolkit;
+import java.awt.Transparency;
+import java.awt.color.ColorSpace;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
+import java.awt.image.ColorModel;
+import java.awt.image.ComponentColorModel;
+import java.awt.image.DataBuffer;
+import java.awt.image.DataBufferByte;
+import java.awt.image.Raster;
+import java.awt.image.WritableRaster;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Hashtable;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -51,9 +65,18 @@ import javax.swing.plaf.basic.BasicSplitPaneUI;
 import javax.swing.plaf.metal.MetalLookAndFeel;
 import javax.swing.plaf.metal.OceanTheme;
 
+import com.unascribed.sup.ColorChoice;
+import com.unascribed.sup.MessageType;
+import com.unascribed.sup.Puppet;
+import com.unascribed.sup.PuppetDelegate;
+import com.unascribed.sup.Util;
+import com.unascribed.sup.WindowIcons;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
 import com.unascribed.sup.util.SwingHelper;
+
+import me.saharnooby.qoi.QOIColorSpace;
+import me.saharnooby.qoi.QOIImage;
 
 import static javax.swing.SwingUtilities.invokeLater;
 
@@ -71,6 +94,7 @@ public class SwingPuppet {
 	private static JThrobber throbber;
 	private static Image logo, logoLowres;
 	private static List<Image> logos;
+	private static Font firaSans, firaSansBold, firaSansItalic, firaSansBoldItalic;
 	
 	private static final int[] colors = new int[ColorChoice.values().length];
 	
@@ -89,11 +113,16 @@ public class SwingPuppet {
 			return null;
 		}
 		
-		logo = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup.png"));
-		logoLowres = Toolkit.getDefaultToolkit().createImage(ClassLoader.getSystemResource("unsup-16.png"));
+		logo = convertToBufferedImage(WindowIcons.highres);
+		logoLowres = convertToBufferedImage(WindowIcons.lowres);
 		logos = new ArrayList<>();
 		logos.add(logo);
 		logos.add(logoLowres);
+		
+		firaSans = loadFont("FiraSans-Regular.ttf", Font.PLAIN);
+		firaSansBold = loadFont("FiraSans-Bold.ttf", Font.BOLD);
+		firaSansItalic = loadFont("FiraSans-Italic.ttf", Font.ITALIC);
+		firaSansBoldItalic = loadFont("FiraSans-BoldItalic.ttf", Font.BOLD|Font.ITALIC);
 		
 		return new PuppetDelegate() {
 			
@@ -203,6 +232,67 @@ public class SwingPuppet {
 		};
 	}
 	
+	// https://github.com/saharNooby/qoi-java-awt/blob/d3acab3d88e6437624a9cdce107ecfd73988adec/src/main/java/me/saharnooby/qoi/plugin/QOIImageReader.java
+
+	public static BufferedImage convertToBufferedImage(QOIImage image) {
+		int width = image.getWidth();
+		int height = image.getHeight();
+		int channels = image.getChannels();
+
+		boolean hasAlpha = channels == 4;
+
+		DataBufferByte buffer = new DataBufferByte(image.getPixelData(), width * height * channels);
+
+		WritableRaster raster = Raster.createInterleavedRaster(
+				buffer,
+				width,
+				height,
+				channels * width,
+				channels,
+				new int[] {0, 1, 2, 3},
+				new Point(0, 0)
+		);
+
+		ColorSpace awtColorSpace = getAwtColorSpace(image.getColorSpace());
+
+		ColorModel colorModel = new ComponentColorModel(
+				awtColorSpace,
+				hasAlpha,
+				false,
+				Transparency.TRANSLUCENT,
+				DataBuffer.TYPE_BYTE
+		);
+
+		return new BufferedImage(
+				colorModel,
+				raster,
+				false,
+				new Hashtable<>()
+		);
+	}
+
+	private static ColorSpace getAwtColorSpace(QOIColorSpace colorSpace) {
+		switch (colorSpace) {
+			case SRGB:
+				return ColorSpace.getInstance(ColorSpace.CS_sRGB);
+			case LINEAR:
+				return ColorSpace.getInstance(ColorSpace.CS_LINEAR_RGB);
+			default:
+				throw new RuntimeException();
+		}
+	}
+
+	private static Font loadFont(String name, int style) {
+		try (InputStream in = SwingPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/"+name)) {
+			Font f = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(style);
+			GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(f);
+			return f;
+		} catch (IOException | FontFormatException e) {
+			Puppet.log("WARN", "Failed to load font "+name, e);
+			return Font.decode("Dialog").deriveFont(style);
+		}
+	}
+
 	private static Color getColor(ColorChoice choice) {
 		return new Color(colors[choice.ordinal()]);
 	}
@@ -244,12 +334,12 @@ public class SwingPuppet {
 		inner.setBorder(new EmptyBorder(8, 0, 0, 0));
 		title = new JLabel("<html>Reticulating splines...</html>");
 		title.setForeground(getColor(ColorChoice.TITLE));
-		title.setFont(title.getFont().deriveFont(24f).deriveFont(Font.BOLD));
+		title.setFont(firaSansBold.deriveFont(24f));
 		title.setAlignmentX(0);
 		inner.add(title);
 		subtitle = new JLabel("");
 		subtitle.setForeground(getColor(ColorChoice.SUBTITLE));
-		subtitle.setFont(subtitle.getFont().deriveFont(14f).deriveFont(Font.PLAIN));
+		subtitle.setFont(firaSans.deriveFont(14f));
 		subtitle.setPreferredSize(new Dimension(448, 18));
 		subtitle.setMaximumSize(new Dimension(448, 18));
 		subtitle.setAlignmentX(0);
@@ -302,7 +392,7 @@ public class SwingPuppet {
 					((JLabel)jc).setIcon(null);
 				}
 				if (jc.getFont() != null) {
-					jc.setFont(jc.getFont().deriveFont(Font.PLAIN).deriveFont(14f));
+					jc.setFont(firaSans.deriveFont(14f));
 				}
 				if (jc instanceof JButton) {
 					jc.setBackground(getColor(ColorChoice.BUTTON));
@@ -388,8 +478,8 @@ public class SwingPuppet {
 		dialog.setForeground(getColor(ColorChoice.DIALOG));
 		dialog.setSize(854, 480);
 		dialog.setLocationRelativeTo(frame);
-		String descPfx = "<style>body { font-family: Dialog; color: #"+Integer.toHexString(getColor(ColorChoice.DIALOG).getRGB()|0xFF000000).substring(2)+"; }</style>";
-		String noDesc = "<font size=\"4\" face=\"Dialog\" color=\"#"+Integer.toHexString(getColor(ColorChoice.SUBTITLE).getRGB()|0xFF000000).substring(2)+"\"><i>Hover an option to the left to see an explanation</i></font>";
+		String descPfx = "<style>body { font-family: \"Fira Sans\"; color: #"+Integer.toHexString(getColor(ColorChoice.DIALOG).getRGB()|0xFF000000).substring(2)+"; }</style>";
+		String noDesc = "<font size=\"4\" face=\"Fira Sans\" color=\"#"+Integer.toHexString(getColor(ColorChoice.SUBTITLE).getRGB()|0xFF000000).substring(2)+"\"><i>Hover an option to the left to see an explanation</i></font>";
 		JEditorPane desc = new JEditorPane("text/html", noDesc);
 		Set<String> results = new HashSet<>();
 		Set<String> descriptions = new HashSet<>();
@@ -408,7 +498,7 @@ public class SwingPuppet {
 				Box box = Box.createVerticalBox();
 				JLabel title = new JLabel(grp.name);
 				title.setBorder(new EmptyBorder(8,8,8,8));
-				title.setFont(title.getFont().deriveFont(18f));
+				title.setFont(firaSansBold.deriveFont(18f));
 				title.setMinimumSize(new Dimension(0, 24));
 				title.setForeground(getColor(ColorChoice.DIALOG));
 				String titleDescHtml = "<h1>"+grp.name+"</h1>"+grp.description;
@@ -431,7 +521,7 @@ public class SwingPuppet {
 				for (FlavorChoice c : grp.choices) {
 					JToggleButton btn = new JToggleButton(c.name);
 					btn.setUI(new BasicButtonUI());
-					btn.setFont(btn.getFont().deriveFont(14f));
+					btn.setFont(firaSans.deriveFont(14f));
 					btn.setSelected(c.def);
 					if (c.def) selectedAny = true;
 					btn.setMinimumSize(new Dimension(0, 32));
@@ -442,13 +532,13 @@ public class SwingPuppet {
 							btn.setBorder(new EmptyBorder(2,2,2,2));
 							btn.setBackground(getColor(ColorChoice.BUTTON));
 							btn.setForeground(getColor(ColorChoice.BUTTONTEXT));
-							btn.setFont(btn.getFont().deriveFont(Font.BOLD));
+							btn.setFont(firaSansBold.deriveFont(14f));
 							results.add(c.id);
 						} else {
 							btn.setBorder(new LineBorder(getColor(ColorChoice.DIALOG), 2));
 							btn.setBackground(getColor(ColorChoice.BACKGROUND));
 							btn.setForeground(getColor(ColorChoice.DIALOG));
-							btn.setFont(btn.getFont().deriveFont(0));
+							btn.setFont(firaSans.deriveFont(14f));
 							results.remove(c.id);
 						}
 					};
@@ -536,7 +626,7 @@ public class SwingPuppet {
 					}
 				});
 				cb.setIconTextGap(8);
-				cb.setFont(title.getFont().deriveFont(18f).deriveFont(0));
+				cb.setFont(firaSans.deriveFont(18f));
 				cb.setMinimumSize(new Dimension(0, 24));
 				cb.setForeground(getColor(ColorChoice.DIALOG));
 				cb.setBackground(getColor(ColorChoice.BACKGROUND));
