@@ -49,8 +49,9 @@ repositories {
 }
 
 sourceSets {
-	// prevent crossing puppet/agent boundary and using heavy libs from puppet
+	// prevent crossing puppet/agent boundary
 	puppet {
+		compileClasspath += sourceSets.main.compileClasspath
 		compileClasspath += sourceSets.main.output
 	}
 	agent {
@@ -62,6 +63,8 @@ sourceSets {
 configurations {
 	shade
 	implementation.extendsFrom shade
+	include
+	compileOnly.extendsFrom include
 }
 
 dependencies {
@@ -82,6 +85,8 @@ dependencies {
 	shadeCis 'com.squareup.okhttp3:okhttp-tls:4.12.0'
 	shadeCis 'com.moandjiezana.toml:toml4j:0.7.2'
 	shade 'com.unascribed:flexver-java:1.1.1'
+	
+	lwjgl(it, '3.3.6', 'glfw', 'opengl')
 }
 
 jar {
@@ -94,11 +99,14 @@ jar {
 shadowJar {
 	archiveClassifier = 'fat'
 	destinationDirectory.set(file('build/tmp'))
+	configurations = [project.configurations.shade]
 	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver", "org.objectweb"].each {
 		relocate it, 'com.unascribed.sup.lib.'+it
 	}
 	from sourceSets.puppet.output
 	from sourceSets.agent.output
+	
+	exclude 'javax/annotation/**'
 }
 
 tasks.named("dependencyUpdates").configure {
@@ -128,6 +136,8 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 	
 	keep 'class com.unascribed.sup.Agent { *; }'
 	keep 'class com.unascribed.sup.Puppet { *; }'
+	keep 'class com.unascribed.sup.GLPuppet { *; }'
+	keep 'class com.unascribed.sup.SwingPuppet { *; }'
 	keep 'class com.unascribed.sup.Unsup { *; }'
 	keep 'class com.unascribed.sup.PublicInAgent { *; }'
 	
@@ -135,6 +145,8 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 
 	dontwarn 'com.unascribed.sup.lib.**'
 	dontwarn 'org.jetbrains.annotations.**'
+	dontwarn 'org.lwjgl.**'
+	dontwarn 'javax.annotation.**'
 	
 	keepattributes '*'
 	
@@ -174,6 +186,8 @@ task proguardAgain(type: proguard.gradle.ProGuardTask) {
 
 	dontwarn 'com.unascribed.sup.lib.**'
 	dontwarn 'org.jetbrains.annotations.**'
+	dontwarn 'org.lwjgl.**'
+	dontwarn 'javax.annotation.**'
 	
 	flattenpackagehierarchy 'com.unascribed.sup'
 	
@@ -194,6 +208,10 @@ task proguardJar(type: Jar) {
 		if (it.path.equals('com/unascribed/sup/lib/okhttp3/internal/publicsuffix/NOTICE')) {
 			it.path = 'com/unascribed/sup/publicsuffixes_notice.txt'
 		}
+	}
+	
+	from(project.configurations.include.resolve()) {
+		into 'com/unascribed/sup/jars'
 	}
 	
 	exclude 'com/unascribed/sup/$lib$$okhttp3_internal_platform_android*'
@@ -339,3 +357,27 @@ publishing {
 	}
 }
 
+def lwjgl(DependencyHandler deps, String ver, String... modules) {
+	// minimal set, as the Swing impl will be used if the GL one can't init and these are quite large
+	def platforms = [
+		'linux', 'macos', 'windows',
+		'linux-arm64',
+		'macos-arm64',
+		
+		// 'windows-x86',
+		// 'linux-arm32', 'linux-ppc64le', 'linux-riscv64',
+		// 'windows-arm64',
+		// 'freebsd',
+	]
+	
+	deps.include(dependencies.create("org.lwjgl:lwjgl:${ver}"))
+	modules.each { module ->
+		deps.include(dependencies.create("org.lwjgl:lwjgl-${module}:${ver}"))
+	}
+	platforms.each { platform ->
+		deps.include(dependencies.create("org.lwjgl:lwjgl:${ver}:natives-${platform}"))
+		modules.each { module ->
+			deps.include(dependencies.create("org.lwjgl:lwjgl-${module}:${ver}:natives-${platform}"))
+		}
+	}
+}

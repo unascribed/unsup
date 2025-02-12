@@ -3,11 +3,14 @@ package com.unascribed.sup;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,6 +23,7 @@ import java.util.StringJoiner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
+import com.unascribed.sup.SysProps.PuppetMode;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.pieces.Latch;
 
@@ -39,6 +43,51 @@ public class PuppetHandler {
 	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
 	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
 
+	private static final String[] cpJars = {
+			"lwjgl-3.3.6-natives-freebsd.jar",
+			"lwjgl-3.3.6-natives-linux-arm32.jar",
+			"lwjgl-3.3.6-natives-linux-arm64.jar",
+			"lwjgl-3.3.6-natives-linux-ppc64le.jar",
+			"lwjgl-3.3.6-natives-linux-riscv64.jar",
+			"lwjgl-3.3.6-natives-linux.jar",
+			"lwjgl-3.3.6-natives-macos-arm64.jar",
+			"lwjgl-3.3.6-natives-macos.jar",
+			"lwjgl-3.3.6-natives-windows-arm64.jar",
+			"lwjgl-3.3.6-natives-windows-x86.jar",
+			"lwjgl-3.3.6-natives-windows.jar",
+			"lwjgl-3.3.6.jar",
+			"lwjgl-glfw-3.3.6-natives-freebsd.jar",
+			"lwjgl-glfw-3.3.6-natives-linux-arm32.jar",
+			"lwjgl-glfw-3.3.6-natives-linux-arm64.jar",
+			"lwjgl-glfw-3.3.6-natives-linux-ppc64le.jar",
+			"lwjgl-glfw-3.3.6-natives-linux-riscv64.jar",
+			"lwjgl-glfw-3.3.6-natives-linux.jar",
+			"lwjgl-glfw-3.3.6-natives-macos-arm64.jar",
+			"lwjgl-glfw-3.3.6-natives-macos.jar",
+			"lwjgl-glfw-3.3.6-natives-windows-arm64.jar",
+			"lwjgl-glfw-3.3.6-natives-windows-x86.jar",
+			"lwjgl-glfw-3.3.6-natives-windows.jar",
+			"lwjgl-glfw-3.3.6.jar",
+			"lwjgl-opengl-3.3.6-natives-freebsd.jar",
+			"lwjgl-opengl-3.3.6-natives-linux-arm32.jar",
+			"lwjgl-opengl-3.3.6-natives-linux-arm64.jar",
+			"lwjgl-opengl-3.3.6-natives-linux-ppc64le.jar",
+			"lwjgl-opengl-3.3.6-natives-linux-riscv64.jar",
+			"lwjgl-opengl-3.3.6-natives-linux.jar",
+			"lwjgl-opengl-3.3.6-natives-macos-arm64.jar",
+			"lwjgl-opengl-3.3.6-natives-macos.jar",
+			"lwjgl-opengl-3.3.6-natives-windows-arm64.jar",
+			"lwjgl-opengl-3.3.6-natives-windows-x86.jar",
+			"lwjgl-opengl-3.3.6-natives-windows.jar",
+			"lwjgl-opengl-3.3.6.jar",
+	};
+	
+	private static final String[] copyableProps = {
+		"javax.accessibility.assistive_technologies",
+		"assistive_technologies",
+		"unsup.puppetMode"
+	};
+	
 	public static void destroy() {
 		puppet.destroy();
 	}
@@ -84,8 +133,46 @@ public class PuppetHandler {
 				try {
 					List<String> args = new ArrayList<>();
 					args.add(java);
+					if (System.getProperty("os.name").contains("OS X")) {
+						args.add("-XstartOnFirstThread");
+					}
+					for (String prop : copyableProps) {
+						String v = System.getProperty(prop);
+						if (v != null) {
+							args.add("-D"+prop+"="+v);
+						}
+					}
 					args.add("-cp");
-					args.add(ourPath.getAbsolutePath());
+					List<String> cp = new ArrayList<>();
+					cp.add(ourPath.getAbsolutePath());
+					if (SysProps.PUPPET_MODE != PuppetMode.SWING) {
+						File tmp = new File(".unsup-tmp/natives");
+						tmp.mkdirs();
+						byte[] buf = new byte[16384];
+						for (String s : cpJars) {
+							URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s);
+							if (url != null) {
+								File out = new File(tmp, s);
+								try (FileOutputStream fos = new FileOutputStream(out);
+										InputStream is = url.openStream()) {
+									while (true) {
+										int read = is.read(buf);
+										if (read < 0) break;
+										fos.write(buf, 0, read);
+									}
+								}
+								out.deleteOnExit();
+								cp.add(out.getAbsolutePath());
+							}
+						}
+					}
+					StringBuilder cpStr = new StringBuilder();
+					for (String s : cp) {
+						cpStr.append(s);
+						cpStr.append(File.pathSeparatorChar);
+					}
+					cpStr.setLength(cpStr.length()-1);
+					args.add(cpStr.toString());
 					args.add("com.unascribed.sup.Puppet");
 					Log.debug("unsup location detected as "+ourPath);
 					Log.debug("Java location detected as "+java);

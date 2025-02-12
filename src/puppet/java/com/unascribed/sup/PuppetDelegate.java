@@ -1,0 +1,27 @@
+package com.unascribed.sup;
+
+import java.util.List;
+
+import com.unascribed.sup.data.FlavorGroup;
+
+public interface PuppetDelegate {
+
+	void build();
+	void setColor(ColorChoice choice, int color);
+	
+	void setVisible(boolean visible);
+	
+	void setProgressIndeterminate();
+	void setProgressDeterminate();
+	void setDone();
+	
+	void setProgress(int permil);
+	
+	void setTitle(String title);
+	void setSubtitle(String subtitle);
+	
+	void openChoiceDialog(String name, String title, String body, String def, String[] options);
+	void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options);
+	void openFlavorDialog(String name, List<FlavorGroup> groups);
+	
+}

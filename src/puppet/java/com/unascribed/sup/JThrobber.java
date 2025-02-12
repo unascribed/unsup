@@ -10,6 +10,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import javax.swing.JComponent;
+import javax.swing.SwingUtilities;
 
 public class JThrobber extends JComponent {
 	
@@ -80,7 +81,7 @@ public class JThrobber extends JComponent {
 				int inset = (int)(8+((dia-8)*a));
 				g2d.fillOval(((getWidth()-dia)/2)+(inset/2), ((getHeight()-dia)/2)+(inset/2), dia-inset, dia-inset);
 			} else if (time < -1000) {
-				System.exit(0);
+				Puppet.reportDone();
 			}
 			// ?????
 			int cX = (getWidth()/2)-(dia/15)-1;
@@ -157,7 +158,7 @@ public class JThrobber extends JComponent {
 				if (hz > 240) hz = 240;
 				delayNs = TimeUnit.SECONDS.toNanos(1)/hz;
 			}
-			sched.schedule(Puppet.invokeLater(() -> repaint()), delayNs, TimeUnit.NANOSECONDS);
+			sched.schedule(() -> SwingUtilities.invokeLater(() -> repaint()), delayNs, TimeUnit.NANOSECONDS);
 		}
 	}
 }

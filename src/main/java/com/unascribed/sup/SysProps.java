@@ -1,7 +1,13 @@
 package com.unascribed.sup;
 
+import java.util.Locale;
+
 public class SysProps {
 
+	public enum PuppetMode {
+		AUTO, SWING, OPENGL;
+	}
+	
 	/**
 	 * Enable verbose log output and disable some "friendly" output options.
 	 */
@@ -14,6 +20,10 @@ public class SysProps {
 	 * Assume yes to all overwrite/reconciliation queries.
 	 */
 	public static final boolean DISABLE_RECONCILIATION = Boolean.getBoolean("unsup.disableReconciliation");
+	/**
+	 * Set which mode the Puppet will use, or AUTO to automatically choose one.
+	 */
+	public static final PuppetMode PUPPET_MODE = PuppetMode.valueOf(System.getProperty("unsup.puppetMode", "auto").toUpperCase(Locale.ROOT));
 	
 	
 	/**
