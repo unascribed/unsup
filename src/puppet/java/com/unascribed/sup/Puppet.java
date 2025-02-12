@@ -29,7 +29,7 @@ public class Puppet {
 	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
 
 	public static void main(String[] args) {
-		PuppetMode mode = PuppetMode.SWING;//SysProps.PUPPET_MODE;
+		PuppetMode mode = SysProps.PUPPET_MODE;
 		boolean didOverride = false;
 		PuppetDelegate delTmp = null;
 		if (mode == PuppetMode.AUTO) {
@@ -54,12 +54,14 @@ public class Puppet {
 			} catch (Throwable t) {
 				error = t;
 			}
-			if (mode == PuppetMode.OPENGL) {
-				log("ERROR", "Failed to initialize OpenGL puppet, which was our only option by user request!");
-				System.exit(1);
-				return;
-			} else {
-				log("WARN", "Failed to initialize OpenGL puppet, falling back to Swing", error);
+			if (delTmp == null) {
+				if (mode == PuppetMode.OPENGL) {
+					log("ERROR", "Failed to initialize OpenGL puppet, which was our only option by user request!");
+					System.exit(1);
+					return;
+				} else {
+					log("WARN", "Failed to initialize OpenGL puppet, falling back to Swing", error);
+				}
 			}
 		}
 		if (delTmp == null) {
@@ -277,6 +279,8 @@ public class Puppet {
 			}
 		} catch (IOException e) {
 			log("ERROR", "Failed to listen for orders", e);
+		} finally {
+			System.exit(0);
 		}
 	}
 

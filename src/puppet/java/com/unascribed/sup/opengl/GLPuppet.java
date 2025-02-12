@@ -3,6 +3,7 @@ package com.unascribed.sup.opengl;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.glfw.GLFWImage;
 import org.lwjgl.opengl.GL;
+import org.lwjgl.util.freetype.FT_Bitmap;
 import org.lwjgl.util.freetype.FT_Face;
 
 import com.unascribed.sup.ColorChoice;
@@ -22,30 +23,54 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static com.unascribed.sup.WindowIcons.*;
+import static com.unascribed.sup.opengl.GL.*;
 
 import static org.lwjgl.system.MemoryUtil.*;
 
 import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.opengl.GL14.*;
 import static org.lwjgl.util.freetype.FreeType.*;
 
 public class GLPuppet {
 
 	public static void main(String[] args) {
+		ColorChoice.usePrettyDefaults = true;
 		PuppetDelegate del = start();
+		del.build();
+		del.setVisible(true);
 	}
 	
-	private static final float[][] colors = new float[ColorChoice.values().length][];
+	private static int[] colors;
 	private static long mainWindow;
 	private static FT_Face firaSans, firaSansBold, firaSansItalic, firaSansBoldItalic;
+	private static FT_Bitmap scratchBitmap;
+	private static long ftLibrary;
 	private static int scratchTex;
+	private static GLThrobber throbber = new GLThrobber();
+	
+	private static String title = "Reticulating splines...";
+	private static String subtitle = "";
+	private static float prog = 0.5f;
+	
+	private static volatile boolean run = true;
+	
+	public static int getColor(ColorChoice choice) {
+		return colors[choice.ordinal()];
+	}
 	
 	public static PuppetDelegate start() {
+		colors = ColorChoice.createLookup();
+		
+		glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+		
 		if (!glfwInit()) {
 			Puppet.log("ERROR", "Failed to initialize GLFW: "+getError());
 			return null;
 		}
-		long ftLibrary;
+		
+		glfwSetErrorCallback((error, description) -> {
+			Puppet.log("WARN", "GLFW error: "+memASCII(description));
+		});
+		
 		{
 			PointerBuffer libraryBuf = memAllocPointer(1);
 			int ftError = FT_Init_FreeType(libraryBuf);
@@ -113,6 +138,30 @@ public class GLPuppet {
 			return null;
 		}
 		
+		scratchBitmap = FT_Bitmap.malloc();
+		PointerBuffer buf = memPointerBuffer(scratchBitmap.address()+FT_Bitmap.BUFFER, 1);
+		buf.put(memAlloc(1));
+
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
+		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_FALSE);
+		glfwWindowHint(GLFW_DECORATED, GL_TRUE);
+		glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
+		glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
+		glfwWindowHint(GLFW_FLOATING, GL_TRUE);
+		glfwWindowHint(GLFW_SAMPLES, 16);
+		glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+		glfwWindowHintString(GLFW_WAYLAND_APP_ID, "com.unascribed.sup");
+		glfwWindowHintString(GLFW_X11_CLASS_NAME, "com.unascribed.sup");
+		glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "com.unascribed.sup");
+		
+		mainWindow = glfwCreateWindow(480, 80, "unsup v"+Util.VERSION, NULL, NULL);
+		if (mainWindow == 0) {
+			Puppet.log("ERROR", "Failed to create GLFW window: "+getError());
+			glfwTerminate();
+			return null;
+		}
 		
 		if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
 			try {
@@ -134,160 +183,148 @@ public class GLPuppet {
 			} catch (Throwable t) {}
 		}
 		
-		glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_FALSE);
-		glfwWindowHint(GLFW_DECORATED, GL_TRUE);
-		glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
-		glfwWindowHint(GLFW_RESIZABLE, GL_FALSE);
-		glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
-		glfwWindowHintString(GLFW_WAYLAND_APP_ID, "com.unascribed.sup");
-		glfwWindowHintString(GLFW_X11_CLASS_NAME, "com.unascribed.sup");
-		glfwWindowHintString(GLFW_X11_INSTANCE_NAME, "com.unascribed.sup");
-		
-		mainWindow = glfwCreateWindow(512, 128, "unsup v"+Util.VERSION, NULL, NULL);
-		if (mainWindow == 0) {
-			Puppet.log("ERROR", "Failed to create GLFW window: "+getError());
-			glfwTerminate();
-			return null;
-		}
-		glfwMakeContextCurrent(mainWindow);
-		{
-			ByteBuffer lowresPx = memAlloc(lowres.getPixelData().length);
-			ByteBuffer highresPx = memAlloc(highres.getPixelData().length);
-			lowresPx.put(lowres.getPixelData());
-			highresPx.put(highres.getPixelData());
-			lowresPx.flip();
-			highresPx.flip();
-			
-			GLFWImage.Buffer buffer = GLFWImage.malloc(2);
-			buffer.get(0)
-				.width(lowres.getWidth()).height(lowres.getHeight())
-				.pixels(lowresPx);
-			buffer.get(1)
-				.width(highres.getWidth()).height(highres.getHeight())
-				.pixels(highresPx);
-			glfwSetWindowIcon(mainWindow, buffer);
-			memFree(buffer);
-			memFree(lowresPx);
-			memFree(highresPx);
-		}
-		
-		if (glfwExtensionSupported("GLX_EXT_swap_control_tear") || glfwExtensionSupported("WGL_EXT_swap_control_tear")) {
-			glfwSwapInterval(-1);
-		} else {
-			glfwSwapInterval(1);
-		}
-		
-		glfwSetWindowCloseCallback(mainWindow, unused -> {
-			Puppet.reportCloseRequest();
-		});
-		
-		GL.createCapabilities();
-		
-		Puppet.log("DEBUG", "OpenGL Version: "+glGetString(GL_VERSION));
-		Puppet.log("DEBUG", "OpenGL Renderer: "+glGetString(GL_RENDERER));
-		Puppet.log("DEBUG", "OpenGL Vendor: "+glGetString(GL_VENDOR));
-		
-		scratchTex = glGenTextures();
-		glBindTexture(GL_TEXTURE_2D, scratchTex);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		
-		OpenGLDebug.install();
-		
-		while (mainWindow > 0) { // temp hack
-			render();
-		}
-		glfwTerminate();
-		
 		return new PuppetDelegate() {
 			
 			@Override
+			public void build() {
+				glfwMakeContextCurrent(mainWindow);
+				if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
+					ByteBuffer lowresPx = memAlloc(lowres.getPixelData().length);
+					ByteBuffer highresPx = memAlloc(highres.getPixelData().length);
+					lowresPx.put(lowres.getPixelData());
+					highresPx.put(highres.getPixelData());
+					lowresPx.flip();
+					highresPx.flip();
+					
+					GLFWImage.Buffer buffer = GLFWImage.malloc(2);
+					buffer.get(0)
+						.width(lowres.getWidth()).height(lowres.getHeight())
+						.pixels(lowresPx);
+					buffer.get(1)
+						.width(highres.getWidth()).height(highres.getHeight())
+						.pixels(highresPx);
+					glfwSetWindowIcon(mainWindow, buffer);
+					memFree(buffer);
+					memFree(lowresPx);
+					memFree(highresPx);
+					
+					long monitor = glfwGetPrimaryMonitor();
+					int[] x = new int[1];
+					int[] y = new int[1];
+					int[] w = new int[1];
+					int[] h = new int[1];
+					glfwGetMonitorWorkarea(monitor, x, y, w, h);
+					glfwSetWindowPos(mainWindow, x[0]+(w[0]-480)/2, y[0]+(h[0]-40)/2);
+				}
+				
+				if (glfwExtensionSupported("GLX_EXT_swap_control_tear") || glfwExtensionSupported("WGL_EXT_swap_control_tear")) {
+					glfwSwapInterval(-1);
+				} else {
+					glfwSwapInterval(1);
+				}
+				
+				glfwSetWindowCloseCallback(mainWindow, unused -> {
+					Puppet.reportCloseRequest();
+				});
+				
+				GL.createCapabilities();
+				
+				Puppet.log("DEBUG", "OpenGL Version: "+glGetString(GL_VERSION));
+				Puppet.log("DEBUG", "OpenGL Renderer: "+glGetString(GL_RENDERER));
+				Puppet.log("DEBUG", "OpenGL Vendor: "+glGetString(GL_VENDOR));
+				
+				glfwMakeContextCurrent(NULL);
+			}
+			
+			@Override
 			public void setVisible(boolean visible) {
+				if (visible) {
+					glfwShowWindow(mainWindow);
+				} else {
+					glfwHideWindow(mainWindow);
+				}
+				if (scratchTex == 0) {
+					new Thread(() -> {
+						glfwMakeContextCurrent(mainWindow);
+						GL.createCapabilities();
+						
+						scratchTex = glGenTextures();
+						glBindTexture(GL_TEXTURE_2D, scratchTex);
+						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+						glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+						
+						OpenGLDebug.install();
+						
+						while (run) {
+							render();
+						}
+					}, "GL thread").start();
+				}
 			}
 			
 			@Override
 			public void setTitle(String title) {
-				// TODO Auto-generated method stub
-				
+				GLPuppet.title = title;
 			}
 			
 			@Override
 			public void setSubtitle(String subtitle) {
-				// TODO Auto-generated method stub
-				
+				GLPuppet.subtitle = subtitle;
 			}
 			
 			@Override
 			public void setProgressIndeterminate() {
-				// TODO Auto-generated method stub
-				
+				prog = -1;
 			}
 			
 			@Override
 			public void setProgressDeterminate() {
-				// TODO Auto-generated method stub
-				
+				prog = 0;
 			}
 			
 			@Override
 			public void setProgress(int permil) {
-				// TODO Auto-generated method stub
-				
+				prog = permil/1000f;
 			}
 			
 			@Override
 			public void setDone() {
-				// TODO Auto-generated method stub
-				
+				throbber.animateDone();
 			}
 			
 			@Override
 			public void setColor(ColorChoice choice, int color) {
-				// TODO Auto-generated method stub
-				
+				colors[choice.ordinal()] = color;
 			}
 			
 			@Override
 			public void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options) {
-				// TODO Auto-generated method stub
-				
+				throw new UnsupportedOperationException();
 			}
 			
 			@Override
 			public void openFlavorDialog(String name, List<FlavorGroup> groups) {
-				// TODO Auto-generated method stub
-				
+				throw new UnsupportedOperationException();
 			}
 			
 			@Override
 			public void openChoiceDialog(String name, String title, String body, String def, String[] options) {
-				// TODO Auto-generated method stub
-				
-			}
-			
-			@Override
-			public void build() {
-				// TODO Auto-generated method stub
-				
+				throw new UnsupportedOperationException();
 			}
 		};
 	}
 	
 	private static void render() {
-		String str = "Hello, World!\nÄËÏÖÜ";
-		
 		glfwPollEvents();
 		
-		glClearColor(0, 0.5f, 0.15f, 1);
+		int bg = getColor(ColorChoice.BACKGROUND);
+		glClearColor(((bg >> 16)&0xFF)/255f, ((bg >> 8)&0xFF)/255f, ((bg >> 0)&0xFF)/255f, 1);
 		glClear(GL_COLOR_BUFFER_BIT);
 		
 		glMatrixMode(GL_PROJECTION);
-		glViewport(0, 0, 512, 128);
+		glViewport(0, 0, 480, 80);
 		glLoadIdentity();
-		glOrtho(0, 512, 128, 0, 100, 1000);
+		glOrtho(0, 480, 80, 0, 100, 1000);
 		glMatrixMode(GL_MODELVIEW);
 		glLoadIdentity();
 		glTranslatef(0, 0, -200);
@@ -295,24 +332,57 @@ public class GLPuppet {
 		glShadeModel(GL_SMOOTH);
 		glDisable(GL_CULL_FACE);
 		glDisable(GL_LIGHTING);
+		glDisable(GL_TEXTURE_2D);
+		
+		glColor3f(1, 1, 1);
 
-		float x = 0;
-		float y = 64;
-		FT_Face f = firaSansBold;
+		throbber.render(40, 32, 40);
+		glPushMatrix();
+			glColorPacked3i(getColor(ColorChoice.TITLE));
+			drawString(firaSansBold, 64, 31, 24, title);
+		glPopMatrix();
+		glPushMatrix();
+			glColorPacked3i(getColor(ColorChoice.SUBTITLE));
+			drawString(firaSans, 64, 52, 14, subtitle);
+		glPopMatrix();
+		
+		if (prog >= 0) {
+			glBegin(GL_QUADS);
+				glColorPacked3i(getColor(ColorChoice.PROGRESSTRACK));
+				glVertex2f(64, 70);
+				glVertex2f(476, 70);
+				glVertex2f(476, 76);
+				glVertex2f(64, 76);
+				
+				glColorPacked3i(getColor(ColorChoice.PROGRESS));
+				glVertex2f(65, 71);
+				glVertex2f(65+(prog*412), 71);
+				glVertex2f(65+(prog*412), 75);
+				glVertex2f(65, 75);
+			glEnd();
+		}
+		
+		glfwSwapBuffers(mainWindow);
+	}
+	
+	private static void drawString(FT_Face f, float x, float y, float size, String str) {
+		if (FT_Set_Char_Size(f, 0, (int)(size*64), 72, 72) != 0) return;
+		glEnable(GL_TEXTURE_2D);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);
 		for (int i = 0; i < str.length(); i++) {
 			if (FT_Load_Char(f, str.charAt(i), FT_LOAD_RENDER) != 0) {
-				if (FT_Load_Char(f, '�', FT_LOAD_RENDER) != 0) {
+				if (FT_Load_Char(f, '\uFFFD', FT_LOAD_RENDER) != 0) {
 					continue;
 				}
 			}
-			int w = f.glyph().bitmap().width();
-			int h = f.glyph().bitmap().rows();
+			if (FT_Bitmap_Convert(ftLibrary, f.glyph().bitmap(), scratchBitmap, 4) != 0) continue;
+			int w = scratchBitmap.width();
+			int h = scratchBitmap.rows();
 			if (w != 0 && h != 0) {
 				float xo = x+f.glyph().bitmap_left();
 				float yo = y-f.glyph().bitmap_top();
-				glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA8, w, h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, f.glyph().bitmap().buffer(w*h));
+				glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA8, w, h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, scratchBitmap.buffer(w*h));
 				glEnable(GL_TEXTURE_2D);
 				glBegin(GL_QUADS);
 					glTexCoord2i(0, 0);
@@ -327,11 +397,8 @@ public class GLPuppet {
 				glDisable(GL_TEXTURE_2D);
 			}
 			
-			x += f.glyph().advance().x()/64f;
-			y += f.glyph().advance().y()/64f;
+			glTranslatef(f.glyph().advance().x()/64f, f.glyph().advance().y()/64f, 0);
 		}
-		
-		glfwSwapBuffers(mainWindow);
 	}
 
 	private static boolean loadFont(String name, long ftLibrary, PointerBuffer ptr) {

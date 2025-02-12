@@ -87,6 +87,19 @@ import static javax.swing.SwingUtilities.invokeLater;
  * exit once we're done using it.
  */
 public class SwingPuppet {
+
+	public static void main(String[] args) {
+		ColorChoice.usePrettyDefaults = true;
+		PuppetDelegate del = start();
+		del.build();
+		del.setVisible(true);
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+		}
+		del.setTitle("Bootstrapping...");
+		del.setSubtitle("Downloading mods/foobar-1.2.1.2.1.3.1.4.jar");
+	}
 	
 	private static JFrame frame;
 	private static JLabel title, subtitle;
@@ -96,12 +109,10 @@ public class SwingPuppet {
 	private static List<Image> logos;
 	private static Font firaSans, firaSansBold, firaSansItalic, firaSansBoldItalic;
 	
-	private static final int[] colors = new int[ColorChoice.values().length];
+	private static int[] colors;
 	
 	public static PuppetDelegate start() {
-		for (ColorChoice choice : ColorChoice.values()) {
-			colors[choice.ordinal()] = choice.defaultValue;
-		}
+		colors = ColorChoice.createLookup();
 		
 		SwingHelper.fixSwing();
 		
@@ -300,10 +311,10 @@ public class SwingPuppet {
 	private static void buildUi() {
 		frame = new JFrame("unsup v"+Util.VERSION);
 		frame.setIconImages(logos);
-		frame.setSize(512, 128);
 		frame.setLocationRelativeTo(null);
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		frame.setResizable(false);
+		frame.setAlwaysOnTop(true);
 		frame.addWindowListener(new WindowAdapter() {
 			private boolean closeAlreadyAttempted = false;
 			
@@ -358,9 +369,9 @@ public class SwingPuppet {
 		prog.setBackground(getColor(ColorChoice.PROGRESSTRACK));
 		prog.setBorderPainted(false);
 		prog.setAlignmentX(0);
-		prog.setMinimumSize(new Dimension(440, 6));
-		prog.setPreferredSize(new Dimension(440, 6));
-		prog.setMaximumSize(new Dimension(440, 6));
+		prog.setMinimumSize(new Dimension(412, 6));
+		prog.setPreferredSize(new Dimension(412, 6));
+		prog.setMaximumSize(new Dimension(412, 6));
 		prog.setMaximum(1000);
 		prog.setValue(500);
 		inset.add(prog);
@@ -370,7 +381,9 @@ public class SwingPuppet {
 		
 		outer.add(inner);
 		
+		outer.setPreferredSize(new Dimension(480, 80));
 		frame.setContentPane(outer);
+		frame.pack();
 	}
 
 	protected static void fix(Graphics2D g2d) {

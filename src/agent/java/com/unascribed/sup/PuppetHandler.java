@@ -174,6 +174,9 @@ public class PuppetHandler {
 						}
 					}
 					StringBuilder cpStr = new StringBuilder();
+					if ("${version}".equals(Util.VERSION)) {
+						cpStr.append(System.getProperty("java.class.path"));
+					}
 					for (String s : cp) {
 						cpStr.append(s);
 						cpStr.append(File.pathSeparatorChar);
