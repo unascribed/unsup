@@ -1,12 +1,5 @@
 package com.unascribed.sup.opengl.window;
 
-import static com.unascribed.sup.WindowIcons.highres;
-import static com.unascribed.sup.WindowIcons.lowres;
-import static org.lwjgl.glfw.GLFW.*;
-import static org.lwjgl.system.MemoryUtil.NULL;
-import static org.lwjgl.system.MemoryUtil.memAlloc;
-import static org.lwjgl.system.MemoryUtil.memFree;
-
 import java.nio.ByteBuffer;
 
 import org.lwjgl.glfw.GLFWImage;
@@ -17,7 +10,10 @@ import com.unascribed.sup.opengl.GLPuppet;
 import com.unascribed.sup.opengl.pieces.FontManager;
 import com.unascribed.sup.opengl.pieces.OpenGLDebug;
 
-import static org.lwjgl.opengl.GL11.*;
+import static com.unascribed.sup.WindowIcons.*;
+import static com.unascribed.sup.opengl.util.GL.*;
+import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.system.MemoryUtil.*;
 
 public abstract class Window {
 	
@@ -30,7 +26,10 @@ public abstract class Window {
 	
 	public volatile boolean run = true;
 	
+	private Thread renderThread;
+	
 	public void create(String title, int width, int height, float dpiScale) {
+		if (!Puppet.isMainThread()) throw new IllegalStateException("Must be on main thread");
 		this.width = width;
 		this.height = height;
 		
@@ -39,7 +38,7 @@ public abstract class Window {
 		
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
 		glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 1);
-		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 4);
+		glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
 		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_FALSE);
 		glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
@@ -49,7 +48,7 @@ public abstract class Window {
 		glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
 		glfwWindowHintString(GLFW_WAYLAND_APP_ID, "com.unascribed.sup");
 		glfwWindowHintString(GLFW_X11_CLASS_NAME, "com.unascribed.sup");
-		glfwWindowHintString(GLFW_X11_INSTANCE_NAME, getClass().getName());
+		glfwWindowHintString(GLFW_X11_INSTANCE_NAME, getClass().getSimpleName());
 		
 		int physW = (int)(width*dpiScaleX);
 		int physH = (int)(height*dpiScaleY);
@@ -94,10 +93,6 @@ public abstract class Window {
 			glfwSwapInterval(1);
 		}
 		
-		glfwSetWindowCloseCallback(handle, unused -> {
-			Puppet.reportCloseRequest();
-		});
-		
 		GL.createCapabilities();
 		
 		int bg = GLPuppet.getColor(ColorChoice.BACKGROUND);
@@ -119,13 +114,15 @@ public abstract class Window {
 	}
 	
 	public void setVisible(boolean visible) {
-		if (visible) {
-			glfwShowWindow(handle);
-		} else {
-			glfwHideWindow(handle);
-		}
-		if (scratchTex == 0) {
-			new Thread(() -> {
+		Puppet.runOnMainThread(() -> {
+			if (visible) {
+				glfwShowWindow(handle);
+			} else {
+				glfwHideWindow(handle);
+			}
+		});
+		if (renderThread == null) {
+			renderThread = new Thread(() -> {
 				glfwMakeContextCurrent(handle);
 				GL.createCapabilities();
 				
@@ -137,15 +134,25 @@ public abstract class Window {
 				OpenGLDebug.install();
 				
 				while (run) {
-					render();
+					if (!render()) {
+						try {
+							Thread.sleep(30);
+						} catch (InterruptedException e) {
+						}
+					}
 				}
-			}, getClass().getSimpleName()+" GL thread").start();
+				
+				glfwMakeContextCurrent(NULL);
+				
+				Puppet.runOnMainThread(() -> {
+					glfwDestroyWindow(handle);
+				});
+			}, getClass().getSimpleName()+" GL thread");
+			renderThread.start();
 		}
 	}
 
-	public void render() {
-		glfwPollEvents();
-		
+	public boolean render() {
 		if (needsRerender()) {
 			int[] fbw = new int[1];
 			int[] fbh = new int[1];
@@ -168,7 +175,15 @@ public abstract class Window {
 			renderInner();
 			
 			glfwSwapBuffers(handle);
+			return true;
 		}
+		return false;
+	}
+	
+	public void close() {
+		if (!run || handle == 0) return;
+		run = false;
+		glfwHideWindow(handle);
 	}
 	
 	protected abstract void renderInner();

@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 import java.util.StringJoiner;
 
@@ -64,6 +63,8 @@ import javax.swing.plaf.basic.BasicSplitPaneDivider;
 import javax.swing.plaf.basic.BasicSplitPaneUI;
 import javax.swing.plaf.metal.MetalLookAndFeel;
 import javax.swing.plaf.metal.OceanTheme;
+
+import org.brotli.dec.BrotliInputStream;
 
 import com.unascribed.sup.ColorChoice;
 import com.unascribed.sup.MessageType;
@@ -117,10 +118,10 @@ public class SwingPuppet {
 		logos.add(logo);
 		logos.add(logoLowres);
 		
-		firaSans = loadFont("FiraSans-Regular.ttf", Font.PLAIN);
-		firaSansBold = loadFont("FiraSans-Bold.ttf", Font.BOLD);
-		firaSansItalic = loadFont("FiraSans-Italic.ttf", Font.ITALIC);
-		firaSansBoldItalic = loadFont("FiraSans-BoldItalic.ttf", Font.BOLD|Font.ITALIC);
+		firaSans = loadFont("FiraSans-Regular.ttf.br", Font.PLAIN);
+		firaSansBold = loadFont("FiraSans-Bold.ttf.br", Font.BOLD);
+		firaSansItalic = loadFont("FiraSans-Italic.ttf.br", Font.ITALIC);
+		firaSansBoldItalic = loadFont("FiraSans-BoldItalic.ttf.br", Font.BOLD|Font.ITALIC);
 		
 		return new PuppetDelegate() {
 			
@@ -281,7 +282,7 @@ public class SwingPuppet {
 	}
 
 	private static Font loadFont(String name, int style) {
-		try (InputStream in = SwingPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/assets/fonts/"+name)) {
+		try (InputStream in = new BrotliInputStream(SwingPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/assets/fonts/"+name))) {
 			Font f = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(style);
 			GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(f);
 			return f;
@@ -427,9 +428,10 @@ public class SwingPuppet {
 	}
 	
 	private static void openMessageDialog(String name, String title, String body, int messageType, String... options) {
-		String[] split = body.split("\n", 2);
+		String[] split = Puppet.format(body).split("\n", 2);
 		body = "<b>"+split[0]+"</b><br/>"+(split.length == 2 ? split[1].replace("\n", "<br/>") : "");
-		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", messageType, JOptionPane.DEFAULT_OPTION, null, options);
+		String[] formatted = Puppet.format(options);
+		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", messageType, JOptionPane.DEFAULT_OPTION, null, formatted);
 		configureOptionPane(pane);
 		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
 		configureOptionDialog(pane, dialog);
@@ -445,20 +447,27 @@ public class SwingPuppet {
 			if (sel == null || sel == JOptionPane.UNINITIALIZED_VALUE || !(sel instanceof String)) {
 				opt = "closed";
 			} else {
-				opt = ((String)sel).toLowerCase(Locale.ROOT).replace(" ", "");
+				opt = (String)sel;
+				for (int i = 0; i < formatted.length; i++) {
+					if (opt.equals(formatted[i])) {
+						opt = options[i];
+						break;
+					}
+				}
 			}
 			Puppet.reportChoice(name, opt);
 		}
 	}
 
 	private static void openChoiceDialog(String name, String title, String body, String def, String... options) {
-		String[] split = body.split("\n", 2);
+		String[] split = Puppet.format(body).split("\n", 2);
 		body = "<b>"+split[0]+"</b><br/>"+(split.length == 2 ? split[1].replace("\n", "<br/>") : "");
-		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
+		JOptionPane pane = new JOptionPane("<html><center>"+Puppet.format(body)+"</center></html>", JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
 				new Object[]{Puppet.format("option.ok")});
 		pane.setWantsInput(true);
-		pane.setSelectionValues(options);
-		pane.setInitialSelectionValue(def);
+		String[] formatted = Puppet.format(options);
+		pane.setSelectionValues(formatted);
+		pane.setInitialSelectionValue(Puppet.format(def));
 		configureOptionPane(pane);
 		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
 		configureOptionDialog(pane, dialog);
@@ -470,6 +479,12 @@ public class SwingPuppet {
 				opt = "closed";
 			} else {
 				opt = (String)sel;
+				for (int i = 0; i < formatted.length; i++) {
+					if (opt.equals(formatted[i])) {
+						opt = options[i];
+						break;
+					}
+				}
 			}
 			Puppet.reportChoice(name, opt);
 		}

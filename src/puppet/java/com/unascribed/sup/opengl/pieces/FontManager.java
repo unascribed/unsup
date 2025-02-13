@@ -7,6 +7,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.brotli.dec.BrotliInputStream;
 import org.lwjgl.PointerBuffer;
 import org.lwjgl.util.freetype.FT_Bitmap;
 import org.lwjgl.util.freetype.FT_Face;
@@ -15,7 +16,7 @@ import com.unascribed.sup.Puppet;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.opengl.GLPuppet;
 
-import static org.lwjgl.opengl.GL11.*;
+import static com.unascribed.sup.opengl.util.GL.*;
 import static org.lwjgl.util.freetype.FreeType.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
@@ -27,10 +28,10 @@ public class FontManager {
 	private FT_Bitmap scratchBitmap;
 	
 	public enum Face {
-		REGULAR("FiraSans-Regular.ttf", "NotoSans-Regular.woff", "NotoSansCJK-Regular.ttc"),
-		BOLD("FiraSans-Bold.ttf", "NotoSans-Bold.woff", "NotoSansCJK-Regular.ttc"),
-		ITALIC("FiraSans-Italic.ttf", "NotoSans-Regular.woff", "NotoSansCJK-Regular.ttc"),
-		BOLDITALIC("FiraSans-BoldItalic.ttf", "NotoSans-Bold.woff", "NotoSansCJK-Regular.ttc"),
+		REGULAR("FiraSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc.br"),
+		BOLD("FiraSans-Bold.ttf.br", "NotoSansCJK-Regular.ttc.br"),
+		ITALIC("FiraSans-Italic.ttf.br", "NotoSansCJK-Regular.ttc.br"),
+		BOLDITALIC("FiraSans-BoldItalic.ttf.br", "NotoSansCJK-Regular.ttc.br"),
 		;
 		public final String[] filenames;
 
@@ -132,7 +133,11 @@ public class FontManager {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			try (InputStream in = GLPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/assets/fonts/"+name)) {
-				Util.copy(in, baos);
+				InputStream win = in;
+				if (name.endsWith(".br")) {
+					win = new BrotliInputStream(in);
+				}
+				Util.copy(win, baos);
 			} catch (IOException e) {
 				Puppet.log("WARN", "Failed to load font "+name, e);
 				return null;

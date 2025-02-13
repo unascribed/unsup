@@ -23,6 +23,7 @@ import java.util.StringJoiner;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
+import org.brotli.dec.BrotliInputStream;
 import com.unascribed.sup.SysProps.PuppetMode;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.pieces.Latch;
@@ -146,11 +147,14 @@ public class PuppetHandler {
 				try {
 					List<String> args = new ArrayList<>();
 					args.add(java);
-					if (System.getProperty("os.name").contains("OS X")) {
+					if (System.getProperty("os.name").contains("OS X") && SysProps.PUPPET_MODE != PuppetMode.SWING) {
 						args.add("-XstartOnFirstThread");
 					}
 					for (String prop : copyableProps) {
 						String v = System.getProperty(prop);
+						if ("unsup.puppetMode".equals(prop) && v == null) {
+							v = Agent.config.get("puppet_mode", "auto");
+						}
 						if (v != null) {
 							args.add("-D"+prop+"="+v);
 						}
@@ -159,14 +163,56 @@ public class PuppetHandler {
 					List<String> cp = new ArrayList<>();
 					cp.add(ourPath.getAbsolutePath());
 					if (SysProps.PUPPET_MODE != PuppetMode.SWING) {
+						String osName = System.getProperty("os.name");
+						String ourOs = "";
+						String ourArch = "";
+						// copied from LWJGL3 Platform
+						if (osName.startsWith("Windows")) {
+							ourOs = "windows";
+						} else if (osName.startsWith("FreeBSD")) {
+							ourOs = "freebsd";
+						} else if (osName.startsWith("Linux") || osName.startsWith("SunOS") || osName.startsWith("Unix")) {
+							ourOs = "linux";
+						} else if (osName.startsWith("Mac OS X") || osName.startsWith("Darwin")) {
+							ourOs = "macos";
+						}
+						if (!ourOs.isEmpty()) {
+							String osArch = System.getProperty("os.arch");
+							boolean is64Bit = osArch.contains("64") || osArch.startsWith("armv8");
+							if (osArch.startsWith("arm") || osArch.startsWith("aarch")) {
+								if (is64Bit) {
+									ourArch = "-arm64";
+								} else {
+									ourArch = "-arm32";
+								}
+							} else if (osArch.startsWith("ppc")) {
+								if ("ppc64le".equals(osArch)) {
+									ourArch = "-ppc64le";
+								}
+							} else if (osArch.startsWith("riscv")) {
+								if ("riscv64".equals(osArch)) {
+									ourArch = "-riscv64";
+								}
+							} else {
+								if (is64Bit) {
+									ourArch = ".";
+								} else {
+									ourArch = "-x86";
+								}
+							}
+						}
+						// this will result in a generic substring if the above code didn't find an
+						// exact match, so we'll just pop all the natives and let LWJGL sort it out
+						String ourNatives = "natives-"+ourOs+ourArch;
 						File tmp = new File(".unsup-tmp/natives");
 						tmp.mkdirs();
 						for (String s : cpJars) {
+							if (s.contains("natives-") && !s.contains(ourNatives)) continue;
 							URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s);
 							if (url != null) {
 								File out = new File(tmp, s);
 								try (FileOutputStream fos = new FileOutputStream(out);
-										InputStream is = url.openStream()) {
+										InputStream is = new BrotliInputStream(url.openStream())) {
 									Util.copy(is, fos);
 								}
 								out.deleteOnExit();
@@ -346,7 +392,7 @@ public class PuppetHandler {
 		if (Math.abs(lastReportedProgress-prog) >= 100 || System.nanoTime()-lastReportedProgressTime > TimeUnit.SECONDS.toNanos(3)) {
 			lastReportedProgress = prog;
 			lastReportedProgressTime = System.nanoTime();
-			Log.info(title+" "+(prog/10)+"%");
+			Log.info(Agent.config.get("strings."+title)+" "+(prog/10)+"%");
 		}
 	}
 

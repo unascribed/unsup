@@ -9,8 +9,8 @@ public enum ConflictType {
 	LOCAL_CHANGED_REMOTE_DELETED,
 	LOCAL_DELETED_REMOTE_CHANGED,
 	;
-	public final String msg;
+	public final String translationKey;
 	ConflictType() {
-		this.msg = "conflict."+name().toLowerCase(Locale.ROOT);
+		this.translationKey = name().toLowerCase(Locale.ROOT);
 	}
 }

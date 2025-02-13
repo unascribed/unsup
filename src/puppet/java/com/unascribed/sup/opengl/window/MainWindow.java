@@ -1,15 +1,13 @@
 package com.unascribed.sup.opengl.window;
 
-import static com.unascribed.sup.opengl.util.GL.glColorPacked3i;
-import static org.lwjgl.glfw.GLFW.glfwSetWindowRefreshCallback;
-
 import com.unascribed.sup.ColorChoice;
 import com.unascribed.sup.Puppet;
 import com.unascribed.sup.opengl.GLPuppet;
 import com.unascribed.sup.opengl.pieces.GLThrobber;
 import com.unascribed.sup.opengl.pieces.FontManager.Face;
 
-import static org.lwjgl.opengl.GL11.*;
+import static com.unascribed.sup.opengl.util.GL.*;
+import static org.lwjgl.glfw.GLFW.*;
 
 public class MainWindow extends Window {
 
@@ -27,6 +25,10 @@ public class MainWindow extends Window {
 
 		glfwSetWindowRefreshCallback(handle, window -> {
 			needsFullRedraw = true;
+		});
+		
+		glfwSetWindowCloseCallback(handle, unused -> {
+			Puppet.reportCloseRequest();
 		});
 	}
 	

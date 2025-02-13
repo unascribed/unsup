@@ -1,16 +1,15 @@
 package com.unascribed.sup.opengl.window;
 
-import static org.lwjgl.glfw.GLFW.*;
 
 import com.unascribed.sup.ColorChoice;
 import com.unascribed.sup.MessageType;
+import com.unascribed.sup.Puppet;
 import com.unascribed.sup.opengl.GLPuppet;
 import com.unascribed.sup.opengl.pieces.FontManager.Face;
 
-import static org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT;
-import static org.lwjgl.opengl.GL11.glClear;
-
 import static com.unascribed.sup.opengl.util.GL.*;
+import static org.lwjgl.glfw.GLFW.*;
+import static org.lwjgl.system.MemoryUtil.*;
 
 public class MessageDialogWindow extends Window {
 
@@ -19,6 +18,7 @@ public class MessageDialogWindow extends Window {
 	private final String[] bodyLines;
 	private final MessageType messageType;
 	private final String[] options;
+	private final String[] optionsRaw;
 	
 	private final float[] bodyMeasurements;
 	private final float[] optionMeasurements;
@@ -28,15 +28,23 @@ public class MessageDialogWindow extends Window {
 	private int hovered = -1;
 	
 	private boolean needsRedraw = true;
+	private boolean needsFullRedraw = true;
 	
 	private double mouseX, mouseY;
+	private boolean mouseClicked = false;
+	private boolean enterPressed = false;
+	
+	private boolean clickCursorActive = false;
+	
+	private long clickCursor;
 	
 	public MessageDialogWindow(String name, String title, String body, MessageType messageType, String[] options) {
 		this.name = name;
-		this.title = title;
-		this.bodyLines = body.split("\n");
+		this.title = Puppet.format(title);
+		this.bodyLines = Puppet.format(body).split("\n");
 		this.messageType = messageType;
-		this.options = options;
+		this.optionsRaw = options;
+		this.options = Puppet.format(options);
 		
 		this.bodyMeasurements = new float[bodyLines.length];
 		this.optionMeasurements = new float[options.length];
@@ -47,8 +55,11 @@ public class MessageDialogWindow extends Window {
 		glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
 		super.create(title, width, height, dpiScale);
 		
+		clickCursor = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
+		
 		glfwSetWindowRefreshCallback(handle, window -> {
 			needsRedraw = true;
+			needsFullRedraw = true;
 		});
 		glfwSetKeyCallback(handle, (window, key, scancode, action, mods) -> {
 			if (action == GLFW_RELEASE) return;
@@ -62,11 +73,26 @@ public class MessageDialogWindow extends Window {
 				h %= options.length;
 				highlighted = h;
 				needsRedraw = true;
+			} else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE || key == GLFW_KEY_KP_ENTER) {
+				enterPressed = true;
+				needsRedraw = true;
 			}
 		});
 		glfwSetCursorPosCallback(handle, (window, xpos, ypos) -> {
 			mouseX = xpos/dpiScale;
 			mouseY = ypos/dpiScale;
+			needsRedraw = true;
+		});
+		glfwSetMouseButtonCallback(handle, (window, button, action, mods) -> {
+			if (action == GLFW_RELEASE) return;
+			if (button == GLFW_MOUSE_BUTTON_LEFT) {
+				mouseClicked = true;
+				needsRedraw = true;
+			}
+		});
+		glfwSetWindowCloseCallback(handle, unused -> {
+			Puppet.reportChoice(name, "closed");
+			close();
 		});
 	}
 	
@@ -95,38 +121,66 @@ public class MessageDialogWindow extends Window {
 	
 	@Override
 	protected boolean needsRerender() {
-		return needsRedraw;
+		return needsRedraw || needsFullRedraw;
 	}
 
 	@Override
 	protected void renderInner() {
-		glClear(GL_COLOR_BUFFER_BIT);
+		if (needsFullRedraw) {
+			glClear(GL_COLOR_BUFFER_BIT);
+			glColorPacked3i(GLPuppet.getColor(ColorChoice.DIALOG));
+		}
 		
 		float y = 20;
-		glColorPacked3i(GLPuppet.getColor(ColorChoice.DIALOG));
 		for (int i = 0; i < bodyLines.length; i++) {
 			String line = bodyLines[i];
 			Face f = i == 0 ? Face.BOLD : Face.REGULAR;
 			float w = bodyMeasurements[i];
-			glPushMatrix();
-				font.drawString(f, (int)((width-w)/2), y, 12, line);
-			glPopMatrix();
+			if (needsFullRedraw) {
+				glPushMatrix();
+					font.drawString(f, (int)((width-w)/2), y, 12, line);
+				glPopMatrix();
+			}
 			y += 16;
 		}
+		
 
 		y -= 4;
 		
 		glDisable(GL_TEXTURE_2D);
 		glBegin(GL_QUADS);
+		int tmpHovered = -1;
 		float x = (width-totalOptionWidth)/2;
 		for (int i = 0; i < options.length; i++) {
 			float w = optionMeasurements[i]+14;
 			if (w < 64) w = 64;
-			glColorPacked3i(GLPuppet.getColor(ColorChoice.BUTTON));
-			glVertex2f(x, y);
-			glVertex2f(x+w, y);
-			glVertex2f(x+w, y+27);
-			glVertex2f(x, y+27);
+			
+			float x2 = x+w;
+			float y2 = y+27;
+			
+			if (mouseX >= x && mouseX <= x2 &&
+					mouseY >= y && mouseY <= y2) {
+				tmpHovered = i;
+				Puppet.runOnMainThread(() -> glfwSetCursor(handle, clickCursor));
+				clickCursorActive = true;
+				
+				if (mouseClicked) {
+					Puppet.reportChoice(name, optionsRaw[i]);
+					close();
+				}
+			}
+			
+			for (int j = 0; j < (i == tmpHovered ? 2 : 1); j++) {
+				if (j == 0) {
+					glColorPacked3i(GLPuppet.getColor(ColorChoice.BUTTON));
+				} else {
+					glColor4f(1, 1, 1, 0.25f);
+				}
+				glVertex2f(x, y);
+				glVertex2f(x2, y);
+				glVertex2f(x2, y2);
+				glVertex2f(x, y2);
+			}
 			
 			if (i == highlighted) {
 				glColor4f(1, 1, 1, 0.5f);
@@ -134,9 +188,18 @@ public class MessageDialogWindow extends Window {
 				glVertex2f(x+w-6, y+20);
 				glVertex2f(x+w-6, y+22);
 				glVertex2f(x+6, y+22);
+				
+				if (enterPressed) {
+					Puppet.reportChoice(name, optionsRaw[i]);
+					close();
+				}
 			}
 			
 			x += w+6;
+		}
+		hovered = tmpHovered;
+		if (tmpHovered == -1 && clickCursorActive) {
+			Puppet.runOnMainThread(() -> glfwSetCursor(handle, NULL));
 		}
 		glEnd();
 		x = (width-totalOptionWidth)/2;
@@ -157,6 +220,9 @@ public class MessageDialogWindow extends Window {
 		}
 		
 		needsRedraw = false;
+		needsFullRedraw = false;
+		if (mouseClicked) mouseClicked = false;
+		if (enterPressed) enterPressed = false;
 	}
 
 }

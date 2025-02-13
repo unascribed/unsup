@@ -1,3 +1,5 @@
+[![Translation status](https://weblate.sleeping.town/widgets/unsup/-/unsup/multi-auto.svg)](http://weblate.sleeping.town/engage/unsup/)
+
 <img src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/unsup.svg" align="right" width="180px">
 
 # unsup

@@ -69,7 +69,6 @@ configurations {
 }
 
 dependencies {
-
 	def shadeCis = {
 		shade(it) {
 			transitive = false
@@ -82,9 +81,11 @@ dependencies {
 		exclude group: 'org.jetbrains'
 		exclude module: 'kotlin-stdlib-common'
 	}
+	shadeCis 'com.squareup.okhttp3:okhttp-brotli:4.12.0'
 	shadeCis 'com.squareup.okhttp3:okhttp-dnsoverhttps:4.12.0'
 	shadeCis 'com.squareup.okhttp3:okhttp-tls:4.12.0'
 	shadeCis 'com.moandjiezana.toml:toml4j:0.7.2'
+	shadeCis 'org.brotli:dec:0.1.2'
 	shade 'com.unascribed:flexver-java:1.1.1'
 	
 	lwjgl(it, '3.3.6', 'glfw', 'opengl', 'freetype')
@@ -101,9 +102,9 @@ shadowJar {
 	archiveClassifier = 'fat'
 	destinationDirectory.set(file('build/tmp'))
 	configurations = [project.configurations.shade]
-	["net.i2p.crypto", "kotlin", "okio", "okhttp3", "com.grack.nanojson", "com.moandjiezana.toml", "com.unascribed.flexver", "org.objectweb", "me.saharnooby"].each {
-		relocate it, 'com.unascribed.sup.lib.'+it
-	}
+	enableRelocation = true
+	relocationPrefix = "com.unascribed.sup.lib"
+	relocate 'me.saharnooby.qoi', 'com.unascribed.sup.lib.me.saharnooby.qoi'
 	from sourceSets.puppet.output
 	from sourceSets.agent.output
 	
@@ -159,7 +160,7 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 task proguardAgain(type: proguard.gradle.ProGuardTask) {
 	doFirst {
 		def pat = java.util.regex.Pattern.compile('^(com/unascribed/sup/([^/]+)/(.*))\\.class$')
-		file('build/tmp/mapping.map').withWriter {
+		new File('build/tmp/mapping.map').withWriter {
 			ZipFile zf = new ZipFile("build/tmp/proguard.jar");
 			for (ZipEntry ze : Collections.list(zf.entries())) {
 				def m = pat.matcher(ze.getName())
@@ -200,8 +201,11 @@ task proguardAgain(type: proguard.gradle.ProGuardTask) {
 	
 }
 
+task brotliDepJars {}
+
 task proguardJar(type: Jar) {
 	dependsOn proguardAgain
+	dependsOn brotliDepJars
 	from(zipTree('build/tmp/proguard2.jar'))
 	
 	eachFile {
@@ -213,7 +217,7 @@ task proguardJar(type: Jar) {
 		}
 	}
 	
-	from(project.configurations.include.resolve()) {
+	from(fileTree('build/tmp/depjars')) {
 		into 'com/unascribed/sup/jars'
 	}
 	
@@ -231,12 +235,34 @@ task proguardJar(type: Jar) {
 	}
 }
 
+project.configurations.include.resolve().each { file ->
+	def t = task("uncompressedJar_"+file.name, type: Jar) {
+		from zipTree(file)
+		archiveFileName.set(file.name)
+		destinationDirectory.set(project.file('build/tmp/depjars'))
+		entryCompression = 'stored'
+	}
+	def bt = task("brotliJar_"+file.name, type:Exec) {
+		dependsOn t
+		if (project.hasProperty("unsup.ci")) {
+			environment 'LD_LIBRARY_PATH', './.ci'
+			commandLine './.ci/brotli', '-Zj', 'build/tmp/depjars/'+file.name
+		} else {
+			commandLine 'brotli', '-Zj', 'build/tmp/depjars/'+file.name
+		}
+	}
+	brotliDepJars.dependsOn bt
+}
+
 task amendClassPrivacy {
 	dependsOn proguardJar
+	// create vars now for configuration cache parallelism
+	def proguardJarOut = proguardJar.archivePath
+	def ver = project.version
 	doFirst {
 		File tmp = new File("build/tmp/amended.jar");
 		ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tmp));
-		ZipFile zf = new ZipFile(proguardJar.archivePath);
+		ZipFile zf = new ZipFile(proguardJarOut);
 		for (ZipEntry ze : Collections.list(zf.entries())) {
 			if (ze.getName().equals("com/unascribed/sup/PublicInAgent.class")) continue;
 			ZipEntry copy = new ZipEntry(ze.getName());
@@ -266,7 +292,7 @@ task amendClassPrivacy {
 						if (it.name == '<clinit>') {
 							it.instructions.each {
 								if (it instanceof LdcInsnNode && it.cst instanceof String && it.cst == '${version}') {
-									it.cst = project.version;
+									it.cst = ver;
 								}
 							}
 						}
@@ -281,7 +307,7 @@ task amendClassPrivacy {
 		}
 		zf.close();
 		zos.close();
-		tmp.renameTo(proguardJar.archivePath);
+		tmp.renameTo(proguardJarOut);
 	}
 }
 
@@ -361,16 +387,11 @@ publishing {
 }
 
 def lwjgl(DependencyHandler deps, String ver, String... modules) {
-	// minimal set, as the Swing impl will be used if the GL one can't init and these are quite large
 	def platforms = [
-		'linux', 'macos', 'windows',
-		'linux-arm64',
-		'macos-arm64',
-		
-		// 'windows-x86',
-		// 'linux-arm32', 'linux-ppc64le', 'linux-riscv64',
-		// 'windows-arm64',
-		// 'freebsd',
+		'linux', 'linux-arm64', //'linux-arm32', 'linux-ppc64le', 'linux-riscv64',
+		'macos', 'macos-arm64',
+		'windows', //'windows-x86', 'windows-arm64',
+		'freebsd',
 	]
 	
 	deps.include(dependencies.create("org.lwjgl:lwjgl:${ver}"))

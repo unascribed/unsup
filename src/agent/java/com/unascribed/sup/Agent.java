@@ -60,6 +60,7 @@ import com.unascribed.sup.util.Strings;
 import okhttp3.Dns;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
+import okhttp3.brotli.BrotliInterceptor;
 import okhttp3.dnsoverhttps.DnsOverHttps;
 import okhttp3.tls.HandshakeCertificates;
 
@@ -358,6 +359,7 @@ public class Agent {
 			.readTimeout(15, TimeUnit.SECONDS)
 			.callTimeout(120, TimeUnit.SECONDS)
 			.sslSocketFactory(certs.sslSocketFactory(), certs.trustManager())
+			.addInterceptor(BrotliInterceptor.INSTANCE)
 			.build();
 		switch (config.get("dns", "system")) {
 			case "system":
@@ -563,7 +565,7 @@ public class Agent {
 					resp = conflictPreload.get(conflictType);
 				} else {
 					resp = PuppetHandler.openAlert("dialog.conflict.title",
-							"dialog.conflict."+(dest.exists() ? "aside" : "normal")+"¤"+path+"¤"+conflictType.msg,
+							"dialog.conflict.leadin."+conflictType.translationKey+"¤"+path+"¤dialog.conflict.body¤"+(dest.exists() ? "dialog.conflict.aside_trailer" : ""),
 							AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
 					if (resp == AlertOption.NOTOALL) {
 						resp = AlertOption.NO;
