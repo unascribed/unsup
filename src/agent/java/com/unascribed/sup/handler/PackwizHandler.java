@@ -95,14 +95,14 @@ public class PackwizHandler extends AbstractFormatHandler {
 			} else {
 				Log.info("Update available - only components have changed");
 			}
-			String interlude = " from "+ourVersion.name+" to "+theirVersion.name;
+			String body = "dialog.update.named¤"+ourVersion.name+"¤"+theirVersion.name;
 			if (ourVersion.name.equals(theirVersion.name)) {
-				interlude = "";
+				body = "dialog.update.unnamed";
 			}
 			boolean bootstrapping = !pwstate.containsKey("lastIndexHash");
 			if (!bootstrapping && actualUpdate && !autoaccept) {
-				AlertOption updateResp = PuppetHandler.openAlert("Update available",
-						"<b>An update"+interlude+" is available!</b><br/>Do you want to install it?",
+				AlertOption updateResp = PuppetHandler.openAlert("dialog.update.title",
+						body,
 						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
 					Log.info("Ignoring update by user choice.");
@@ -110,8 +110,8 @@ public class PackwizHandler extends AbstractFormatHandler {
 				}
 			}
 			pwstate.put("lastIndexHash", indexDoublet);
-			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
-			PuppetHandler.updateSubtitle("Calculating update");
+			PuppetHandler.updateTitle(bootstrapping ? "title.bootstrapping" : "title.updating", false);
+			PuppetHandler.updateSubtitle("subtitle.calculating");
 			Toml index = RequestHelper.loadToml(src.resolve(Util.uriOfPath(indexMeta.getString("file"))), 8*M,
 					indexFunc, indexMeta.getString("hash"));
 			Toml unsup = null;
@@ -293,8 +293,8 @@ public class PackwizHandler extends AbstractFormatHandler {
 				}
 			}
 			svc.shutdown();
-			PuppetHandler.updateSubtitle("Retrieving metafiles");
-			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
+			PuppetHandler.updateSubtitle("subtitle.packwiz.retrieving");
+			PuppetHandler.updateTitle(bootstrapping ? "title.bootstrapping" : "title.updating", false);
 			for (Future<Metafile> future : metafileFutures) {
 				Metafile mf;
 				while (true) {
@@ -381,7 +381,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				syntheticGroupsJson.put(en.getKey(), obj);
 			}
 
-			PuppetHandler.updateSubtitle("Waiting for flavor selection");
+			PuppetHandler.updateSubtitle("subtitle.waiting_for_flavors");
 			if (SysProps.PACKWIZ_CHANGE_FLAVORS) {
 				ourFlavors.clear();
 			}

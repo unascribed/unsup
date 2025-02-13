@@ -159,7 +159,7 @@ public class NativeHandler extends AbstractFormatHandler {
 					Log.warn("Bootstrap manifest version "+bootstrapVersion+" is older than root manifest version "+theirVersion+", will have to perform extra updates");
 				}
 				HashFunction func = HashFunction.byName(bootstrap.getString("hash_function", DEFAULT_HASH_FUNCTION));
-				PuppetHandler.updateTitle("Bootstrapping...", false);
+				PuppetHandler.updateTitle("title.bootstrapping", false);
 				bootstrapPlan = new UpdatePlan<>(true, newState);
 				for (Object o : bootstrap.getArray("files")) {
 					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in files array is not an object");
@@ -207,8 +207,8 @@ public class NativeHandler extends AbstractFormatHandler {
 			if (!bootstrapping) {
 				Log.info("Update available! We have "+ourVersion+", they have "+theirVersion);
 				if (!autoaccept) {
-					AlertOption updateResp = PuppetHandler.openAlert("Update available",
-							"<b>An update from "+ourVersion.name+" to "+theirVersion.name+" is available!</b><br/>Do you want to install it?",
+					AlertOption updateResp = PuppetHandler.openAlert("dialog.update.title",
+							"dialog.update.named¤"+ourVersion.name+"¤"+theirVersion.name,
 							AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 					if (updateResp == AlertOption.NO) {
 						Log.info("Ignoring update by user choice.");
@@ -221,8 +221,8 @@ public class NativeHandler extends AbstractFormatHandler {
 				plan.files.putAll(bootstrapPlan.files);
 				plan.expectedState.putAll(bootstrapPlan.expectedState);
 			}
-			PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
-			PuppetHandler.updateSubtitle("Calculating update");
+			PuppetHandler.updateTitle(bootstrapping ? "title.bootstrapping" : "title.updating", false);
+			PuppetHandler.updateSubtitle("subtitle.calculating");
 			boolean yappedAboutConsistency = false;
 			int updates = theirVersion.code-ourVersion.code;
 			for (int i = 0; i < updates; i++) {

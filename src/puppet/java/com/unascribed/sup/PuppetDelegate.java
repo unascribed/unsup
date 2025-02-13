@@ -20,8 +20,8 @@ public interface PuppetDelegate {
 	void setTitle(String title);
 	void setSubtitle(String subtitle);
 	
-	void openChoiceDialog(String name, String title, String body, String def, String[] options);
-	void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options);
+	void openChoiceDialog(String name, String title, String body, String[] options, String def);
+	void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options, String def);
 	void openFlavorDialog(String name, List<FlavorGroup> groups);
 	
 }

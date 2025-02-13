@@ -88,19 +88,6 @@ import static javax.swing.SwingUtilities.invokeLater;
  */
 public class SwingPuppet {
 
-	public static void main(String[] args) {
-		ColorChoice.usePrettyDefaults = true;
-		PuppetDelegate del = start();
-		del.build();
-		del.setVisible(true);
-		try {
-			Thread.sleep(1000);
-		} catch (InterruptedException e) {
-		}
-		del.setTitle("Bootstrapping...");
-		del.setSubtitle("Downloading mods/foobar-1.2.1.2.1.3.1.4.jar");
-	}
-	
 	private static JFrame frame;
 	private static JLabel title, subtitle;
 	private static JProgressBar prog;
@@ -212,14 +199,14 @@ public class SwingPuppet {
 			}
 
 			@Override
-			public void openChoiceDialog(String name, String title, String body, String def, String[] options) {
+			public void openChoiceDialog(String name, String title, String body, String[] options, String def) {
 				invokeLater(() -> {
 					SwingPuppet.openChoiceDialog(name, title, body, def, options);
 				});
 			}
 
 			@Override
-			public void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options) {
+			public void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options, String def) {
 				invokeLater(() -> {
 					int swingType = JOptionPane.PLAIN_MESSAGE;
 					switch (messageType) {
@@ -294,7 +281,7 @@ public class SwingPuppet {
 	}
 
 	private static Font loadFont(String name, int style) {
-		try (InputStream in = SwingPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/"+name)) {
+		try (InputStream in = SwingPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/assets/fonts/"+name)) {
 			Font f = Font.createFont(Font.TRUETYPE_FONT, in).deriveFont(style);
 			GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(f);
 			return f;
@@ -322,7 +309,7 @@ public class SwingPuppet {
 			public void windowClosing(WindowEvent e) {
 				if (closeAlreadyAttempted) {
 					openMessageDialog(null, "unsup is busy",
-							"<html><center><b>The updater is busy and can't exit right now.</b><br/>Please wait a moment.</center></html>",
+							"<html><center><b>"+Puppet.format("dialog.busy")+"</b><br/>"+Puppet.format("dialog.please_wait")+"</center></html>",
 							JOptionPane.WARNING_MESSAGE, "OK");
 				} else {
 					closeAlreadyAttempted = true;
@@ -343,7 +330,7 @@ public class SwingPuppet {
 		
 		Box inner = Box.createVerticalBox();
 		inner.setBorder(new EmptyBorder(8, 0, 0, 0));
-		title = new JLabel("<html>Reticulating splines...</html>");
+		title = new JLabel("<html>"+Puppet.format("title.default")+"</html>");
 		title.setForeground(getColor(ColorChoice.TITLE));
 		title.setFont(firaSansBold.deriveFont(24f));
 		title.setAlignmentX(0);
@@ -440,7 +427,9 @@ public class SwingPuppet {
 	}
 	
 	private static void openMessageDialog(String name, String title, String body, int messageType, String... options) {
-		JOptionPane pane = new JOptionPane(body, messageType, JOptionPane.DEFAULT_OPTION, null, options);
+		String[] split = body.split("\n", 2);
+		body = "<b>"+split[0]+"</b><br/>"+(split.length == 2 ? split[1].replace("\n", "<br/>") : "");
+		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", messageType, JOptionPane.DEFAULT_OPTION, null, options);
 		configureOptionPane(pane);
 		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
 		configureOptionDialog(pane, dialog);
@@ -463,7 +452,10 @@ public class SwingPuppet {
 	}
 
 	private static void openChoiceDialog(String name, String title, String body, String def, String... options) {
-		JOptionPane pane = new JOptionPane(body, JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null, new Object[]{"OK"});
+		String[] split = body.split("\n", 2);
+		body = "<b>"+split[0]+"</b><br/>"+(split.length == 2 ? split[1].replace("\n", "<br/>") : "");
+		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
+				new Object[]{Puppet.format("option.ok")});
 		pane.setWantsInput(true);
 		pane.setSelectionValues(options);
 		pane.setInitialSelectionValue(def);
@@ -484,7 +476,7 @@ public class SwingPuppet {
 	}
 	
 	private static void openFlavorDialog(String name, List<FlavorGroup> groups) {
-		JDialog dialog = new JDialog(frame != null && frame.isVisible() ? frame : null, "Select flavors");
+		JDialog dialog = new JDialog(frame != null && frame.isVisible() ? frame : null, Puppet.format("dialog.flavors.title"));
 		dialog.setIconImages(logos);
 		dialog.setModal(true);
 		dialog.setBackground(getColor(ColorChoice.BACKGROUND));
@@ -492,7 +484,7 @@ public class SwingPuppet {
 		dialog.setSize(854, 480);
 		dialog.setLocationRelativeTo(frame);
 		String descPfx = "<style>body { font-family: \"Fira Sans\"; color: #"+Integer.toHexString(getColor(ColorChoice.DIALOG).getRGB()|0xFF000000).substring(2)+"; }</style>";
-		String noDesc = "<font size=\"4\" face=\"Fira Sans\" color=\"#"+Integer.toHexString(getColor(ColorChoice.SUBTITLE).getRGB()|0xFF000000).substring(2)+"\"><i>Hover an option to the left to see an explanation</i></font>";
+		String noDesc = "<font size=\"4\" face=\"Fira Sans\" color=\"#"+Integer.toHexString(getColor(ColorChoice.SUBTITLE).getRGB()|0xFF000000).substring(2)+"\"><i>"+Puppet.format("flavor.hover_notice")+"</i></font>";
 		JEditorPane desc = new JEditorPane("text/html", noDesc);
 		Set<String> results = new HashSet<>();
 		Set<String> descriptions = new HashSet<>();
@@ -768,7 +760,7 @@ public class SwingPuppet {
 		buttons.setAlignmentX(0);
 		buttons.setMaximumSize(new Dimension(32767, 48));
 		buttons.add(Box.createHorizontalGlue());
-		JButton done = new JButton("Done");
+		JButton done = new JButton(Puppet.format("option.done"));
 		done.setBackground(getColor(ColorChoice.BUTTON));
 		done.setForeground(getColor(ColorChoice.BUTTONTEXT));
 		buttons.add(done);

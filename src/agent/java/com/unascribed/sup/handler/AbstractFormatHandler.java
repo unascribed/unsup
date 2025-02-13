@@ -112,7 +112,7 @@ public abstract class AbstractFormatHandler {
 			ourFlavors = new JsonArray(ourFlavors == null ? Collections.emptyList() : ourFlavors);
 			if (PuppetHandler.puppetOut != null) {
 				PuppetHandler.tellPuppet(":expedite=openTimeout");
-				ourFlavors.addAll(PuppetHandler.openFlavorSelectDialog("Select flavors", "", unpickedGroups));
+				ourFlavors.addAll(PuppetHandler.openFlavorSelectDialog("dialog.flavors.title", "", unpickedGroups));
 			} else {
 				for (FlavorGroup grp : unpickedGroups) {
 					if (grp.defChoice != null) {

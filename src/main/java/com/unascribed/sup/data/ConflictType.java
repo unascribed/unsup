@@ -1,14 +1,16 @@
 package com.unascribed.sup.data;
 
+import java.util.Locale;
+
 public enum ConflictType {
-	NO_CONFLICT(null),
-	LOCAL_AND_REMOTE_CREATED("created by you and in this update"),
-	LOCAL_AND_REMOTE_CHANGED("changed by you and in this update"),
-	LOCAL_CHANGED_REMOTE_DELETED("changed by you and deleted in this update"),
-	LOCAL_DELETED_REMOTE_CHANGED("deleted by you and changed in this update"),
+	NO_CONFLICT,
+	LOCAL_AND_REMOTE_CREATED,
+	LOCAL_AND_REMOTE_CHANGED,
+	LOCAL_CHANGED_REMOTE_DELETED,
+	LOCAL_DELETED_REMOTE_CHANGED,
 	;
 	public final String msg;
-	ConflictType(String msg) {
-		this.msg = msg;
+	ConflictType() {
+		this.msg = "conflict."+name().toLowerCase(Locale.ROOT);
 	}
 }

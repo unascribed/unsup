@@ -7,6 +7,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -27,6 +28,7 @@ import com.unascribed.sup.swing.SwingPuppet;
 public class Puppet {
 	
 	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
+	private static final Map<String, String> strings = new HashMap<>();
 
 	public static void main(String[] args) {
 		PuppetMode mode = SysProps.PUPPET_MODE;
@@ -123,6 +125,10 @@ public class Puppet {
 					case "colorProgressTrack": case "colorDialog": case "colorButton": case "colorButtonText":
 						del.setColor(ColorChoice.valueOf(order.substring(5).toUpperCase(Locale.ROOT)), Integer.parseInt(arg, 16));
 						continue;
+					case "string":
+						String[] spl = arg.split(":", 2);
+						strings.put(spl[0], spl[1]);
+						continue;
 					case "belay": {
 						r = () -> {
 							synchronized (orders) {
@@ -182,49 +188,50 @@ public class Puppet {
 						break;
 					}
 					case "title": {
-						r = () -> del.setTitle(arg);
+						r = () -> del.setTitle(format(arg));
 						break;
 					}
 					case "subtitle": {
-						r = () -> del.setSubtitle(arg);
+						r = () -> del.setSubtitle(format(arg));
 						break;
 					}
 					case "alert": {
 						String[] split = arg.split(":");
 						String title = split[0];
-						String body = "<html><center>"+split[1]+"</center></html>";
+						String body = split[1];
 						String messageTypeStr = split[2];
 						String optionTypeStr = split[3];
+						String def = split.length < 5 ? null : split[4];
 						if (messageTypeStr.startsWith("choice=")) {
 							String[] options = messageTypeStr.substring(7).split("\u001C");
 							for (int i = 0; i < options.length; i++) {
-								options[i] = options[i].replace('\u001B', ':');
+								options[i] = format(options[i].replace('\u001B', ':'));
 							}
-							r = () -> del.openChoiceDialog(name, title, body, optionTypeStr, options);
+							r = () -> del.openChoiceDialog(name, format(title), format(body), options, optionTypeStr);
 						} else {
 							MessageType messageType = MessageType.valueOf(messageTypeStr.toUpperCase(Locale.ROOT));
 							String[] options;
 							switch (optionTypeStr) {
 								case "yesno":
-									options = new String[]{"Yes", "No"};
+									options = new String[]{format("option.yes"), format("option.no")};
 									break;
 								case "yesnocancel":
-									options = new String[]{"Yes", "No", "Cancel"};
+									options = new String[]{format("option.yes"), format("option.no"), format("option.cancel")};
 									break;
 								case "okcancel":
-									options = new String[]{"OK", "Cancel"};
+									options = new String[]{format("option.ok"), format("option.cancel")};
 									break;
 								case "yesnotoallcancel":
-									options = new String[]{"Yes to All", "Yes", "No to All", "No", "Cancel"};
+									options = new String[]{format("option.yes_to_all"), format("option.yes"), format("option.no_to_all"), format("option.no"), format("option.cancel")};
 									break;
 								default:
 									Puppet.log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
 									// fallthru
 								case "ok":
-									options = new String[]{"Ok"};
+									options = new String[]{format("option.ok")};
 									break;
 							}
-							r = () -> del.openMessageDialog(name, title, body, messageType, options);
+							r = () -> del.openMessageDialog(name, format(title), format(body), messageType, options, format(def));
 						}
 						break;
 					}
@@ -311,6 +318,16 @@ public class Puppet {
 
 	public static void reportDone() {
 		System.exit(0);
+	}
+
+	public static String format(String key, Object... args) {
+		String[] split = key.split("¤");
+		if (split.length > 1) {
+			int origLen = args.length;
+			args = Arrays.copyOf(args, origLen+split.length);
+			System.arraycopy(split, 1, args, origLen, split.length);
+		}
+		return String.format(strings.getOrDefault(split[0], split[0]).replace("%n", "\n"), args);
 	}
 
 }

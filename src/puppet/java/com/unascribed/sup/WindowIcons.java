@@ -15,7 +15,7 @@ public class WindowIcons {
 	public static final QOIImage highres = load("unsup");
 
 	private static QOIImage load(String name) {
-		try (InputStream in = GLPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/"+name+".qoi")) {
+		try (InputStream in = GLPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/assets/"+name+".qoi")) {
 			return QOIDecoder.decode(in, 4);
 		} catch (IOException | NullPointerException e) {
 			Puppet.log("ERROR", "Failed to load "+name+".qoi", e);

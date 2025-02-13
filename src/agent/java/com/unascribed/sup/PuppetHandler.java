@@ -97,7 +97,8 @@ public class PuppetHandler {
 	private static final String[] copyableProps = {
 		"javax.accessibility.assistive_technologies",
 		"assistive_technologies",
-		"unsup.puppetMode"
+		"unsup.puppetMode",
+		"sun.java2d.uiScale"
 	};
 	
 	public static void destroy() {
@@ -282,7 +283,7 @@ public class PuppetHandler {
 		}
 	}
 
-	public static void setPuppetColorsFromConfig() {
+	public static void sendConfig() {
 		tellPuppet(":colorBackground="+Agent.config.get("colors.background", "000000"));
 		tellPuppet(":colorTitle="+Agent.config.get("colors.title", "FFFFFF"));
 		tellPuppet(":colorSubtitle="+Agent.config.get("colors.subtitle", "AAAAAA"));
@@ -293,6 +294,12 @@ public class PuppetHandler {
 		tellPuppet(":colorDialog="+Agent.config.get("colors.dialog", "FFFFFF"));
 		tellPuppet(":colorButton="+Agent.config.get("colors.button", "FFFFFF"));
 		tellPuppet(":colorButtonText="+Agent.config.get("colors.button_text", "FFFFFF"));
+		
+		for (String k : Agent.config.keySet()) {
+			if (k.startsWith("strings.")) {
+				tellPuppet(":string="+k.substring(8)+":"+Agent.config.get(k));
+			}
+		}
 	}
 
 	public static void tellPuppet(String order) {
@@ -350,7 +357,7 @@ public class PuppetHandler {
 			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
 			Latch latch = new Latch();
 			alertWaiters.put(name, latch);
-			tellPuppet("["+name+"]:alert="+title+":"+body+":"+messageType.name().toLowerCase(Locale.ROOT)+":"+optionType.name().toLowerCase(Locale.ROOT).replace("_", ""));
+			tellPuppet("["+name+"]:alert="+title+":"+body+":"+messageType.name().toLowerCase(Locale.ROOT)+":"+optionType.name().toLowerCase(Locale.ROOT).replace("_", "")+":"+def.name().toLowerCase(Locale.ROOT).replace("_", ""));
 			latch.awaitUninterruptibly();
 			return AlertOption.valueOf(alertResults.remove(name).toUpperCase(Locale.ROOT));
 		}

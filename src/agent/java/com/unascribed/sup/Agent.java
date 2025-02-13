@@ -20,6 +20,7 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -162,7 +163,7 @@ public class Agent {
 				state = new JsonObject();
 			}
 			
-			PuppetHandler.setPuppetColorsFromConfig();
+			PuppetHandler.sendConfig();
 			
 			PuppetHandler.tellPuppet(":build");
 			PuppetHandler.tellPuppet(":subtitle="+config.get("subtitle", ""));
@@ -178,8 +179,8 @@ public class Agent {
 
 			PuppetHandler.tellPuppet(":belay=openTimeout");
 			if (updatedComponents) {
-				PuppetHandler.openAlert("unsup notice",
-						"<b>A component update was applied.</b><br/>The game must be restarted — no errors have occurred, just launch the game again.",
+				PuppetHandler.openAlert("dialog.component_update.title",
+						"dialog.component_update",
 						PuppetHandler.AlertMessageType.INFO, AlertOptionType.OK, AlertOption.OK);
 			} else if (PuppetHandler.puppetOut != null) {
 				Log.info("Waiting for puppet to complete done animation...");
@@ -241,9 +242,14 @@ public class Agent {
 				exit(EXIT_CONFIG_ERROR);
 				return false;
 			}
-			config = mergePreset(config, "__global__");
+			config = mergePreset(config, "lang/en-US", true);
+			String lang = Locale.getDefault().toLanguageTag();
+			if (!"en-US".equals(lang)) {
+				config = mergePreset(config, "lang/"+lang, false);
+			}
+			config = mergePreset(config, "__global__", false);
 			if (config.containsKey("preset")) {
-				config = mergePreset(config, config.get("preset"));
+				config = mergePreset(config, config.get("preset"), true);
 			}
 			return true;
 		} else {
@@ -402,7 +408,7 @@ public class Agent {
 	}
 	
 	private static boolean checkForUpdate(SourceFormat fmt, URI src, boolean autoaccept, boolean reentering) {
-		PuppetHandler.updateTitle("Checking for updates...", false);
+		PuppetHandler.updateTitle("title.checking", false);
 		try {
 			CheckResult res = null;
 			if ("merge".equals(src.getScheme())) {
@@ -447,8 +453,8 @@ public class Agent {
 		} catch (Throwable t) {
 			Log.warn("Error while updating", t);
 			PuppetHandler.tellPuppet(":expedite=openTimeout");
-			if (PuppetHandler.openAlert("unsup error",
-					"<b>An error occurred while attempting to update.</b><br/>See the log for more info."+(standalone ? "" : "<br/>Choose Cancel to abort launch."),
+			if (PuppetHandler.openAlert("dialog.error.title",
+					"dialog.error."+(standalone ? "standalone" : "normal"),
 					PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
 				Log.info("User cancelled error dialog! Exiting.");
 				exit(EXIT_USER_REQUEST);
@@ -495,7 +501,7 @@ public class Agent {
 		}
 		long progressDenom = 1;
 		File wd = new File("");
-		PuppetHandler.updateSubtitle("Verifying consistency");
+		PuppetHandler.updateSubtitle("subtitle.verifying");
 		Set<String> moveAside = new HashSet<>();
 		Map<ConflictType, AlertOption> conflictPreload = new EnumMap<>(ConflictType.class);
 		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
@@ -556,11 +562,8 @@ public class Agent {
 				} else if (conflictPreload.containsKey(conflictType)) {
 					resp = conflictPreload.get(conflictType);
 				} else {
-					resp = PuppetHandler.openAlert("File conflict",
-							"<b>The file "+path+" was "+conflictType.msg+".</b><br/>"
-									+ "Do you want to replace it with the version from the update?<br/>"
-									+ "Choose Cancel to abort. No files have been changed yet."+
-									(dest.exists() ? "<br/><br/>If you choose Yes, a copy of the current file will be created at "+path+".orig." : ""),
+					resp = PuppetHandler.openAlert("dialog.conflict.title",
+							"dialog.conflict."+(dest.exists() ? "aside" : "normal")+"¤"+path+"¤"+conflictType.msg,
 							AlertMessageType.QUESTION, AlertOptionType.YES_NO_TO_ALL_CANCEL, AlertOption.YES);
 					if (resp == AlertOption.NOTOALL) {
 						resp = AlertOption.NO;
@@ -591,16 +594,16 @@ public class Agent {
 		final long progressDenomf = progressDenom;
 		AtomicLong progress = new AtomicLong();
 		Runnable updateProgress = () -> PuppetHandler.updateProgress((int)((progress.get()*1000)/progressDenomf));
-		PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", true);
+		PuppetHandler.updateTitle(bootstrapping ? "title.bootstrapping" : "title.updating", true);
 		ExecutorService svc = Executors.newFixedThreadPool(6);
 		Set<String> files = new HashSet<>();
 		List<Future<?>> futures = new ArrayList<>();
 		Map<FilePlan, DownloadedFile> downloads = new IdentityHashMap<>();
 		Runnable updateSubtitle = () -> {
 			if (files.size() == 0) {
-				PuppetHandler.updateSubtitle("Downloading...");
+				PuppetHandler.updateSubtitle("subtitle.downloading_indeterminate");
 			} else if (files.size() == 1) {
-				PuppetHandler.updateSubtitle("Downloading "+files.iterator().next());
+				PuppetHandler.updateSubtitle("subtitle.downloading¤"+files.iterator().next());
 			} else {
 				StringBuilder sb = new StringBuilder();
 				boolean first = true;
@@ -612,7 +615,7 @@ public class Agent {
 					}
 					sb.append(s.substring(s.lastIndexOf('/')+1));
 				}
-				PuppetHandler.updateSubtitle("Downloading "+sb);
+				PuppetHandler.updateSubtitle("subtitle.downloading¤"+sb);
 			}
 		};
 		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
@@ -692,9 +695,9 @@ public class Agent {
 				}
 			}
 		}
-		PuppetHandler.updateTitle(bootstrapping ? "Bootstrapping..." : "Updating...", false);
+		PuppetHandler.updateTitle(bootstrapping ? "title.bootstrapping" : "title.updating", false);
 		synchronized (dangerMutex) {
-			PuppetHandler.updateSubtitle("Applying changes. Do not force close the updater.");
+			PuppetHandler.updateSubtitle("subtitle.applying");
 			for (int pass = 0; pass < 2; pass++) {
 				for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {
 					String path = en.getKey();
@@ -829,9 +832,13 @@ public class Agent {
 		}
 	}
 	
-	private static QDIni mergePreset(QDIni config, String presetName) {
+	private static QDIni mergePreset(QDIni config, String presetName, boolean mustExist) {
 		URL u = Agent.class.getClassLoader().getResource("com/unascribed/sup/presets/"+presetName+".ini");
 		if (u == null) {
+			if (!mustExist) {
+				Log.debug("Optional preset "+presetName+" not found");
+				return config;
+			}
 			Log.error("Config file error: Preset "+presetName+" not found at "+config.getBlame("preset")+"! Exiting.");
 			exit(EXIT_CONFIG_ERROR);
 			return null;
