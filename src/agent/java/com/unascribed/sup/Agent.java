@@ -185,7 +185,7 @@ public class Agent {
 						PuppetHandler.AlertMessageType.INFO, AlertOptionType.OK, AlertOption.OK);
 			} else if (PuppetHandler.puppetOut != null) {
 				Log.info("Waiting for puppet to complete done animation...");
-				PuppetHandler.tellPuppet(":title=All done");
+				PuppetHandler.tellPuppet(":title=title.done");
 				PuppetHandler.tellPuppet(":mode=done");
 				if (!PuppetHandler.puppet.waitFor(3, TimeUnit.SECONDS)) {
 					Log.warn("Tired of waiting, killing the puppet.");

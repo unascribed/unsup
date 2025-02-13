@@ -343,6 +343,7 @@ public class Puppet {
 	}
 
 	public static String format(String key, Object... args) {
+		if (key.isEmpty()) return "";
 		String[] split = key.split("¤");
 		if (split.length > 1) {
 			int origLen = args.length;
@@ -354,7 +355,7 @@ public class Puppet {
 				}
 			}
 		}
-		return String.format(strings.getOrDefault(split[0], "??"+split[0]+"/"+Arrays.toString(args)).replace("%n", "\n"), args);
+		return String.format(strings.getOrDefault(split[0], key).replace("%n", "\n"), args);
 	}
 
 	public static String[] format(String[] keys) {
