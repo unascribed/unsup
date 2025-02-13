@@ -335,7 +335,7 @@ public class Puppet {
 	}
 
 	public static void reportDone() {
-		System.exit(0);
+//		System.exit(0);
 	}
 	
 	public static void addTranslation(String key, String value) {

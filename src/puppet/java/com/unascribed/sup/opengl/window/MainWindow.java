@@ -1,6 +1,7 @@
 package com.unascribed.sup.opengl.window;
 
 import com.unascribed.sup.ColorChoice;
+import com.unascribed.sup.MessageType;
 import com.unascribed.sup.Puppet;
 import com.unascribed.sup.opengl.GLPuppet;
 import com.unascribed.sup.opengl.pieces.GLThrobber;
@@ -13,11 +14,12 @@ public class MainWindow extends Window {
 
 	public GLThrobber throbber = new GLThrobber();
 	
-	public String title = "Reticulating splines...";
+	public String title = Puppet.format("title.default");
 	public String subtitle = "";
 	public float prog = 0.5f;
 	
 	public boolean needsFullRedraw = true;
+	public boolean closeRequested = false;
 	
 	@Override
 	public void create(String title, int width, int height, float dpiScale) {
@@ -28,7 +30,17 @@ public class MainWindow extends Window {
 		});
 		
 		glfwSetWindowCloseCallback(handle, unused -> {
-			Puppet.reportCloseRequest();
+			if (closeRequested) {
+				MessageDialogWindow diag = new MessageDialogWindow("puppet_busy_notice", "dialog.busy.title",
+						Puppet.format("dialog.busy"), MessageType.WARN, new String[] {"option.ok"});
+				Puppet.runOnMainThread(() -> {
+					diag.create(dpiScale);
+					diag.setVisible(true);
+				});
+			} else {
+				Puppet.reportCloseRequest();
+				closeRequested = true;
+			}
 		});
 	}
 	

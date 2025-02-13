@@ -33,10 +33,6 @@ public class PuppetDebug {
 			Thread.sleep(1000);
 		} catch (InterruptedException e) {
 		}
-		del.openMessageDialog("xx", "dialog.conflict.title",
-							"dialog.conflict.leadin.local_changed_remote_deleted¤foo/bar.jar¤dialog.conflict.body¤dialog.conflict.aside_trailer",
-							MessageType.QUESTION, new String[] {"option.yes_to_all", "option.yes", "option.no_to_all", "option.no", "option.cancel"}, "option.yes");
-		
 		Puppet.startMainThreadRunner();
 	}
 

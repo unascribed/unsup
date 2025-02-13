@@ -579,7 +579,7 @@ public class Agent {
 					f.skip = true;
 					continue;
 				} else if (resp == AlertOption.CANCEL) {
-					Log.info("User cancelled error dialog! Exiting.");
+					Log.info("User cancelled conflict dialog! Exiting.");
 					exit(EXIT_USER_REQUEST);
 					return;
 				}

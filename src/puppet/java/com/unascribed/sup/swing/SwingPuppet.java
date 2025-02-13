@@ -309,9 +309,9 @@ public class SwingPuppet {
 			@Override
 			public void windowClosing(WindowEvent e) {
 				if (closeAlreadyAttempted) {
-					openMessageDialog(null, "unsup is busy",
+					openMessageDialog(null, Puppet.format("dialog.busy.title"),
 							"<html><center><b>"+Puppet.format("dialog.busy")+"</b><br/>"+Puppet.format("dialog.please_wait")+"</center></html>",
-							JOptionPane.WARNING_MESSAGE, "OK");
+							JOptionPane.WARNING_MESSAGE, Puppet.format("option.ok"));
 				} else {
 					closeAlreadyAttempted = true;
 					Puppet.reportCloseRequest();

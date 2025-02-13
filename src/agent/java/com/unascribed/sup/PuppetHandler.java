@@ -405,7 +405,7 @@ public class PuppetHandler {
 			alertWaiters.put(name, latch);
 			tellPuppet("["+name+"]:alert="+title+":"+body+":"+messageType.name().toLowerCase(Locale.ROOT)+":"+optionType.name().toLowerCase(Locale.ROOT).replace("_", "")+":"+def.name().toLowerCase(Locale.ROOT).replace("_", ""));
 			latch.awaitUninterruptibly();
-			return AlertOption.valueOf(alertResults.remove(name).toUpperCase(Locale.ROOT));
+			return AlertOption.valueOf(alertResults.remove(name).replace("option.", "").toUpperCase(Locale.ROOT));
 		}
 	}
 
