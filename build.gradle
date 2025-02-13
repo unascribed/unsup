@@ -336,13 +336,13 @@ if (project.hasProperty("unsup.signifyKey")) {
 } else if (project.hasProperty("unsup.ci")) {
 	task sign(type: Exec) {
 		doFirst {
-			file('/tmp/signify.sec').text = System.getenv("SIGNIFY_KEY")+'\n'
+			new File('/tmp/signify.sec').text = System.getenv("SIGNIFY_KEY")+'\n'
+			standardInput new java.io.ByteArrayInputStream(System.getenv("SIGNIFY_PASSWORD").getBytes("UTF-8"))
 		}
 		dependsOn proguardJar
 		inputs.file proguardJar.archivePath
 		outputs.file sigFile
 		commandLine './.ci/signify-openbsd', '-S', '-s', '/tmp/signify.sec', '-m', proguardJar.archivePath.absolutePath, '-x', sigFile.absolutePath
-		standardInput new java.io.ByteArrayInputStream(System.getenv("SIGNIFY_PASSWORD").getBytes("UTF-8"))
 	}
 }
 
