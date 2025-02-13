@@ -243,11 +243,13 @@ public class Agent {
 				exit(EXIT_CONFIG_ERROR);
 				return false;
 			}
-			config = mergePreset(config, "lang/en-US", true);
 			String lang = Locale.getDefault().toLanguageTag();
+			if (SysProps.LANGUAGE != null) lang = SysProps.LANGUAGE;
+			Log.debug("Language: "+lang);
 			if (!"en-US".equals(lang)) {
 				config = mergePreset(config, "lang/"+lang, false);
 			}
+			config = mergePreset(config, "lang/en-US", true);
 			config = mergePreset(config, "__global__", false);
 			if (config.containsKey("preset")) {
 				config = mergePreset(config, config.get("preset"), true);

@@ -24,6 +24,10 @@ public class SysProps {
 	 * Set which mode the Puppet will use, or AUTO to automatically choose one.
 	 */
 	public static final PuppetMode PUPPET_MODE = PuppetMode.valueOf(System.getProperty("unsup.puppetMode", "auto").toUpperCase(Locale.ROOT));
+	/**
+	 * Override the language rather than using the one detected by Java.
+	 */
+	public static final String LANGUAGE = System.getProperty("unsup.language");
 	
 	
 	/**

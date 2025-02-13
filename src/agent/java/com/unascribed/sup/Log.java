@@ -57,7 +57,7 @@ public class Log {
 	}
 	
 	public synchronized static void log(String flavor, String tag, String msg, Throwable t) {
-		if ("DEBUG" != flavor || SysProps.DEBUG) {
+		if (!("DEBUG".equals(flavor)) || SysProps.DEBUG) {
 			t.printStackTrace();
 		}
 		t.printStackTrace(fileStream);
@@ -66,7 +66,7 @@ public class Log {
 	
 	public synchronized static void log(String flavor, String tag, String msg) {
 		String line = "["+dateFormat.format(new Date())+"] [unsup "+tag+"/"+flavor+"]: "+msg;
-		if ("DEBUG" != flavor || SysProps.DEBUG) System.out.println(line);
+		if (!("DEBUG".equals(flavor)) || SysProps.DEBUG) System.out.println(line);
 		fileStream.println(line);
 	}
 	
