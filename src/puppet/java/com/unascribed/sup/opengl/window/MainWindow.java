@@ -1,9 +1,9 @@
 package com.unascribed.sup.opengl.window;
 
 import com.unascribed.sup.ColorChoice;
-import com.unascribed.sup.MessageType;
+import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.Puppet;
-import com.unascribed.sup.opengl.GLPuppet;
+import com.unascribed.sup.Translate;
 import com.unascribed.sup.opengl.pieces.GLThrobber;
 import com.unascribed.sup.opengl.pieces.FontManager.Face;
 
@@ -14,7 +14,7 @@ public class MainWindow extends Window {
 
 	public GLThrobber throbber = new GLThrobber();
 	
-	public String title = Puppet.format("title.default");
+	public String title = Translate.format("title.default");
 	public String subtitle = "";
 	public float prog = 0.5f;
 	
@@ -22,19 +22,23 @@ public class MainWindow extends Window {
 	public boolean closeRequested = false;
 	
 	@Override
-	public void create(String title, int width, int height, float dpiScale) {
-		super.create(title, width, height, dpiScale);
+	public void create(Window parent, String title, int width, int height, double dpiScale) {
+		glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
+		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		super.create(parent, title, width, height, dpiScale);
 
 		glfwSetWindowRefreshCallback(handle, window -> {
-			needsFullRedraw = true;
+			synchronized (this) {
+				needsFullRedraw = true;
+			}
 		});
 		
 		glfwSetWindowCloseCallback(handle, unused -> {
 			if (closeRequested) {
 				MessageDialogWindow diag = new MessageDialogWindow("puppet_busy_notice", "dialog.busy.title",
-						Puppet.format("dialog.busy"), MessageType.WARN, new String[] {"option.ok"});
+						Translate.format("dialog.busy"), AlertMessageType.WARN, new String[] {"option.ok"}, "option.ok");
 				Puppet.runOnMainThread(() -> {
-					diag.create(dpiScale);
+					diag.create(this, dpiScale);
 					diag.setVisible(true);
 				});
 			} else {
@@ -52,18 +56,19 @@ public class MainWindow extends Window {
 	}
 	
 	@Override
-	protected void renderInner() {
-		if (needsFullRedraw) {
+	protected synchronized void renderInner() {
+		boolean nfr = needsFullRedraw;
+		if (nfr) {
 			glClear(GL_COLOR_BUFFER_BIT);
 		}
 		throbber.render(40, 32, 40);
-		if (needsFullRedraw) {
+		if (nfr) {
 			glPushMatrix();
-				glColorPacked3i(GLPuppet.getColor(ColorChoice.TITLE));
+				glColor(ColorChoice.TITLE);
 				font.drawString(Face.BOLD, 64, 31, 24, title);
 			glPopMatrix();
 			glPushMatrix();
-				glColorPacked3i(GLPuppet.getColor(ColorChoice.SUBTITLE));
+				glColor(ColorChoice.SUBTITLE);
 				font.drawString(Face.REGULAR, 64, 52, 14, subtitle);
 			glPopMatrix();
 			needsFullRedraw = false;
@@ -72,13 +77,13 @@ public class MainWindow extends Window {
 		if (prog >= 0) {
 			glDisable(GL_TEXTURE_2D);
 			glBegin(GL_QUADS);
-				glColorPacked3i(GLPuppet.getColor(ColorChoice.PROGRESSTRACK));
+				glColor(ColorChoice.PROGRESSTRACK);
 				glVertex2f(64, 70);
 				glVertex2f(476, 70);
 				glVertex2f(476, 76);
 				glVertex2f(64, 76);
 				
-				glColorPacked3i(GLPuppet.getColor(ColorChoice.PROGRESS));
+				glColor(ColorChoice.PROGRESS);
 				glVertex2f(65, 71);
 				glVertex2f(65+(prog*412), 71);
 				glVertex2f(65+(prog*412), 75);

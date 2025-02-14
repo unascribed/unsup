@@ -9,6 +9,11 @@ public enum ColorChoice {
 	DIALOG(0xFFFFFF),
 	BUTTON(0xFFFF00),
 	BUTTONTEXT(0x000000),
+	
+	QUESTION(0xFF00FF),
+	INFO(0x00FFFF),
+	WARNING(0xFFFF00),
+	ERROR(0xFF0000),
 	;
 	
 	public static boolean usePrettyDefaults = false;
@@ -21,7 +26,11 @@ public enum ColorChoice {
 		0x455A64,
 		0xFFFFFF,
 		0x00A653,
-		0xFFFFFF
+		0xFFFFFF,
+		0xD500F9,
+		0x2979FF,
+		0xFF9100,
+		0xFF1744,
 	};
 	
 	public final int defaultValue;
@@ -37,6 +46,10 @@ public enum ColorChoice {
 			rtrn[choice.ordinal()] = choice.defaultValue;
 		}
 		return rtrn;
+	}
+	
+	public int get() {
+		return Puppet.getColor(this);
 	}
 	
 }

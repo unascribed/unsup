@@ -14,4 +14,16 @@ public class FlavorGroup {
 		public String description;
 		public boolean def;
 	}
+	
+	public boolean isBoolean() {
+		if (choices.size() == 2) {
+			String a = choices.get(0).id;
+			String b = choices.get(1).id;
+			String on = id+"_on";
+			String off = id+"_off";
+			return (a.equals(on) && b.equals(off))
+					|| (a.equals(off) && b.equals(on));
+		}
+		return false;
+	}
 }

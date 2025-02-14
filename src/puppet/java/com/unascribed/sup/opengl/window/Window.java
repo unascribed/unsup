@@ -10,6 +10,8 @@ import com.unascribed.sup.opengl.GLPuppet;
 import com.unascribed.sup.opengl.pieces.FontManager;
 import com.unascribed.sup.opengl.pieces.OpenGLDebug;
 
+import static org.lwjgl.opengl.GL13.GL_CLAMP_TO_BORDER;
+
 import static com.unascribed.sup.WindowIcons.*;
 import static com.unascribed.sup.opengl.util.GL.*;
 import static org.lwjgl.glfw.GLFW.*;
@@ -19,7 +21,8 @@ public abstract class Window {
 	
 	protected long handle;
 	protected int width, height;
-	protected float dpiScaleX, dpiScaleY;
+	protected int fbWidth, fbHeight;
+	protected double dpiScaleX, dpiScaleY;
 	
 	protected final FontManager font = new FontManager();
 	protected int scratchTex;
@@ -28,7 +31,7 @@ public abstract class Window {
 	
 	private Thread renderThread;
 	
-	public void create(String title, int width, int height, float dpiScale) {
+	public void create(Window parent, String title, int width, int height, double dpiScale) {
 		if (!Puppet.isMainThread()) throw new IllegalStateException("Must be on main thread");
 		this.width = width;
 		this.height = height;
@@ -42,7 +45,6 @@ public abstract class Window {
 		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_FALSE);
 		glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
 		glfwWindowHint(GLFW_SAMPLES, 16);
 		glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
@@ -54,8 +56,15 @@ public abstract class Window {
 		int physH = (int)(height*dpiScaleY);
 		handle = glfwCreateWindow(physW, physH, title, NULL, NULL);
 		if (handle == 0) {
-			Puppet.log("ERROR", "Failed to create GLFW window: "+GLPuppet.getGLFWErrorDescription());
+			throw new RuntimeException("Failed to create GLFW window: "+GLPuppet.getGLFWErrorDescription());
 		};
+		
+		glfwSetFramebufferSizeCallback(handle, (window, newWidth, newHeight) -> {
+			synchronized (this) {
+				fbWidth = newWidth;
+				fbHeight = newHeight;
+			}
+		});
 		
 		glfwMakeContextCurrent(handle);
 		if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
@@ -78,12 +87,17 @@ public abstract class Window {
 			memFree(lowresPx);
 			memFree(highresPx);
 			
-			long monitor = glfwGetPrimaryMonitor();
 			int[] x = new int[1];
 			int[] y = new int[1];
 			int[] w = new int[1];
 			int[] h = new int[1];
-			glfwGetMonitorWorkarea(monitor, x, y, w, h);
+			if (parent == null) {
+				long monitor = glfwGetPrimaryMonitor();
+				glfwGetMonitorWorkarea(monitor, x, y, w, h);
+			} else {
+				glfwGetWindowPos(parent.handle, x, y);
+				glfwGetWindowSize(parent.handle, w, h);
+			}
 			glfwSetWindowPos(handle, x[0]+(w[0]-physW)/2, y[0]+(h[0]-physH)/2);
 		}
 		
@@ -95,7 +109,7 @@ public abstract class Window {
 		
 		GL.createCapabilities();
 		
-		int bg = GLPuppet.getColor(ColorChoice.BACKGROUND);
+		int bg = ColorChoice.BACKGROUND.get();
 		glClearColor(((bg >> 16)&0xFF)/255f, ((bg >> 8)&0xFF)/255f, ((bg >> 0)&0xFF)/255f, 1);
 		
 		glShadeModel(GL_SMOOTH);
@@ -109,7 +123,7 @@ public abstract class Window {
 	
 	protected abstract void setupGL();
 	
-	protected boolean needsRerender() {
+	protected synchronized boolean needsRerender() {
 		return true;
 	}
 	
@@ -130,6 +144,9 @@ public abstract class Window {
 				glBindTexture(GL_TEXTURE_2D, scratchTex);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+				glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
 				
 				OpenGLDebug.install();
 				
@@ -154,26 +171,31 @@ public abstract class Window {
 
 	public boolean render() {
 		if (needsRerender()) {
-			int[] fbw = new int[1];
-			int[] fbh = new int[1];
-			glfwGetFramebufferSize(handle, fbw, fbh);
-			
-			glMatrixMode(GL_PROJECTION);
-			glViewport(0, 0, fbw[0], fbh[0]);
-			glLoadIdentity();
-			glOrtho(0, fbw[0], fbh[0], 0, 100, 1000);
-			glMatrixMode(GL_MODELVIEW);
-			glLoadIdentity();
-			glTranslatef(0, 0, -200);
-			glScalef(dpiScaleX = (fbw[0]/(float)width), dpiScaleY = (fbh[0]/(float)height), 1);
-			font.dpiScale = dpiScaleX;
-			
-			glDisable(GL_TEXTURE_2D);
-			
-			glColor3f(1, 1, 1);
-	
-			renderInner();
-			
+			synchronized (this) {
+				if (fbWidth == 0) {
+					int[] fbw = new int[1];
+					int[] fbh = new int[1];
+					glfwGetFramebufferSize(handle, fbw, fbh);
+					fbWidth = fbw[0];
+					fbHeight = fbh[0];
+				}
+				
+				glMatrixMode(GL_PROJECTION);
+				glViewport(0, 0, fbWidth, fbHeight);
+				glLoadIdentity();
+				glOrtho(0, fbWidth, fbHeight, 0, 100, 1000);
+				glMatrixMode(GL_MODELVIEW);
+				glLoadIdentity();
+				glTranslatef(0, 0, -200);
+				glScaled(dpiScaleX = (fbWidth/(double)width), dpiScaleY = (fbHeight/(double)height), 1);
+				font.dpiScale = dpiScaleX;
+				
+				glDisable(GL_TEXTURE_2D);
+				
+				glColor3f(1, 1, 1);
+		
+				renderInner();
+			}
 			glfwSwapBuffers(handle);
 			return true;
 		}

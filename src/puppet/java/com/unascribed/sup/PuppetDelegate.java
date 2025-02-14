@@ -7,7 +7,6 @@ import com.unascribed.sup.data.FlavorGroup;
 public interface PuppetDelegate {
 
 	void build();
-	void setColor(ColorChoice choice, int color);
 	
 	void setVisible(boolean visible);
 	
@@ -21,7 +20,7 @@ public interface PuppetDelegate {
 	void setSubtitle(String subtitle);
 	
 	void openChoiceDialog(String name, String title, String body, String[] options, String def);
-	void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options, String def);
+	void openMessageDialog(String name, String title, String body, AlertMessageType messageType, String[] options, String def);
 	void openFlavorDialog(String name, List<FlavorGroup> groups);
 	
 }

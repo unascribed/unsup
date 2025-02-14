@@ -7,7 +7,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -30,7 +29,7 @@ import com.unascribed.sup.swing.SwingPuppet;
 public class Puppet {
 	
 	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
-	private static final Map<String, String> strings = new HashMap<>();
+	private static final int[] colors = ColorChoice.createLookup();
 	
 	private static final BlockingQueue<Runnable> mainThreadWorkQueue = new LinkedBlockingQueue<>();
 	private static final Thread mainThread = Thread.currentThread();
@@ -129,11 +128,12 @@ public class Puppet {
 						}
 						case "colorBackground": case "colorTitle": case "colorSubtitle": case "colorProgress":
 						case "colorProgressTrack": case "colorDialog": case "colorButton": case "colorButtonText":
-							del.setColor(ColorChoice.valueOf(order.substring(5).toUpperCase(Locale.ROOT)), Integer.parseInt(arg, 16));
+						case "colorQuestion": case "colorInfo": case "colorWarning": case "colorError":
+							colors[ColorChoice.valueOf(order.substring(5).toUpperCase(Locale.ROOT)).ordinal()] = Integer.parseInt(arg, 16);
 							continue;
 						case "string":
 							String[] spl = arg.split(":", 2);
-							strings.put(spl[0], spl[1]);
+							Translate.strings.put(spl[0], spl[1]);
 							continue;
 						case "belay": {
 							r = () -> {
@@ -194,11 +194,11 @@ public class Puppet {
 							break;
 						}
 						case "title": {
-							r = () -> del.setTitle(format(arg));
+							r = () -> del.setTitle(Translate.format(arg));
 							break;
 						}
 						case "subtitle": {
-							r = () -> del.setSubtitle(format(arg));
+							r = () -> del.setSubtitle(Translate.format(arg));
 							break;
 						}
 						case "alert": {
@@ -211,11 +211,11 @@ public class Puppet {
 							if (messageTypeStr.startsWith("choice=")) {
 								String[] options = messageTypeStr.substring(7).split("\u001C");
 								for (int i = 0; i < options.length; i++) {
-									options[i] = format(options[i].replace('\u001B', ':'));
+									options[i] = Translate.format(options[i].replace('\u001B', ':'));
 								}
 								r = () -> del.openChoiceDialog(name, title, body, options, optionTypeStr);
 							} else {
-								MessageType messageType = MessageType.valueOf(messageTypeStr.toUpperCase(Locale.ROOT));
+								AlertMessageType messageType = AlertMessageType.valueOf(messageTypeStr.toUpperCase(Locale.ROOT));
 								String[] options;
 								switch (optionTypeStr) {
 									case "yesno":
@@ -237,7 +237,7 @@ public class Puppet {
 										options = new String[]{"option.ok"};
 										break;
 								}
-								r = () -> del.openMessageDialog(name, title, body, messageType, options, format(def));
+								r = () -> del.openMessageDialog(name, title, body, messageType, options, Translate.format(def));
 							}
 							break;
 						}
@@ -335,37 +335,9 @@ public class Puppet {
 	}
 
 	public static void reportDone() {
-//		System.exit(0);
+		System.exit(0);
 	}
 	
-	public static void addTranslation(String key, String value) {
-		strings.put(key, value);
-	}
-
-	public static String format(String key, Object... args) {
-		if (key.isEmpty()) return "";
-		String[] split = key.split("¤");
-		if (split.length > 1) {
-			int origLen = args.length;
-			args = Arrays.copyOf(args, origLen+split.length-1);
-			System.arraycopy(split, 1, args, origLen, split.length-1);
-			for (int i = 1; i < args.length; i++) {
-				if (strings.containsKey(args[i])) {
-					args[i] = format((String)args[i], args);
-				}
-			}
-		}
-		return String.format(strings.getOrDefault(split[0], key).replace("%n", "\n"), args);
-	}
-
-	public static String[] format(String[] keys) {
-		String[] out = new String[keys.length];
-		for (int i = 0; i < keys.length; i++) {
-			out[i] = format(keys[i]);
-		}
-		return out;
-	}
-
 	public static boolean isMainThread() {
 		return Thread.currentThread() == mainThread;
 	}
@@ -376,6 +348,10 @@ public class Puppet {
 		} else {
 			mainThreadWorkQueue.add(r);
 		}
+	}
+
+	public static int getColor(ColorChoice choice) {
+		return colors[choice.ordinal()];
 	}
 
 }

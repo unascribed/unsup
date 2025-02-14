@@ -2,14 +2,15 @@ package com.unascribed.sup.opengl;
 
 import org.lwjgl.PointerBuffer;
 
-import com.unascribed.sup.ColorChoice;
-import com.unascribed.sup.MessageType;
+import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.Puppet;
 import com.unascribed.sup.PuppetDelegate;
+import com.unascribed.sup.SysProps;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.WindowIcons;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.opengl.util.QDPNG;
+import com.unascribed.sup.opengl.window.FlavorDialogWindow;
 import com.unascribed.sup.opengl.window.MainWindow;
 import com.unascribed.sup.opengl.window.MessageDialogWindow;
 import java.io.File;
@@ -17,24 +18,39 @@ import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
+import java.util.OptionalDouble;
 import java.util.concurrent.TimeUnit;
-
 import static org.lwjgl.system.MemoryUtil.*;
 import static org.lwjgl.glfw.GLFW.*;
 
 public class GLPuppet {
 	
-	private static int[] colors;
 	private static MainWindow mainWindow;
 	
-	public static int getColor(ColorChoice choice) {
-		return colors[choice.ordinal()];
-	}
-	
 	public static PuppetDelegate start() {
-		String uiscale = System.getProperty("sun.java2d.uiScale");
-		float dpiScale = uiscale != null ? Float.parseFloat(uiscale) : 1;
-		colors = ColorChoice.createLookup();
+		// just a transliteration of https://wiki.archlinux.org/title/HiDPI plus some unsup-specific extras
+		double dpiScale = scanScale("unsup.scale", "sun.java2d.uiScale", "glass.gtk.uiScale",
+				"UNSUP_SCALE", "QT_SCALE_FACTOR", "GDK_DPI_SCALE×GDK_SCALE", "ELM_SCALE").orElse(1);
+		
+		switch (SysProps.PUPPET_PLATFORM) {
+			case COCOA:
+				glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_COCOA);
+				break;
+			case NULL:
+				glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_NULL);
+				break;
+			case WAYLAND:
+				glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WAYLAND);
+				break;
+			case WIN32:
+				glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_WIN32);
+				break;
+			case X11:
+				glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+				break;
+			case AUTO:
+				break;
+		}
 		
 		if (!glfwInit()) {
 			Puppet.log("ERROR", "Failed to initialize GLFW: "+getGLFWErrorDescription());
@@ -76,7 +92,7 @@ public class GLPuppet {
 			@Override
 			public void build() {
 				Puppet.runOnMainThread(() -> {
-					mainWindow.create("unsup v"+Util.VERSION, 480, 80, dpiScale);
+					mainWindow.create(null, "unsup v"+Util.VERSION, 480, 80, dpiScale);
 				});
 			}
 			
@@ -118,35 +134,69 @@ public class GLPuppet {
 			}
 			
 			@Override
-			public void setColor(ColorChoice choice, int color) {
-				colors[choice.ordinal()] = color;
-			}
-			
-			@Override
-			public void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options, String def) {
-				MessageDialogWindow diag = new MessageDialogWindow(name, title, body, messageType, options);
-				for (int i = 0; i < options.length; i++) {
-					if (options[i].equals(def)) {
-						diag.highlighted = i;
-						break;
-					}
-				}
+			public void openMessageDialog(String name, String title, String body, AlertMessageType messageType, String[] options, String def) {
+				MessageDialogWindow diag = new MessageDialogWindow(name, title, body, messageType, options, def);
 				Puppet.runOnMainThread(() -> {
-					diag.create(dpiScale);
+					diag.create(mainWindow, dpiScale);
 					diag.setVisible(true);
 				});
 			}
 			
 			@Override
 			public void openFlavorDialog(String name, List<FlavorGroup> groups) {
-				throw new UnsupportedOperationException();
+				FlavorDialogWindow diag = new FlavorDialogWindow(name, groups);
+				Puppet.runOnMainThread(() -> {
+					diag.create(mainWindow, dpiScale);
+					diag.setVisible(true);
+				});
 			}
 			
 			@Override
 			public void openChoiceDialog(String name, String title, String body, String[] options, String def) {
-				openMessageDialog(name, title, body, MessageType.NONE, options, def);
+				openMessageDialog(name, title, body, AlertMessageType.NONE, options, def);
 			}
 		};
+	}
+
+	private static double parseScale(String uiscale) throws NumberFormatException {
+		if (uiscale.endsWith("dpi")) {
+			return Double.parseDouble(uiscale.substring(0, uiscale.length()-3))/96;
+		} else if (uiscale.endsWith("%")) {
+			return Double.parseDouble(uiscale.substring(0, uiscale.length()-1))/100;
+		} else {
+			return Double.parseDouble(uiscale);
+		}
+	}
+	
+	private static OptionalDouble scanScale(String... keys) {
+		for (String key : keys) {
+			if (key.contains("×")) {
+				String[] split = key.split("×");
+				OptionalDouble left = scanScale(split[0]);
+				OptionalDouble right = scanScale(split[1]);
+				if (left.isPresent() && right.isPresent()) {
+					return OptionalDouble.of(left.getAsDouble()*right.getAsDouble());
+				} else if (left.isPresent()) {
+					return left;
+				} else if (right.isPresent()) {
+					return right;
+				}
+			} else {
+				String prop = System.getProperty(key);
+				if (prop != null) {
+					try {
+						return OptionalDouble.of(parseScale(prop));
+					} catch (NumberFormatException e) {}
+				}
+				String env = System.getenv(key);
+				if (env != null) {
+					try {
+						return OptionalDouble.of(parseScale(env));
+					} catch (NumberFormatException e) {}
+				}
+			}
+		}
+		return OptionalDouble.empty();
 	}
 
 	public static String getGLFWErrorDescription() {

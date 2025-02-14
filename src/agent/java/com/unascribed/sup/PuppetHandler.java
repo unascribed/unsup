@@ -40,7 +40,6 @@ public class PuppetHandler {
 	private static Map<String, String> alertResults = new HashMap<>();
 	private static Map<String, Latch> alertWaiters = new HashMap<>();
 	
-	public enum AlertMessageType { QUESTION, INFO, WARN, ERROR, NONE }
 	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
 	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
 
@@ -99,7 +98,9 @@ public class PuppetHandler {
 		"javax.accessibility.assistive_technologies",
 		"assistive_technologies",
 		"unsup.puppetMode",
-		"sun.java2d.uiScale"
+		"unsup.puppet.opengl.platform",
+		"sun.java2d.uiScale",
+		"unsup.scale"
 	};
 	
 	public static void destroy() {
@@ -340,6 +341,11 @@ public class PuppetHandler {
 		tellPuppet(":colorDialog="+Agent.config.get("colors.dialog", "FFFFFF"));
 		tellPuppet(":colorButton="+Agent.config.get("colors.button", "FFFFFF"));
 		tellPuppet(":colorButtonText="+Agent.config.get("colors.button_text", "FFFFFF"));
+		
+		tellPuppet(":colorQuestion="+Agent.config.get("colors.info", "FF00FF"));
+		tellPuppet(":colorInfo="+Agent.config.get("colors.info", "00FFFF"));
+		tellPuppet(":colorWarning="+Agent.config.get("colors.info", "FFFF00"));
+		tellPuppet(":colorError="+Agent.config.get("colors.info", "FF0000"));
 		
 		for (String k : Agent.config.keySet()) {
 			if (k.startsWith("strings.")) {

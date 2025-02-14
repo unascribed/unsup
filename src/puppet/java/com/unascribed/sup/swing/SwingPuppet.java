@@ -67,9 +67,10 @@ import javax.swing.plaf.metal.OceanTheme;
 import org.brotli.dec.BrotliInputStream;
 
 import com.unascribed.sup.ColorChoice;
-import com.unascribed.sup.MessageType;
+import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.Puppet;
 import com.unascribed.sup.PuppetDelegate;
+import com.unascribed.sup.Translate;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.WindowIcons;
 import com.unascribed.sup.data.FlavorGroup;
@@ -97,11 +98,7 @@ public class SwingPuppet {
 	private static List<Image> logos;
 	private static Font firaSans, firaSansBold, firaSansItalic, firaSansBoldItalic;
 	
-	private static int[] colors;
-	
 	public static PuppetDelegate start() {
-		colors = ColorChoice.createLookup();
-		
 		SwingHelper.fixSwing();
 		
 		MetalLookAndFeel.setCurrentTheme(new OceanTheme());
@@ -130,11 +127,6 @@ public class SwingPuppet {
 				invokeLater(() -> {
 					buildUi();
 				});
-			}
-
-			@Override
-			public void setColor(ColorChoice choice, int color) {
-				colors[choice.ordinal()] = color;
 			}
 			
 			@Override
@@ -207,7 +199,7 @@ public class SwingPuppet {
 			}
 
 			@Override
-			public void openMessageDialog(String name, String title, String body, MessageType messageType, String[] options, String def) {
+			public void openMessageDialog(String name, String title, String body, AlertMessageType messageType, String[] options, String def) {
 				invokeLater(() -> {
 					int swingType = JOptionPane.PLAIN_MESSAGE;
 					switch (messageType) {
@@ -293,7 +285,7 @@ public class SwingPuppet {
 	}
 
 	private static Color getColor(ColorChoice choice) {
-		return new Color(colors[choice.ordinal()]);
+		return new Color(choice.get());
 	}
 
 	private static void buildUi() {
@@ -309,9 +301,9 @@ public class SwingPuppet {
 			@Override
 			public void windowClosing(WindowEvent e) {
 				if (closeAlreadyAttempted) {
-					openMessageDialog(null, Puppet.format("dialog.busy.title"),
-							"<html><center><b>"+Puppet.format("dialog.busy")+"</b><br/>"+Puppet.format("dialog.please_wait")+"</center></html>",
-							JOptionPane.WARNING_MESSAGE, Puppet.format("option.ok"));
+					openMessageDialog(null, Translate.format("dialog.busy.title"),
+							"<html><center><b>"+Translate.format("dialog.busy")+"</b><br/>"+Translate.format("dialog.please_wait")+"</center></html>",
+							JOptionPane.WARNING_MESSAGE, Translate.format("option.ok"));
 				} else {
 					closeAlreadyAttempted = true;
 					Puppet.reportCloseRequest();
@@ -331,7 +323,7 @@ public class SwingPuppet {
 		
 		Box inner = Box.createVerticalBox();
 		inner.setBorder(new EmptyBorder(8, 0, 0, 0));
-		title = new JLabel("<html>"+Puppet.format("title.default")+"</html>");
+		title = new JLabel("<html>"+Translate.format("title.default")+"</html>");
 		title.setForeground(getColor(ColorChoice.TITLE));
 		title.setFont(firaSansBold.deriveFont(24f));
 		title.setAlignmentX(0);
@@ -428,9 +420,9 @@ public class SwingPuppet {
 	}
 	
 	private static void openMessageDialog(String name, String title, String body, int messageType, String... options) {
-		String[] split = Puppet.format(body).split("\n", 2);
+		String[] split = Translate.format(body).split("\n", 2);
 		body = "<b>"+split[0]+"</b><br/>"+(split.length == 2 ? split[1].replace("\n", "<br/>") : "");
-		String[] formatted = Puppet.format(options);
+		String[] formatted = Translate.format(options);
 		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", messageType, JOptionPane.DEFAULT_OPTION, null, formatted);
 		configureOptionPane(pane);
 		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
@@ -460,14 +452,14 @@ public class SwingPuppet {
 	}
 
 	private static void openChoiceDialog(String name, String title, String body, String def, String... options) {
-		String[] split = Puppet.format(body).split("\n", 2);
+		String[] split = Translate.format(body).split("\n", 2);
 		body = "<b>"+split[0]+"</b><br/>"+(split.length == 2 ? split[1].replace("\n", "<br/>") : "");
-		JOptionPane pane = new JOptionPane("<html><center>"+Puppet.format(body)+"</center></html>", JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
-				new Object[]{Puppet.format("option.ok")});
+		JOptionPane pane = new JOptionPane("<html><center>"+Translate.format(body)+"</center></html>", JOptionPane.PLAIN_MESSAGE, JOptionPane.DEFAULT_OPTION, null,
+				new Object[]{Translate.format("option.ok")});
 		pane.setWantsInput(true);
-		String[] formatted = Puppet.format(options);
+		String[] formatted = Translate.format(options);
 		pane.setSelectionValues(formatted);
-		pane.setInitialSelectionValue(Puppet.format(def));
+		pane.setInitialSelectionValue(Translate.format(def));
 		configureOptionPane(pane);
 		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
 		configureOptionDialog(pane, dialog);
@@ -491,15 +483,14 @@ public class SwingPuppet {
 	}
 	
 	private static void openFlavorDialog(String name, List<FlavorGroup> groups) {
-		JDialog dialog = new JDialog(frame != null && frame.isVisible() ? frame : null, Puppet.format("dialog.flavors.title"));
+		JDialog dialog = new JDialog(frame != null && frame.isVisible() ? frame : null, Translate.format("dialog.flavors.title"));
 		dialog.setIconImages(logos);
 		dialog.setModal(true);
 		dialog.setBackground(getColor(ColorChoice.BACKGROUND));
 		dialog.setForeground(getColor(ColorChoice.DIALOG));
-		dialog.setSize(854, 480);
 		dialog.setLocationRelativeTo(frame);
 		String descPfx = "<style>body { font-family: \"Fira Sans\"; color: #"+Integer.toHexString(getColor(ColorChoice.DIALOG).getRGB()|0xFF000000).substring(2)+"; }</style>";
-		String noDesc = "<font size=\"4\" face=\"Fira Sans\" color=\"#"+Integer.toHexString(getColor(ColorChoice.SUBTITLE).getRGB()|0xFF000000).substring(2)+"\"><i>"+Puppet.format("flavor.hover_notice")+"</i></font>";
+		String noDesc = "<font size=\"4\" face=\"Fira Sans\" color=\"#"+Integer.toHexString(getColor(ColorChoice.SUBTITLE).getRGB()|0xFF000000).substring(2)+"\"><i>"+Translate.format("flavor.hover_notice")+"</i></font>";
 		JEditorPane desc = new JEditorPane("text/html", noDesc);
 		Set<String> results = new HashSet<>();
 		Set<String> descriptions = new HashSet<>();
@@ -514,7 +505,7 @@ public class SwingPuppet {
 		};
 		Box options = Box.createVerticalBox();
 		for (FlavorGroup grp : groups) {
-			if (!isBoolean(grp)) {
+			if (!grp.isBoolean()) {
 				Box box = Box.createVerticalBox();
 				JLabel title = new JLabel(grp.name);
 				title.setBorder(new EmptyBorder(8,8,8,8));
@@ -592,7 +583,7 @@ public class SwingPuppet {
 		}
 		options.add(Box.createVerticalStrut(8));
 		for (FlavorGroup grp : groups) {
-			if (isBoolean(grp)) {
+			if (grp.isBoolean()) {
 				JCheckBox cb = new JCheckBox(grp.name);
 				cb.setUI(new BasicCheckBoxUI());
 				cb.setIcon(new Icon() {
@@ -775,7 +766,7 @@ public class SwingPuppet {
 		buttons.setAlignmentX(0);
 		buttons.setMaximumSize(new Dimension(32767, 48));
 		buttons.add(Box.createHorizontalGlue());
-		JButton done = new JButton(Puppet.format("option.done"));
+		JButton done = new JButton(Translate.format("option.done"));
 		done.setBackground(getColor(ColorChoice.BUTTON));
 		done.setForeground(getColor(ColorChoice.BUTTONTEXT));
 		buttons.add(done);
@@ -800,6 +791,7 @@ public class SwingPuppet {
 		});
 		split.setDividerSize(4);
 		split.setSize(854, 480);
+		split.setPreferredSize(new Dimension(854, 480));
 		split.setDividerLocation(0.4);
 		split.setBackground(getColor(ColorChoice.BACKGROUND));
 		split.setForeground(getColor(ColorChoice.DIALOG));
@@ -816,6 +808,7 @@ public class SwingPuppet {
 				Puppet.reportCloseRequest();
 			}
 		});
+		dialog.pack();
 		dialog.setVisible(true);
 		if (closed[0]) return;
 		StringJoiner sj = new StringJoiner("\u001C");
@@ -823,18 +816,6 @@ public class SwingPuppet {
 			sj.add(s);
 		}
 		Puppet.reportChoice(name, sj.toString());
-	}
-
-	private static boolean isBoolean(FlavorGroup grp) {
-		if (grp.choices.size() == 2) {
-			String a = grp.choices.get(0).id;
-			String b = grp.choices.get(1).id;
-			String on = grp.id+"_on";
-			String off = grp.id+"_off";
-			return (a.equals(on) && b.equals(off))
-					|| (a.equals(off) && b.equals(on));
-		}
-		return false;
 	}
 	
 }

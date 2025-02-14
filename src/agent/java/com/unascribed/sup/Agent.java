@@ -36,7 +36,6 @@ import java.util.regex.Pattern;
 import com.grack.nanojson.JsonObject;
 import com.grack.nanojson.JsonParser;
 import com.grack.nanojson.JsonWriter;
-import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
 import com.unascribed.sup.data.ConflictType;
@@ -182,7 +181,7 @@ public class Agent {
 			if (updatedComponents) {
 				PuppetHandler.openAlert("dialog.component_update.title",
 						"dialog.component_update",
-						PuppetHandler.AlertMessageType.INFO, AlertOptionType.OK, AlertOption.OK);
+						AlertMessageType.INFO, AlertOptionType.OK, AlertOption.OK);
 			} else if (PuppetHandler.puppetOut != null) {
 				Log.info("Waiting for puppet to complete done animation...");
 				PuppetHandler.tellPuppet(":title=title.done");
@@ -459,7 +458,7 @@ public class Agent {
 			PuppetHandler.tellPuppet(":expedite=openTimeout");
 			if (PuppetHandler.openAlert("dialog.error.title",
 					"dialog.error."+(standalone ? "standalone" : "normal"),
-					PuppetHandler.AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
+					AlertMessageType.ERROR, standalone ? AlertOptionType.OK : AlertOptionType.OK_CANCEL, AlertOption.OK) == AlertOption.CANCEL) {
 				Log.info("User cancelled error dialog! Exiting.");
 				exit(EXIT_USER_REQUEST);
 			}

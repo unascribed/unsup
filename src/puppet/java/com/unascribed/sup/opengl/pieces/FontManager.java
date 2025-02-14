@@ -22,7 +22,7 @@ import static org.lwjgl.system.MemoryUtil.*;
 
 public class FontManager {
 	
-	public float dpiScale = 1;
+	public double dpiScale = 1;
 	private Map<String, FT_Face> ftFaces = new HashMap<>();
 	private long ftLibrary;
 	private FT_Bitmap scratchBitmap;
@@ -58,6 +58,13 @@ public class FontManager {
 	}
 	
 	public void drawString(Face f, float x, float y, float size, String str) {
+		glPushMatrix();
+		x = alignToScreenPixel((x+getState().glTranslationX)*dpiScale);
+		y = alignToScreenPixel((y+getState().glTranslationY)*dpiScale);
+		size = (float)(size*dpiScale);
+		glLoadIdentity();
+		glTranslatef(0, 0, -200);
+		
 		int ftSize = (int)(size*64*dpiScale);
 		glEnable(GL_TEXTURE_2D);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -75,28 +82,36 @@ public class FontManager {
 				maxV = 0;
 			}
 			if (w != 0 && h != 0) {
-				float xo = x+(ftFace.glyph().bitmap_left()/dpiScale);
-				float yo = y-(ftFace.glyph().bitmap_top()/dpiScale);
+				// only align x and not y to avoid "serial killer letters" effect often seen in e.g. Qt6
+				double xo = alignToScreenPixel(x+ftFace.glyph().bitmap_left()/dpiScale);
+				double yo = y-(ftFace.glyph().bitmap_top()/dpiScale);
 				glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA8, w, h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, scratchBitmap.buffer(w*h));
 				glEnable(GL_TEXTURE_2D);
 				glBegin(GL_QUADS);
 					glTexCoord2i(0, minV);
-					glVertex2f(xo, yo);
+					glVertex2d(xo, yo);
 					glTexCoord2i(1, minV);
-					glVertex2f(xo+(w/dpiScale), yo);
+					glVertex2d(xo+(w/dpiScale), yo);
 					glTexCoord2i(1, maxV);
-					glVertex2f(xo+(w/dpiScale), yo+(h/dpiScale));
+					glVertex2d(xo+(w/dpiScale), yo+(h/dpiScale));
 					glTexCoord2i(0, maxV);
-					glVertex2f(xo, yo+(h/dpiScale));
+					glVertex2d(xo, yo+(h/dpiScale));
 				glEnd();
 				glDisable(GL_TEXTURE_2D);
 			}
 			
-			glTranslatef(ftFace.glyph().advance().x()/64f/dpiScale, ftFace.glyph().advance().y()/64f/dpiScale, 0);
+			glTranslated(alignToScreenPixel(ftFace.glyph().advance().x()/64f/dpiScale), ftFace.glyph().advance().y()/64f/dpiScale, 0);
 		}
+		glPopMatrix();
+	}
+
+	private float alignToScreenPixel(double x) {
+		double newx = Math.round(x*dpiScale)/dpiScale;
+		return (float)newx;
 	}
 
 	public float measureString(Face f, float size, String str) {
+		size = alignToScreenPixel(size);
 		int ftSize = (int)(size*64);
 		float w = 0;
 		for (int i = 0; i < str.length(); i++) {

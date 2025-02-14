@@ -388,9 +388,9 @@ publishing {
 
 def lwjgl(DependencyHandler deps, String ver, String... modules) {
 	def platforms = [
-		'linux', 'linux-arm64', //'linux-arm32', 'linux-ppc64le', 'linux-riscv64',
+		'linux', 'linux-arm64', 'linux-arm32', 'linux-ppc64le', 'linux-riscv64',
 		'macos', 'macos-arm64',
-		'windows', //'windows-x86', 'windows-arm64',
+		'windows', 'windows-x86', 'windows-arm64',
 		'freebsd',
 	]
 	

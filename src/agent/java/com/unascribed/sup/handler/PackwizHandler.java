@@ -25,10 +25,10 @@ import com.unascribed.flexver.FlexVerComparator;
 import com.unascribed.sup.Agent;
 import com.unascribed.sup.Log;
 import com.unascribed.sup.MMCUpdater;
+import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.PuppetHandler;
 import com.unascribed.sup.SysProps;
 import com.unascribed.sup.Util;
-import com.unascribed.sup.PuppetHandler.AlertMessageType;
 import com.unascribed.sup.PuppetHandler.AlertOption;
 import com.unascribed.sup.PuppetHandler.AlertOptionType;
 import com.unascribed.sup.data.FlavorGroup;
@@ -102,8 +102,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 			boolean bootstrapping = !pwstate.containsKey("lastIndexHash");
 			if (!bootstrapping && actualUpdate && !autoaccept) {
 				AlertOption updateResp = PuppetHandler.openAlert("dialog.update.title",
-						body,
-						AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
+						body, AlertMessageType.QUESTION, AlertOptionType.YES_NO, AlertOption.YES);
 				if (updateResp == AlertOption.NO) {
 					Log.info("Ignoring update by user choice.");
 					return new CheckResult(ourVersion, theirVersion, null, Collections.emptyMap());

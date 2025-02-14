@@ -1,5 +1,5 @@
 package com.unascribed.sup;
 
-public enum MessageType {
+public enum AlertMessageType {
 	QUESTION, INFO, WARN, ERROR, NONE
 }
