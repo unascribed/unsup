@@ -2,6 +2,7 @@ package com.unascribed.sup;
 
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -27,6 +28,7 @@ import org.brotli.dec.BrotliInputStream;
 import com.unascribed.sup.SysProps.PuppetMode;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.pieces.Latch;
+import com.unascribed.sup.util.RequestHelper;
 
 public class PuppetHandler {
 	
@@ -43,55 +45,12 @@ public class PuppetHandler {
 	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
 	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
 
-	private static final String[] cpJars = {
-			"lwjgl-3.3.6-natives-freebsd.jar",
-			"lwjgl-3.3.6-natives-linux-arm32.jar",
-			"lwjgl-3.3.6-natives-linux-arm64.jar",
-			"lwjgl-3.3.6-natives-linux-ppc64le.jar",
-			"lwjgl-3.3.6-natives-linux-riscv64.jar",
-			"lwjgl-3.3.6-natives-linux.jar",
-			"lwjgl-3.3.6-natives-macos-arm64.jar",
-			"lwjgl-3.3.6-natives-macos.jar",
-			"lwjgl-3.3.6-natives-windows-arm64.jar",
-			"lwjgl-3.3.6-natives-windows-x86.jar",
-			"lwjgl-3.3.6-natives-windows.jar",
-			"lwjgl-3.3.6.jar",
-			"lwjgl-glfw-3.3.6-natives-freebsd.jar",
-			"lwjgl-glfw-3.3.6-natives-linux-arm32.jar",
-			"lwjgl-glfw-3.3.6-natives-linux-arm64.jar",
-			"lwjgl-glfw-3.3.6-natives-linux-ppc64le.jar",
-			"lwjgl-glfw-3.3.6-natives-linux-riscv64.jar",
-			"lwjgl-glfw-3.3.6-natives-linux.jar",
-			"lwjgl-glfw-3.3.6-natives-macos-arm64.jar",
-			"lwjgl-glfw-3.3.6-natives-macos.jar",
-			"lwjgl-glfw-3.3.6-natives-windows-arm64.jar",
-			"lwjgl-glfw-3.3.6-natives-windows-x86.jar",
-			"lwjgl-glfw-3.3.6-natives-windows.jar",
-			"lwjgl-glfw-3.3.6.jar",
-			"lwjgl-opengl-3.3.6-natives-freebsd.jar",
-			"lwjgl-opengl-3.3.6-natives-linux-arm32.jar",
-			"lwjgl-opengl-3.3.6-natives-linux-arm64.jar",
-			"lwjgl-opengl-3.3.6-natives-linux-ppc64le.jar",
-			"lwjgl-opengl-3.3.6-natives-linux-riscv64.jar",
-			"lwjgl-opengl-3.3.6-natives-linux.jar",
-			"lwjgl-opengl-3.3.6-natives-macos-arm64.jar",
-			"lwjgl-opengl-3.3.6-natives-macos.jar",
-			"lwjgl-opengl-3.3.6-natives-windows-arm64.jar",
-			"lwjgl-opengl-3.3.6-natives-windows-x86.jar",
-			"lwjgl-opengl-3.3.6-natives-windows.jar",
-			"lwjgl-opengl-3.3.6.jar",
-			"lwjgl-freetype-3.3.6-natives-freebsd.jar",
-			"lwjgl-freetype-3.3.6-natives-linux-arm32.jar",
-			"lwjgl-freetype-3.3.6-natives-linux-arm64.jar",
-			"lwjgl-freetype-3.3.6-natives-linux-ppc64le.jar",
-			"lwjgl-freetype-3.3.6-natives-linux-riscv64.jar",
-			"lwjgl-freetype-3.3.6-natives-linux.jar",
-			"lwjgl-freetype-3.3.6-natives-macos-arm64.jar",
-			"lwjgl-freetype-3.3.6-natives-macos.jar",
-			"lwjgl-freetype-3.3.6-natives-windows-arm64.jar",
-			"lwjgl-freetype-3.3.6-natives-windows-x86.jar",
-			"lwjgl-freetype-3.3.6-natives-windows.jar",
-			"lwjgl-freetype-3.3.6.jar",
+	private static final String lwjglVersion = "3.3.6";
+	private static final String[] lwjgls = {
+			"lwjgl",
+			"lwjgl-glfw",
+			"lwjgl-opengl",
+			"lwjgl-freetype",
 	};
 	
 	private static final String[] copyableProps = {
@@ -164,61 +123,119 @@ public class PuppetHandler {
 					List<String> cp = new ArrayList<>();
 					cp.add(ourPath.getAbsolutePath());
 					if (SysProps.PUPPET_MODE != PuppetMode.SWING) {
+						boolean xdg = false;
+						File cacheDir = new File(new File(System.getProperty("user.home")), ".unsup");
 						String osName = System.getProperty("os.name");
-						String ourOs = "";
-						String ourArch = "";
+						String ourOs = "unknown";
+						String ourArch = "unknown";
 						// copied from LWJGL3 Platform
 						if (osName.startsWith("Windows")) {
 							ourOs = "windows";
+							cacheDir = new File(new File(System.getenv("APPDATA")), "Local/unsup");
 						} else if (osName.startsWith("FreeBSD")) {
 							ourOs = "freebsd";
+							xdg = true;
 						} else if (osName.startsWith("Linux") || osName.startsWith("SunOS") || osName.startsWith("Unix")) {
 							ourOs = "linux";
+							xdg = true;
 						} else if (osName.startsWith("Mac OS X") || osName.startsWith("Darwin")) {
 							ourOs = "macos";
+							cacheDir = new File(new File(System.getProperty("user.home")), "Library/Caches/unsup");
 						}
-						if (!ourOs.isEmpty()) {
-							String osArch = System.getProperty("os.arch");
-							boolean is64Bit = osArch.contains("64") || osArch.startsWith("armv8");
-							if (osArch.startsWith("arm") || osArch.startsWith("aarch")) {
-								if (is64Bit) {
-									ourArch = "-arm64";
-								} else {
-									ourArch = "-arm32";
-								}
-							} else if (osArch.startsWith("ppc")) {
-								if ("ppc64le".equals(osArch)) {
-									ourArch = "-ppc64le";
-								}
-							} else if (osArch.startsWith("riscv")) {
-								if ("riscv64".equals(osArch)) {
-									ourArch = "-riscv64";
-								}
+						if (xdg) {
+							String home = System.getenv("HOME");
+							if (home == null || home.trim().isEmpty()) {
+								home = System.getProperty("user.home");
+							}
+							String dir = System.getenv("XDG_DATA_HOME");
+							if (dir == null || dir.trim().isEmpty()) {
+								dir = home+"/.cache";
+							}
+							cacheDir = new File(dir+"/unsup");
+						}
+						String osArch = System.getProperty("os.arch");
+						boolean is64Bit = osArch.contains("64") || osArch.startsWith("armv8");
+						if (osArch.startsWith("arm") || osArch.startsWith("aarch")) {
+							if (is64Bit) {
+								ourArch = "arm64";
 							} else {
-								if (is64Bit) {
-									ourArch = ".";
-								} else {
-									ourArch = "-x86";
-								}
+								ourArch = "arm32";
+							}
+						} else if (osArch.startsWith("ppc")) {
+							if ("ppc64le".equals(osArch)) {
+								ourArch = "ppc64le";
+							}
+						} else if (osArch.startsWith("riscv")) {
+							if ("riscv64".equals(osArch)) {
+								ourArch = "riscv64";
+							}
+						} else {
+							if (is64Bit) {
+								ourArch = "amd64";
+							} else {
+								ourArch = "x86";
 							}
 						}
-						// this will result in a generic substring if the above code didn't find an
-						// exact match, so we'll just pop all the natives and let LWJGL sort it out
-						String ourNatives = "natives-"+ourOs+ourArch;
 						File tmp = new File(".unsup-tmp/natives");
 						tmp.mkdirs();
-						for (String s : cpJars) {
-							if (s.contains("natives-") && !s.contains(ourNatives)) continue;
-							URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s);
-							if (url != null) {
-								File out = new File(tmp, s);
-								try (FileOutputStream fos = new FileOutputStream(out);
-										InputStream is = new BrotliInputStream(url.openStream())) {
-									Util.copy(is, fos);
-								}
+						Log.debug("Retrieving natives for "+ourOs+"-"+ourArch+"...");
+						try {
+							int M = 1024*1024;
+							for (String s : lwjgls) {
+								URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s+"-"+lwjglVersion+".jar.br");
+								File out = new File(tmp, s+"-"+lwjglVersion+".jar");
 								out.deleteOnExit();
-								cp.add(out.getAbsolutePath());
+								if (url != null) {
+									try (FileOutputStream fos = new FileOutputStream(out);
+											InputStream is = new BrotliInputStream(url.openStream())) {
+										Util.copy(is, fos);
+									}
+									cp.add(out.getAbsolutePath());
+								}
+								String nativesFname = s+"-"+lwjglVersion+"-"+ourOs+"-"+ourArch;
+								File nativesOut = new File(tmp, nativesFname+".jar");
+								File nativesCacheFile = new File(cacheDir, nativesFname+".jar.br");
+								File nativesCacheFileSig = new File(cacheDir, nativesFname+".sig");
+								boolean needsDownload = true;
+								if (nativesCacheFile.exists()) {
+									try {
+										byte[] data = RequestHelper.loadAndVerify(nativesCacheFile.toURI(), 64*M, nativesCacheFileSig.toURI(), Agent.unsupSig);
+										try (FileOutputStream fos = new FileOutputStream(nativesOut);
+												InputStream is = new BrotliInputStream(new ByteArrayInputStream(data))) {
+											Util.copy(is, fos);
+										}
+										needsDownload = false;
+										Log.debug("Got "+nativesFname+" from cache");
+									} catch (IOException e) {
+										Log.warn("Failed to load cached natives jar, redownloading it", e);
+									}
+								}
+								if (needsDownload) {
+									String module = s.replace("lwjgl-", "");
+									Log.debug("Downloading "+nativesFname+" from unsup.y2k.my...");
+									String dlBase = "https://unsup.y2k.my/api/v1/natives/"+lwjglVersion+"/"+ourOs+"/"+ourArch+"/"+module;
+									URI dl = URI.create(dlBase+".jar.br");
+									URI sig = URI.create(dlBase+".sig");
+									byte[] sigData = RequestHelper.downloadToMemory(sig, 512);
+									cacheDir.mkdirs();
+									try (FileOutputStream fos = new FileOutputStream(nativesCacheFileSig)) {
+										fos.write(sigData);
+									}
+									byte[] data = RequestHelper.loadAndVerify(dl, 64*M, nativesCacheFileSig.toURI(), Agent.unsupSig);
+									try (FileOutputStream fos = new FileOutputStream(nativesCacheFile)) {
+										fos.write(data);
+									}
+									try (FileOutputStream fos = new FileOutputStream(nativesOut);
+											InputStream is = new BrotliInputStream(new ByteArrayInputStream(data))) {
+										Util.copy(is, fos);
+									}
+									Log.debug(nativesFname+" downloaded and saved to cache");
+								}
+								cp.add(nativesOut.getAbsolutePath());
 							}
+						} catch (IOException e) {
+							Log.error("Failed to load natives, falling back to Swing puppet (use -Dunsup.puppetMode=swing to enforce this behavior)", e);
+							args.add("-Dunsup.puppetMode=swing");
 						}
 					}
 					StringBuilder cpStr = new StringBuilder();

@@ -35,6 +35,7 @@ import com.unascribed.sup.Agent;
 import com.unascribed.sup.Log;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.data.HashFunction;
+import com.unascribed.sup.signing.SigProvider;
 
 import okhttp3.HttpUrl;
 import okhttp3.Request;
@@ -66,14 +67,18 @@ public class RequestHelper {
 	}
 	
 	public static byte[] loadAndVerify(URI src, int sizeLimit, URI sigUrl) throws IOException {
+		return loadAndVerify(src, sizeLimit, sigUrl, Agent.packSig);
+	}
+	
+	public static byte[] loadAndVerify(URI src, int sizeLimit, URI sigUrl, SigProvider key) throws IOException {
 		byte[] resp = downloadToMemory(src, sizeLimit);
 		if (resp == null) {
 			throw new IOException(src+" is larger than "+(sizeLimit/K)+"K, refusing to continue downloading");
 		}
-		if (Agent.packSig != null && sigUrl != null) {
+		if (key != null && sigUrl != null) {
 			try {
 				byte[] sigResp = downloadToMemory(sigUrl, 512);
-				if (!Agent.packSig.verify(resp, sigResp)) {
+				if (!key.verify(resp, sigResp)) {
 					throw new SignatureException("Signature is invalid");
 				} else {
 					Log.debug("Signature for "+src+" (retrieved from "+sigUrl+") is valid");

@@ -130,6 +130,8 @@ public class Agent {
 				return;
 			}
 			
+			setupOkHttp();
+			
 			if (!noGui) {
 				PuppetHandler.create();
 				cleanup.add(PuppetHandler::destroy);
@@ -172,7 +174,6 @@ public class Agent {
 			// order so we can belay it later if we finished before the timer expired
 			PuppetHandler.tellPuppet("[openTimeout]1250:visible=true");
 			
-			setupOkHttp();
 			checkForUpdate(fmt, src, SysProps.DISABLE_RECONCILIATION, false);
 
 			if (awaitingExit) Agent.blockForever();
@@ -200,7 +201,7 @@ public class Agent {
 			} else {
 				Log.info("All done, handing over control.");
 				// poke the Unsup class so it loads and finalizes all of its values
-				if (Unsup.SOURCE_VERSION != null) Unsup.SOURCE_VERSION.toString();
+				if (Unsup.SOURCE_VERSION != null) Unsup.poke();
 				String cmd = System.getProperty("sun.java.command");
 				if ("org.multimc.EntryPoint".equals(cmd)) {
 					// we actually run before MultiMC's Java-side launcher code, so print a
@@ -249,7 +250,7 @@ public class Agent {
 				config = mergePreset(config, "lang/"+lang, false);
 			}
 			config = mergePreset(config, "lang/en-US", true);
-			config = mergePreset(config, "__global__", false);
+			config = mergePreset(config, "__global__", true);
 			if (config.containsKey("preset")) {
 				config = mergePreset(config, config.get("preset"), true);
 			}

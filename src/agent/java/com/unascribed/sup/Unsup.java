@@ -20,5 +20,7 @@ public class Unsup {
 	 * {@code true} if unsup downloaded updates this launch.
 	 */
 	public static final boolean UPDATED = Agent.updated;
+
+	static void poke() {}
 	
 }

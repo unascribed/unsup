@@ -417,8 +417,8 @@ public class QDIni {
 				}
 				trunc = trunc.trim();
 				int equals = line.indexOf('=');
-				String key = path+line.substring(0, equals);
-				String value = line.substring(equals+1);
+				String key = path+line.substring(0, equals).trim();
+				String value = line.substring(equals+1).trim();
 				if (transformer != null) {
 					String newValue = transformer.transformValue(key, value);
 					String newComment = transformer.transformValueComment(key, value, comment);

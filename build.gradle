@@ -66,6 +66,8 @@ configurations {
 	implementation.extendsFrom shade
 	include
 	compileOnly.extendsFrom include
+	natives
+	compileOnly.extendsFrom natives
 }
 
 dependencies {
@@ -399,9 +401,9 @@ def lwjgl(DependencyHandler deps, String ver, String... modules) {
 		deps.include(dependencies.create("org.lwjgl:lwjgl-${module}:${ver}"))
 	}
 	platforms.each { platform ->
-		deps.include(dependencies.create("org.lwjgl:lwjgl:${ver}:natives-${platform}"))
+		deps.natives(dependencies.create("org.lwjgl:lwjgl:${ver}:natives-${platform}"))
 		modules.each { module ->
-			deps.include(dependencies.create("org.lwjgl:lwjgl-${module}:${ver}:natives-${platform}"))
+			deps.natives(dependencies.create("org.lwjgl:lwjgl-${module}:${ver}:natives-${platform}"))
 		}
 	}
 }

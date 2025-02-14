@@ -217,13 +217,8 @@ public class FlavorDialogWindow extends Window {
 		float scrollKnobX2 = width-rightArea;
 		
 		if (maxScroll < 0) {
-			glBegin(GL_QUADS);
-				glColor(ColorChoice.BACKGROUND);
-				glVertex2f(scrollKnobX1, 0);
-				glVertex2f(scrollKnobX2, 0);
-				glVertex2f(scrollKnobX2, height);
-				glVertex2f(scrollKnobX1, height);
-			glEnd();
+			glColor(ColorChoice.BACKGROUND);
+			drawRectXY(scrollKnobX1, 0, scrollKnobX2, height);
 		} else {
 			float scrollKnobHeight = (height/(height+maxScroll))*(height-4);
 			float scrollKnobOfs = (scroll/maxScroll)*(height-4-scrollKnobHeight);
@@ -232,16 +227,12 @@ public class FlavorDialogWindow extends Window {
 			
 			glBegin(GL_QUADS);
 				glColor(ColorChoice.PROGRESSTRACK);
-				glVertex2f(scrollKnobX1, 0);
-				glVertex2f(scrollKnobX2, 0);
-				glVertex2f(scrollKnobX2, height);
-				glVertex2f(scrollKnobX1, height);
+				buildRectXY(scrollKnobX1, 0, scrollKnobX2, height);
 				
 				glColor(ColorChoice.PROGRESS);
-				glVertex2f(scrollKnobX1+scrollKnobInset, scrollKnobOfs+4);
-				glVertex2f(scrollKnobX2-scrollKnobInset, scrollKnobOfs+4);
-				glVertex2f(scrollKnobX2-scrollKnobInset, scrollKnobOfs+scrollKnobHeight);
-				glVertex2f(scrollKnobX1+scrollKnobInset, scrollKnobOfs+scrollKnobHeight);
+				buildRectWHI(scrollKnobX1, scrollKnobOfs+4,
+						scrollKnobWidth, scrollKnobHeight,
+						scrollKnobInset);
 			glEnd();
 			
 			drawCircle(scrollKnobX1+(scrollKnobWidth/2), scrollKnobOfs+4, scrollKnobWidth-(scrollKnobInset*2));
@@ -250,12 +241,7 @@ public class FlavorDialogWindow extends Window {
 		
 		if (nlr) {
 			glColor(ColorChoice.BACKGROUND);
-			glBegin(GL_QUADS);
-				glVertex2f(0, 0);
-				glVertex2f(leftArea, 0);
-				glVertex2f(leftArea, height);
-				glVertex2f(0, height);
-			glEnd();
+			drawRectXY(0, 0, leftArea, height);
 			boolean firstBoolean = true;
 			for (int i = 0; i < flavors.size(); i++) {
 				if (didKeyboardNav && i == highlighted) {
@@ -317,15 +303,7 @@ public class FlavorDialogWindow extends Window {
 								drawCircle(x, y, 24);
 							}
 							glColor(ColorChoice.BUTTONTEXT);
-							glBegin(GL_QUAD_STRIP);
-								glVertex2f(x-8.422f, y+1.406f);
-								glVertex2f(x-5.592f, y-1.422f);
-								glVertex2f(x-1.918f, y+7.895f);
-								glVertex2f(x-2.084f, y+2.086f);
-								
-								glVertex2f(x+8.482f, y-3.674f);
-								glVertex2f(x+5.508f, y-6.350f);
-							glEnd();
+							drawCheckmark(x, y);
 						} else {
 							glColor(ColorChoice.DIALOG);
 							drawCircle(x, y, 24);

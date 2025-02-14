@@ -5,12 +5,11 @@ import com.unascribed.sup.ColorChoice;
 import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.Puppet;
 import com.unascribed.sup.Translate;
+import com.unascribed.sup.opengl.icons.Icon;
 import com.unascribed.sup.opengl.pieces.FontManager.Face;
 
 import static org.lwjgl.opengl.GL11.glBegin;
 import static org.lwjgl.opengl.GL11.glEnd;
-import static org.lwjgl.opengl.GL11.glVertex2f;
-
 import static com.unascribed.sup.opengl.util.GL.*;
 import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.*;
@@ -173,6 +172,7 @@ public class MessageDialogWindow extends Window {
 	
 	@Override
 	protected synchronized boolean needsRerender() {
+		needsFullRedraw = true;
 		return needsRedraw || needsFullRedraw;
 	}
 
@@ -182,151 +182,40 @@ public class MessageDialogWindow extends Window {
 		if (nfr) {
 			glClear(GL_COLOR_BUFFER_BIT);
 			
-			glPushMatrix();
-				glTranslatef(32, Math.max(32, bodyLines.length*8), 0);
-				glScalef(1.75f, 1.75f, 1);
-				if (conflictDialog) {
-					glColor(ColorChoice.WARNING);
-					glPushMatrix();
-						glTranslatef(0, -3, 0);
-						glScalef(12, 10, 1);
-						drawCircle(0, 0, 1);
-					glPopMatrix();
-					glBegin(GL_QUADS);
-						glVertex2f(-5, -10);
-						glVertex2f(5, -10);
-						glVertex2f(5.931f, -3.755f);
-						glVertex2f(-5.931f, -3.755f);
-						
-						glVertex2f(-1, 1);
-						glVertex2f(1, 1);
-						glVertex2f(1, 8);
-						glVertex2f(-1, 8);
-						
-						glVertex2f(-6, 8);
-						glVertex2f(6, 8);
-						glVertex2f(6, 10);
-						glVertex2f(-6, 10);
-						
-						glColor(ColorChoice.BACKGROUND);
-						glVertex2f(1.540f, -10);
-						glVertex2f(3.210f, -10);
-						glVertex2f(1.790f, -6.5f);
-						glVertex2f(-0.210f, -6.5f);
-						
-						glVertex2f(2.210f, -8);
-						glVertex2f(4.210f, -8);
-						glVertex2f(2.101f, -2.5f);
-						glVertex2f(-0.210f, -2.5f);
-					glEnd();
-					glBegin(GL_TRIANGLES);
-						glVertex2f(2.451f, -4);
-						glVertex2f(4.460f, -4);
-						glVertex2f(1, 0.75f);
-					glEnd();
-				} else {
+			if (messageType != AlertMessageType.NONE) {
+				glPushMatrix();
+					glTranslatef(32, Math.max(32, bodyLines.length*8), 0);
+					glScalef(1.75f, 1.75f, 1);
+					Icon i = Icon.ERROR;
 					ColorChoice color = ColorChoice.PROGRESS;
-					switch (messageType) {
-						case QUESTION:
-							color = ColorChoice.QUESTION;
-							break;
-						case INFO:
-							color = ColorChoice.INFO;
-							break;
-						case WARN:
-							color = ColorChoice.WARNING;
-							break;
-						case ERROR:
-							color = ColorChoice.ERROR;
-							break;
-						case NONE:
-							break;
+					if (conflictDialog) {
+						i = Icon.FRAGILE;
+						color = ColorChoice.SUBTITLE;
+					} else {
+						switch (messageType) {
+							case QUESTION:
+								i = Icon.QUESTION;
+								color = ColorChoice.QUESTION;
+								break;
+							case INFO:
+								i = Icon.INFO;
+								color = ColorChoice.INFO;
+								break;
+							case WARN:
+								i = Icon.ALERT;
+								color = ColorChoice.WARNING;
+								break;
+							case ERROR:
+								i = Icon.ERROR;
+								color = ColorChoice.ERROR;
+								break;
+							case NONE:
+								throw new AssertionError();
+						}
 					}
-					glColor(color);
-					switch (messageType) {
-						case WARN:
-							glBegin(GL_TRIANGLES);
-								glVertex2f(0, -10);
-								glVertex2f(11, 9);
-								glVertex2f(-11, 9);
-								
-								glColor(ColorChoice.BACKGROUND);
-								glVertex2f(0, -6.01f);
-								glVertex2f(7.531f, 7f);
-								glVertex2f(-7.531f, 7f);
-							glEnd();
-							glColor(color);
-							break;
-						case INFO: case QUESTION: case ERROR:
-							drawCircle(0, 0, 24);
-							glColor(ColorChoice.BACKGROUND);
-							drawCircle(0, 0, 20);
-							glColor(color);
-							break;
-						case NONE:
-							break;
-					}
-					switch (messageType) {
-						case QUESTION:
-							drawCircleArc(0, -2, 8, 0, (Math.PI/2)*3);
-							glBegin(GL_QUADS);
-								glVertex2f(-1, 0);
-								glVertex2f(1, 0);
-								glVertex2f(1, 3);
-								glVertex2f(-1, 3);
-								
-								glVertex2f(-1, 4);
-								glVertex2f(1, 4);
-								glVertex2f(1, 6);
-								glVertex2f(-1, 6);
-							glEnd();
-							glColor(ColorChoice.BACKGROUND);
-							drawCircle(0, -2, 4);
-							break;
-						case INFO:
-							glBegin(GL_QUADS);
-								glVertex2f(-1, 6);
-								glVertex2f(1, 6);
-								glVertex2f(1, -2);
-								glVertex2f(-1, -2);
-								
-								glVertex2f(-1, -4);
-								glVertex2f(1, -4);
-								glVertex2f(1, -6);
-								glVertex2f(-1, -6);
-							glEnd();
-							break;
-						case WARN:
-							glBegin(GL_QUADS);
-								glVertex2f(-1, -2);
-								glVertex2f(1, -2);
-								glVertex2f(1, 2);
-								glVertex2f(-1, 2);
-								
-								glVertex2f(-1, 4);
-								glVertex2f(1, 4);
-								glVertex2f(1, 6);
-								glVertex2f(-1, 6);
-							glEnd();
-							break;
-						case ERROR:
-							glBegin(GL_QUADS);
-								glVertex2f(-3.590f, -5.000f);
-								glVertex2f(5.000f, 3.590f);
-								glVertex2f(3.590f, 5.000f);
-								glVertex2f(-5.000f, -3.590f);
-								
-								glVertex2f(3.590f, -5.000f);
-								glVertex2f(-5.000f, 3.590f);
-								glVertex2f(-3.590f, 5.000f);
-								glVertex2f(5.000f, -3.590f);
-							glEnd();
-							break;
-						case NONE:
-							break;
-					}
-				}
-			glPopMatrix();
+					i.draw(ColorChoice.BACKGROUND, color);
+				glPopMatrix();
+			}
 			
 			glColor(ColorChoice.DIALOG);
 		}
@@ -378,10 +267,7 @@ public class MessageDialogWindow extends Window {
 			if (isToAll) {
 				x2 = x2Mouse = x+optionMeasurements[i]+32;
 				glColor(ColorChoice.BACKGROUND);
-				glVertex2f(x1, y1);
-				glVertex2f(x2, y1);
-				glVertex2f(x2, y2);
-				glVertex2f(x1, y2);
+				buildRectXY(x1, y1, x2, y2);
 				
 				w = optionMeasurements[i]+48;
 				
@@ -429,19 +315,15 @@ public class MessageDialogWindow extends Window {
 						glColor(isToAll ? ColorChoice.DIALOG : ColorChoice.BUTTONTEXT, 0.25f);
 					}
 				}
-				glVertex2f(x1+inset, y1+inset);
-				glVertex2f(x2-inset, y1+inset);
-				glVertex2f(x2-inset, y2-inset);
-				glVertex2f(x1+inset, y2-inset);
+				buildRectXYI(x1, y1, x2, y2, inset);
 			}
 			
 			if (i == highlighted) {
 				if (glfwGetWindowAttrib(handle, GLFW_FOCUSED) == GLFW_TRUE) {
-					glColor4f(1, 1, 1, 0.5f);
-					glVertex2f(x1+hoverInset, y1+20);
-					glVertex2f(x2Mouse-hoverInset, y1+20);
-					glVertex2f(x2Mouse-hoverInset, y1+22);
-					glVertex2f(x1+hoverInset, y1+22);
+					glColor(isToAll ? ColorChoice.DIALOG : ColorChoice.BUTTONTEXT, 0.5f);
+					buildRectXYII(x1, y1+20,
+							x2Mouse, y1+22,
+							hoverInset, 0);
 				}
 				
 				if (enterPressed && !isToAll) {
@@ -455,15 +337,7 @@ public class MessageDialogWindow extends Window {
 				float cx = x1+((x2-x1)/2);
 				float cy = y1+((y2-y1)/2);
 				
-				glVertex2f(cx-8.422f, cy+1.406f);
-				glVertex2f(cx-5.592f, cy-1.422f);
-				glVertex2f(cx-2.084f, cy+2.086f);
-				glVertex2f(cx-1.918f, cy+7.895f);
-				
-				glVertex2f(cx-2.084f, cy+2.086f);
-				glVertex2f(cx-1.918f, cy+7.895f);
-				glVertex2f(cx+8.482f, cy-3.674f);
-				glVertex2f(cx+5.508f, cy-6.350f);
+				buildCheckmark(cx, cy);
 			}
 			
 			x += w+6;

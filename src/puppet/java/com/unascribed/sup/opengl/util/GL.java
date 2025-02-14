@@ -80,6 +80,65 @@ public class GL extends GL12 {
 		return state.get();
 	}
 	
+	
+	public static void drawRectWH(float x, float y, float w, float h) {
+		drawRectXY(x, y, x+w, y+h);
+	}
+	
+	public static void drawRectXY(float x1, float y1, float x2, float y2) {
+		glBegin(GL_QUADS);
+			buildRectXY(x1, y1, x2, y2);
+		glEnd();
+	}
+	
+	public static void buildRectWH(float x, float y, float w, float h) {
+		buildRectXY(x, y, x+w, y+h);
+	}
+	
+	public static void buildRectXY(float x1, float y1, float x2, float y2) {
+		glVertex2f(x1, y1);
+		glVertex2f(x2, y1);
+		glVertex2f(x2, y2);
+		glVertex2f(x1, y2);
+	}
+	
+
+	
+	public static void drawRectWHI(float x, float y, float w, float h, float inset) {
+		drawRectWHII(x, y, w, h, inset, inset);
+	}
+	
+	public static void drawRectXYI(float x1, float y1, float x2, float y2, float inset) {
+		drawRectXYII(x1, y1, x2, y2, inset, inset);
+	}
+	
+	public static void buildRectWHI(float x, float y, float w, float h, float inset) {
+		buildRectWHII(x, y, w, h, inset, inset);
+	}
+	
+	public static void buildRectXYI(float x1, float y1, float x2, float y2, float inset) {
+		buildRectXYII(x1, y1, x2, y2, inset, inset);
+	}
+	
+	
+	public static void drawRectWHII(float x, float y, float w, float h, float insetX, float insetY) {
+		drawRectXYII(x, y, x+w, y+h, insetX, insetY);
+	}
+	
+	public static void drawRectXYII(float x1, float y1, float x2, float y2, float insetX, float insetY) {
+		glBegin(GL_QUADS);
+			buildRectXYII(x1, y1, x2, y2, insetX, insetY);
+		glEnd();
+	}
+	
+	public static void buildRectWHII(float x, float y, float w, float h, float insetX, float insetY) {
+		buildRectXYII(x, y, x+w, y+h, insetX, insetY);
+	}
+	
+	public static void buildRectXYII(float x1, float y1, float x2, float y2, float insetX, float insetY) {
+		buildRectXY(x1+insetX, y1+insetY, x2-insetX, y2-insetY);
+	}
+	
 
 	public static void drawCircle(float x, float y, float dia) {
 		State s = state.get();
@@ -110,6 +169,25 @@ public class GL extends GL12 {
 				glVertex2d(x+(Math.sin(t)*r), y+(Math.cos(t)*r));
 			}
 		glEnd();
+	}
+	
+	
+	public static void drawCheckmark(float x, float y) {
+		glBegin(GL_QUADS);
+			buildCheckmark(x, y);
+		glEnd();
+	}
+	
+	public static void buildCheckmark(float x, float y) {
+		glVertex2f(x-8.422f, y+1.406f);
+		glVertex2f(x-5.592f, y-1.422f);
+		glVertex2f(x-2.084f, y+2.086f);
+		glVertex2f(x-1.918f, y+7.895f);
+		
+		glVertex2f(x-2.084f, y+2.086f);
+		glVertex2f(x-1.918f, y+7.895f);
+		glVertex2f(x+8.482f, y-3.674f);
+		glVertex2f(x+5.508f, y-6.350f);
 	}
 	
 }
