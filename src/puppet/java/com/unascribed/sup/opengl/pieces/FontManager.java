@@ -28,10 +28,10 @@ public class FontManager {
 	private FT_Bitmap scratchBitmap;
 	
 	public enum Face {
-		REGULAR("FiraSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc.br"),
-		BOLD("FiraSans-Bold.ttf.br", "NotoSansCJK-Regular.ttc.br"),
-		ITALIC("FiraSans-Italic.ttf.br", "NotoSansCJK-Regular.ttc.br"),
-		BOLDITALIC("FiraSans-BoldItalic.ttf.br", "NotoSansCJK-Regular.ttc.br"),
+		REGULAR("FiraSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc"),
+		BOLD("FiraSans-Bold.ttf.br", "NotoSansCJK-Bold.ttc"),
+		ITALIC("FiraSans-Italic.ttf.br", "NotoSansCJK-Regular.ttc"),
+		BOLDITALIC("FiraSans-BoldItalic.ttf.br", "NotoSansCJK-Bold.ttc"),
 		;
 		public final String[] filenames;
 

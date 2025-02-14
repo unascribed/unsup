@@ -229,6 +229,7 @@ task proguardJar(type: Jar) {
 	exclude 'META-INF/**'
 	exclude '**/*.kotlin_metadata'
 	exclude '**/*.kotlin_builtins'
+	exclude '**/*.ttc'
 	manifest {
 		attributes (
 			'Main-Class': 'com.unascribed.sup.Agent',

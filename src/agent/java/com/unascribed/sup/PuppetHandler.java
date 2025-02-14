@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.lang.Character.UnicodeScript;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
@@ -178,9 +179,8 @@ public class PuppetHandler {
 						}
 						File tmp = new File(".unsup-tmp/natives");
 						tmp.mkdirs();
-						Log.debug("Retrieving natives for "+ourOs+"-"+ourArch+"...");
+						Log.debug("Retrieving assets for "+ourOs+"-"+ourArch+"...");
 						try {
-							int M = 1024*1024;
 							for (String s : lwjgls) {
 								URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s+"-"+lwjglVersion+".jar.br");
 								File out = new File(tmp, s+"-"+lwjglVersion+".jar");
@@ -192,49 +192,32 @@ public class PuppetHandler {
 									}
 									cp.add(out.getAbsolutePath());
 								}
-								String nativesFname = s+"-"+lwjglVersion+"-"+ourOs+"-"+ourArch;
-								File nativesOut = new File(tmp, nativesFname+".jar");
-								File nativesCacheFile = new File(cacheDir, nativesFname+".jar.br");
-								File nativesCacheFileSig = new File(cacheDir, nativesFname+".sig");
-								boolean needsDownload = true;
-								if (nativesCacheFile.exists()) {
-									try {
-										byte[] data = RequestHelper.loadAndVerify(nativesCacheFile.toURI(), 64*M, nativesCacheFileSig.toURI(), Agent.unsupSig);
-										try (FileOutputStream fos = new FileOutputStream(nativesOut);
-												InputStream is = new BrotliInputStream(new ByteArrayInputStream(data))) {
-											Util.copy(is, fos);
-										}
-										needsDownload = false;
-										Log.debug("Got "+nativesFname+" from cache");
-									} catch (IOException e) {
-										Log.warn("Failed to load cached natives jar, redownloading it", e);
+								String module = s.replace("lwjgl-", "");
+								File natives = obtainAsset(tmp, cacheDir, "natives/"+lwjglVersion+"/"+ourOs+"/"+ourArch+"/"+module);
+								cp.add(natives.getAbsolutePath());
+							}
+							boolean needCjk = false;
+							for (String s : Agent.config.keySet()) {
+								if (s.startsWith("strings.")) {
+									String v = Agent.config.get(s);
+									if (v.codePoints().anyMatch(codepoint -> {
+										UnicodeScript sc = UnicodeScript.of(codepoint);
+										// I think this is all of them??
+										return sc == UnicodeScript.HANGUL || sc == UnicodeScript.HAN || sc == UnicodeScript.KATAKANA
+												|| sc == UnicodeScript.HIRAGANA || sc == UnicodeScript.BOPOMOFO;
+									})) {
+										needCjk = true;
+										break;
 									}
 								}
-								if (needsDownload) {
-									String module = s.replace("lwjgl-", "");
-									Log.debug("Downloading "+nativesFname+" from unsup.y2k.my...");
-									String dlBase = "https://unsup.y2k.my/api/v1/natives/"+lwjglVersion+"/"+ourOs+"/"+ourArch+"/"+module;
-									URI dl = URI.create(dlBase+".jar.br");
-									URI sig = URI.create(dlBase+".sig");
-									byte[] sigData = RequestHelper.downloadToMemory(sig, 512);
-									cacheDir.mkdirs();
-									try (FileOutputStream fos = new FileOutputStream(nativesCacheFileSig)) {
-										fos.write(sigData);
-									}
-									byte[] data = RequestHelper.loadAndVerify(dl, 64*M, nativesCacheFileSig.toURI(), Agent.unsupSig);
-									try (FileOutputStream fos = new FileOutputStream(nativesCacheFile)) {
-										fos.write(data);
-									}
-									try (FileOutputStream fos = new FileOutputStream(nativesOut);
-											InputStream is = new BrotliInputStream(new ByteArrayInputStream(data))) {
-										Util.copy(is, fos);
-									}
-									Log.debug(nativesFname+" downloaded and saved to cache");
-								}
-								cp.add(nativesOut.getAbsolutePath());
+							}
+							if (needCjk) {
+								Log.debug("Retrieving CJK support...");
+								File cjk = obtainAsset(tmp, cacheDir, "CJKSupport");
+								cp.add(cjk.getAbsolutePath());
 							}
 						} catch (IOException e) {
-							Log.error("Failed to load natives, falling back to Swing puppet (use -Dunsup.puppetMode=swing to enforce this behavior)", e);
+							Log.error("Failed to load assets for OpenGL puppet, falling back to Swing puppet (use -Dunsup.puppetMode=swing to enforce this behavior)", e);
 							args.add("-Dunsup.puppetMode=swing");
 						}
 					}
@@ -345,6 +328,50 @@ public class PuppetHandler {
 				puppetThread.start();
 			}
 		}
+	}
+
+	private static File obtainAsset(File tmp, File cacheDir, String url) throws IOException {
+		final int M = 1024*1024;
+		
+		String fname = url.replace("/", "-")+".jar";
+		File out = new File(tmp, fname+".jar");
+		File cacheFile = new File(cacheDir, fname+".jar.br");
+		File cacheFileSig = new File(cacheDir, fname+".sig");
+		boolean needsDownload = true;
+		if (cacheFile.exists()) {
+			try {
+				byte[] data = RequestHelper.loadAndVerify(cacheFile.toURI(), 64*M, cacheFileSig.toURI(), Agent.unsupSig);
+				try (FileOutputStream fos = new FileOutputStream(out);
+						InputStream is = new BrotliInputStream(new ByteArrayInputStream(data))) {
+					Util.copy(is, fos);
+				}
+				needsDownload = false;
+				Log.debug("Got "+fname+" from cache");
+			} catch (IOException e) {
+				Log.warn("Failed to load cached natives jar, redownloading it", e);
+			}
+		}
+		if (needsDownload) {
+			Log.debug("Downloading "+fname+" from unsup.y2k.my...");
+			String dlBase = "https://unsup.y2k.my/assets/v1/"+url;
+			URI dl = URI.create(dlBase+".jar.br");
+			URI sig = URI.create(dlBase+".sig");
+			byte[] sigData = RequestHelper.downloadToMemory(sig, 512);
+			cacheDir.mkdirs();
+			try (FileOutputStream fos = new FileOutputStream(cacheFileSig)) {
+				fos.write(sigData);
+			}
+			byte[] data = RequestHelper.loadAndVerify(dl, 64*M, cacheFileSig.toURI(), Agent.unsupSig);
+			try (FileOutputStream fos = new FileOutputStream(cacheFile)) {
+				fos.write(data);
+			}
+			try (FileOutputStream fos = new FileOutputStream(out);
+					InputStream is = new BrotliInputStream(new ByteArrayInputStream(data))) {
+				Util.copy(is, fos);
+			}
+			Log.debug(fname+" downloaded and saved to cache");
+		}
+		return out;
 	}
 
 	public static void sendConfig() {
