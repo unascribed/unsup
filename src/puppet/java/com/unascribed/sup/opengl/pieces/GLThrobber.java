@@ -41,7 +41,7 @@ public class GLThrobber {
 			glPopMatrix();
 		} else {
 			float from = anim.progress;
-			float length = 360-(anim.barLength + anim.barExtraLength);
+			float length = 360-(anim.barMinLength + anim.barExtraLength);
 			
 			glColor(ColorChoice.PROGRESS);
 			drawCircle(x, y, dia);

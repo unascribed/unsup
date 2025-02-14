@@ -81,7 +81,7 @@ public class GL extends GL12 {
 	}
 	
 
-	public static void drawCircle(float x, float y, int dia) {
+	public static void drawCircle(float x, float y, float dia) {
 		State s = state.get();
 		int list = s.circleList;
 		if (list == 0) {

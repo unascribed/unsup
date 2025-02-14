@@ -62,7 +62,7 @@ public class JThrobber extends JComponent {
 			}, 4);
 		} else {
 			float from = anim.progress - 90;
-			float length = anim.barLength + anim.barExtraLength;
+			float length = anim.barMinLength + anim.barExtraLength;
 			
 			g2d.setStroke(new BasicStroke(4));
 			g2d.setColor(getForeground());

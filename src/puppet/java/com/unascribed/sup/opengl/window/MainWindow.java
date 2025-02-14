@@ -18,7 +18,6 @@ public class MainWindow extends Window {
 	public String subtitle = "";
 	public float prog = 0.5f;
 	
-	public boolean needsFullRedraw = true;
 	public boolean closeRequested = false;
 	
 	@Override
@@ -27,17 +26,12 @@ public class MainWindow extends Window {
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		super.create(parent, title, width, height, dpiScale);
 
-		glfwSetWindowRefreshCallback(handle, window -> {
-			synchronized (this) {
-				needsFullRedraw = true;
-			}
-		});
-		
 		glfwSetWindowCloseCallback(handle, unused -> {
 			if (closeRequested) {
 				MessageDialogWindow diag = new MessageDialogWindow("puppet_busy_notice", "dialog.busy.title",
 						Translate.format("dialog.busy"), AlertMessageType.WARN, new String[] {"option.ok"}, "option.ok");
 				Puppet.runOnMainThread(() -> {
+					if (!run) return;
 					diag.create(this, dpiScale);
 					diag.setVisible(true);
 				});

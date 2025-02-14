@@ -40,7 +40,6 @@ public class MessageDialogWindow extends Window {
 	public int highlighted = 0;
 	
 	private boolean needsRedraw = true;
-	private boolean needsFullRedraw = true;
 	
 	private double mouseX, mouseY;
 	private boolean mouseClicked = false;
@@ -93,12 +92,6 @@ public class MessageDialogWindow extends Window {
 		
 		clickCursor = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
 		
-		glfwSetWindowRefreshCallback(handle, window -> {
-			synchronized (this) {
-				needsRedraw = true;
-				needsFullRedraw = true;
-			}
-		});
 		glfwSetKeyCallback(handle, (window, key, scancode, action, mods) -> {
 			if (action == GLFW_RELEASE) return;
 			if (key == GLFW_KEY_TAB) {
@@ -400,7 +393,10 @@ public class MessageDialogWindow extends Window {
 			if (mouseX >= x1 && mouseX <= x2Mouse &&
 					mouseY >= y1 && mouseY <= y2) {
 				hovered = i;
-				Puppet.runOnMainThread(() -> glfwSetCursor(handle, clickCursor));
+				Puppet.runOnMainThread(() -> {
+					if (!run) return;
+					glfwSetCursor(handle, clickCursor);
+				});
 				clickCursorActive = true;
 				
 				if (mouseClicked) {
@@ -430,7 +426,7 @@ public class MessageDialogWindow extends Window {
 							glColor(ColorChoice.BACKGROUND);
 						}
 					} else {
-						glColor4f(1, 1, 1, 0.25f);
+						glColor(isToAll ? ColorChoice.DIALOG : ColorChoice.BUTTONTEXT, 0.25f);
 					}
 				}
 				glVertex2f(x1+inset, y1+inset);
@@ -474,7 +470,10 @@ public class MessageDialogWindow extends Window {
 		}
 		this.toAll = toAll;
 		if (hovered == -1 && clickCursorActive) {
-			Puppet.runOnMainThread(() -> glfwSetCursor(handle, NULL));
+			Puppet.runOnMainThread(() -> {
+				if (!run) return;
+				glfwSetCursor(handle, NULL);
+			});
 		}
 		glEnd();
 		x = baseX;

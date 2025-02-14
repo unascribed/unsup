@@ -1,6 +1,7 @@
 package com.unascribed.sup.opengl.window;
 
 import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
 
 import org.lwjgl.glfw.GLFWImage;
 import org.lwjgl.opengl.GL;
@@ -29,7 +30,14 @@ public abstract class Window {
 	
 	public volatile boolean run = true;
 	
+	public boolean needsFullRedraw = true;
+	
+	private long timeShown;
+	private boolean honorNeedsRender = false;
+	
 	private Thread renderThread;
+	
+	protected boolean updateDpiScaleByFramebuffer = true;
 	
 	public void create(Window parent, String title, int width, int height, double dpiScale) {
 		if (!Puppet.isMainThread()) throw new IllegalStateException("Must be on main thread");
@@ -59,10 +67,41 @@ public abstract class Window {
 			throw new RuntimeException("Failed to create GLFW window: "+GLPuppet.getGLFWErrorDescription());
 		};
 		
+		glfwSetWindowRefreshCallback(handle, window -> {
+			synchronized (this) {
+				needsFullRedraw = true;
+			}
+		});
+		
+		if (!GLPuppet.scaleOverridden) {
+			glfwSetWindowContentScaleCallback(handle, (window, xscale, yscale) -> {
+				double dsx, dsy;
+				synchronized (this) {
+					dsx = dpiScaleX = xscale*dpiScale;
+					dsy = dpiScaleY = yscale*dpiScale;
+					needsFullRedraw = true;
+				}
+				Puppet.runOnMainThread(() -> {
+					if (!run) return;
+					glfwSetWindowSize(handle, (int)(width*dsx), (int)(height*dsy));
+					synchronized (this) {
+						needsFullRedraw = true;
+					}
+				});
+			});
+		}
+		
 		glfwSetFramebufferSizeCallback(handle, (window, newWidth, newHeight) -> {
 			synchronized (this) {
 				fbWidth = newWidth;
 				fbHeight = newHeight;
+				needsFullRedraw = true;
+			}
+		});
+		
+		glfwSetWindowSizeCallback(handle, (window, newWidth, newHeight) -> {
+			synchronized (this) {
+				needsFullRedraw = true;
 			}
 		});
 		
@@ -101,6 +140,19 @@ public abstract class Window {
 			glfwSetWindowPos(handle, x[0]+(w[0]-physW)/2, y[0]+(h[0]-physH)/2);
 		}
 		
+		if (!GLPuppet.scaleOverridden) {
+			float[] xs = new float[1];
+			float[] ys = new float[1];
+			glfwGetWindowContentScale(handle, xs, ys);
+			
+			if (xs[0] != 1 || ys[0] != 1) {
+				dpiScaleX = dpiScale*xs[0];
+				dpiScaleY = dpiScale*ys[0];
+				
+				glfwSetWindowSize(handle, (int)(width*dpiScaleX), (int)(height*dpiScaleY));
+			}
+		}
+		
 		if (glfwExtensionSupported("GLX_EXT_swap_control_tear") || glfwExtensionSupported("WGL_EXT_swap_control_tear")) {
 			glfwSwapInterval(-1);
 		} else {
@@ -129,6 +181,7 @@ public abstract class Window {
 	
 	public void setVisible(boolean visible) {
 		Puppet.runOnMainThread(() -> {
+			if (!run) return;
 			if (visible) {
 				glfwShowWindow(handle);
 			} else {
@@ -170,8 +223,18 @@ public abstract class Window {
 	}
 
 	public boolean render() {
-		if (needsRerender()) {
-			synchronized (this) {
+		boolean rendered;
+		synchronized (this) {
+			if (!honorNeedsRender) {
+				if (timeShown == 0) timeShown = System.nanoTime();
+				long time = System.nanoTime()-timeShown;
+				if (time > TimeUnit.MILLISECONDS.toNanos(500)) {
+					honorNeedsRender = true;
+				} else {
+					needsFullRedraw = true;
+				}
+			}
+			if (!honorNeedsRender || needsRerender()) {
 				if (fbWidth == 0) {
 					int[] fbw = new int[1];
 					int[] fbh = new int[1];
@@ -187,7 +250,11 @@ public abstract class Window {
 				glMatrixMode(GL_MODELVIEW);
 				glLoadIdentity();
 				glTranslatef(0, 0, -200);
-				glScaled(dpiScaleX = (fbWidth/(double)width), dpiScaleY = (fbHeight/(double)height), 1);
+				if (updateDpiScaleByFramebuffer) {
+					dpiScaleX = (fbWidth/(double)width);
+					dpiScaleY = (fbHeight/(double)height);
+				}
+				glScaled(dpiScaleX, dpiScaleY, 1);
 				font.dpiScale = dpiScaleX;
 				
 				glDisable(GL_TEXTURE_2D);
@@ -195,11 +262,13 @@ public abstract class Window {
 				glColor3f(1, 1, 1);
 		
 				renderInner();
+				rendered = true;
+			} else {
+				rendered = false;
 			}
-			glfwSwapBuffers(handle);
-			return true;
 		}
-		return false;
+		if (rendered) glfwSwapBuffers(handle);
+		return rendered;
 	}
 	
 	public void close() {

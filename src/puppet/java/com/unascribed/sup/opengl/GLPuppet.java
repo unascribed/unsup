@@ -27,10 +27,14 @@ public class GLPuppet {
 	
 	private static MainWindow mainWindow;
 	
+	public static boolean scaleOverridden = false;
+	
 	public static PuppetDelegate start() {
 		// just a transliteration of https://wiki.archlinux.org/title/HiDPI plus some unsup-specific extras
-		double dpiScale = scanScale("unsup.scale", "sun.java2d.uiScale", "glass.gtk.uiScale",
-				"UNSUP_SCALE", "QT_SCALE_FACTOR", "GDK_DPI_SCALE×GDK_SCALE", "ELM_SCALE").orElse(1);
+		OptionalDouble oDpiScale = scanScale("unsup.scale", "sun.java2d.uiScale", "glass.gtk.uiScale",
+				"UNSUP_SCALE", "QT_SCALE_FACTOR", "GDK_DPI_SCALE×GDK_SCALE", "ELM_SCALE");
+		scaleOverridden = oDpiScale.isPresent();
+		double dpiScale = oDpiScale.orElse(1);
 		
 		switch (SysProps.PUPPET_PLATFORM) {
 			case COCOA:

@@ -7,7 +7,7 @@ public class ThrobberAnim {
 	public long lastTimeAnimated = System.nanoTime();
 	
 	public final float spinSpeed = 230f;
-	public final int barLength = 16;
+	public int barMinLength = 16;
 	public int barMaxLength = 270;
 	public final long pauseGrowingTime = 200;
 	
@@ -30,7 +30,6 @@ public class ThrobberAnim {
 	}
 
 	public boolean update() {
-		
 		// Based on https://github.com/pnikosis/materialish-progress under Apache License 2.0
 		// Exact snippets and commit:
 		// - https://github.com/pnikosis/materialish-progress/blob/ef285e08d6a2bf31f594f908fb476891a12f316b/library/src/main/java/com/pnikosis/materialishprogress/ProgressWheel.java#L284-L308
@@ -60,7 +59,7 @@ public class ThrobberAnim {
 			}
 
 			float distance = (float) Math.cos((timeStartGrowing / barSpinCycleTime + 1) * Math.PI) / 2 + 0.5f;
-			float destLength = (barMaxLength - barLength);
+			float destLength = (barMaxLength - barMinLength);
 
 			if (barGrowingFromFront) {
 				barExtraLength = distance * destLength;
@@ -79,7 +78,7 @@ public class ThrobberAnim {
 		}
 		lastTimeAnimated = System.nanoTime();
 
-		float length = barLength + barExtraLength;
+		float length = barMinLength + barExtraLength;
 		
 		if (length >= 359 && animateDone) {
 			animateDoneTime = 1;

@@ -1,14 +1,15 @@
 package com.unascribed.sup.data;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FlavorGroup {
+public class FlavorGroup implements Serializable { // TODO serializable is temporary for easy debug
 	public String id, name, description;
 	public List<FlavorChoice> choices = new ArrayList<>();
-	public transient String defChoice, defChoiceName;
+	public /*transient*/ String defChoice, defChoiceName;
 	
-	public static class FlavorChoice {
+	public static class FlavorChoice implements Serializable { // TODO serializable is temporary for easy debug
 		public String id;
 		public String name;
 		public String description;

@@ -57,14 +57,17 @@ public class FontManager {
 		buf.put(memAlloc(1));
 	}
 	
-	public void drawString(Face f, float x, float y, float size, String str) {
-		glPushMatrix();
-		x = alignToScreenPixel((x+getState().glTranslationX)*dpiScale);
-		y = alignToScreenPixel((y+getState().glTranslationY)*dpiScale);
-		size = (float)(size*dpiScale);
-		glLoadIdentity();
-		glTranslatef(0, 0, -200);
+	public float drawString(Face f, float x, float y, float size, String str) {
+		if (dpiScale != 1) {
+			glPushMatrix();
+			x = alignToScreenPixel((x+getState().glTranslationX)*dpiScale);
+			y = alignToScreenPixel((y+getState().glTranslationY)*dpiScale);
+			size = (float)(size*dpiScale);
+			glLoadIdentity();
+			glTranslatef(0, 0, -200);
+		}
 		
+		float totalW = 0;
 		int ftSize = (int)(size*64*dpiScale);
 		glEnable(GL_TEXTURE_2D);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -100,9 +103,15 @@ public class FontManager {
 				glDisable(GL_TEXTURE_2D);
 			}
 			
-			glTranslated(alignToScreenPixel(ftFace.glyph().advance().x()/64f/dpiScale), ftFace.glyph().advance().y()/64f/dpiScale, 0);
+			float glyphW = alignToScreenPixel(ftFace.glyph().advance().x()/64f/dpiScale);
+			totalW += glyphW;
+			x += glyphW;
+			y += ftFace.glyph().advance().y()/64f/dpiScale;
 		}
-		glPopMatrix();
+		if (dpiScale != 1) {
+			glPopMatrix();
+		}
+		return totalW;
 	}
 
 	private float alignToScreenPixel(double x) {
