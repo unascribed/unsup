@@ -3,6 +3,7 @@ package com.unascribed.sup.opengl.pieces;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -216,7 +217,7 @@ public class FontManager {
 			}
 			ByteBuffer buf = memAlloc(baos.size());
 			buf.put(baos.toByteArray());
-			buf.flip();
+			((Buffer)buf).flip();
 			int error = FT_New_Memory_Face(ftLibrary, buf, 0, ftFacePtr);
 			if (error != 0) {
 				Puppet.log("WARN", "Failed to load font "+name+": "+FT_Error_String(error));

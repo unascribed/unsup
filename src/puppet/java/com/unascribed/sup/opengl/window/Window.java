@@ -1,5 +1,6 @@
 package com.unascribed.sup.opengl.window;
 
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.concurrent.TimeUnit;
 
@@ -109,8 +110,8 @@ public abstract class Window {
 			ByteBuffer highresPx = memAlloc(highres.getPixelData().length);
 			lowresPx.put(lowres.getPixelData());
 			highresPx.put(highres.getPixelData());
-			lowresPx.flip();
-			highresPx.flip();
+			((Buffer)lowresPx).flip();
+			((Buffer)highresPx).flip();
 			
 			GLFWImage.Buffer buffer = GLFWImage.malloc(2);
 			buffer.get(0)
