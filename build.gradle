@@ -125,6 +125,7 @@ def pgLibJars = files(
 	System.properties["java.home"]+"/jmods/java.base.jmod", // everyone needs java base
 	System.properties["java.home"]+"/jmods/java.desktop.jmod", // used by the puppet
 	System.properties["java.home"]+"/jmods/java.management.jmod", // for the agent
+	System.properties["java.home"]+"/jmods/java.xml.jmod", // html renderer in the opengl puppet
 )
 
 task proguard(type: proguard.gradle.ProGuardTask) {
@@ -320,9 +321,12 @@ def sigFile = file('build/libs/unsup-'+version+'.jar.sig')
 
 if (project.hasProperty("unsup.signifyKey")) {
 	task sign(type: Exec) {
-		def pipe = new PipedInputStream()
+		def pwCmd = project.getProperty("unsup.signifyPasswordCommand");
 		doFirst {
-			def p = new ProcessBuilder(project.getProperty("unsup.signifyPasswordCommand").split(" "))
+			def pipe = new PipedInputStream()
+			standardInput pipe
+		
+			def p = new ProcessBuilder(pwCmd.split(" "))
 				.redirectError(ProcessBuilder.Redirect.INHERIT)
 				.start()
 			p.outputStream.close()
@@ -334,7 +338,6 @@ if (project.hasProperty("unsup.signifyKey")) {
 		inputs.file proguardJar.archivePath
 		outputs.file sigFile
 		commandLine 'signify', '-S', '-s', project.getProperty("unsup.signifyKey"), '-m', proguardJar.archivePath.absolutePath, '-x', sigFile.absolutePath
-		standardInput pipe
 	}
 } else if (project.hasProperty("unsup.ci")) {
 	task sign(type: Exec) {

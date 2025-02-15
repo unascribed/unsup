@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
@@ -52,6 +53,7 @@ public class FlavorDialogWindow extends Window {
 	private double mouseX, mouseY;
 	private boolean mouseClicked = false;
 	private boolean enterPressed = false;
+	private boolean ctrlEnterPressed = false;
 	private boolean leftPressed = false;
 	private boolean rightPressed = false;
 	private boolean didKeyboardNav = false;
@@ -108,27 +110,32 @@ public class FlavorDialogWindow extends Window {
 					if (h < 0) h = flavors.size()+h;
 					h %= flavors.size();
 					highlighted = h;
-					needsLeftRedraw = true;
-					needsRightRedraw = true;
+					needsFullRedraw = true;
 					didKeyboardNav = true;
+					preferKeyboard = true;
+				}
+			} else if (key == GLFW_KEY_ENTER && (mods & GLFW_MOD_CONTROL) != 0) {
+				synchronized (this) {
+					ctrlEnterPressed = true;
+					needsRightRedraw = true;
 					preferKeyboard = true;
 				}
 			} else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE || key == GLFW_KEY_KP_ENTER) {
 				synchronized (this) {
 					enterPressed = true;
-					needsLeftRedraw = true;
+					needsFullRedraw = true;
 					preferKeyboard = true;
 				}
 			} else if (key == GLFW_KEY_LEFT) {
 				synchronized (this) {
 					leftPressed = true;
-					needsLeftRedraw = true;
+					needsFullRedraw = true;
 					preferKeyboard = true;
 				}
 			} else if (key == GLFW_KEY_RIGHT) {
 				synchronized (this) {
 					rightPressed = true;
-					needsLeftRedraw = true;
+					needsFullRedraw = true;
 					preferKeyboard = true;
 				}
 			}
@@ -146,7 +153,7 @@ public class FlavorDialogWindow extends Window {
 			if (button == GLFW_MOUSE_BUTTON_LEFT) {
 				synchronized (this) {
 					mouseClicked = true;
-					needsLeftRedraw = true;
+					needsFullRedraw = true;
 					preferKeyboard = false;
 				}
 			}
@@ -486,6 +493,33 @@ public class FlavorDialogWindow extends Window {
 				glColor(ColorChoice.DIALOG);
 				drawNode(state, descriptionDocuments.computeIfAbsent(html, FlavorDialogWindow::parseXHTML));
 			}
+			
+			String done = Translate.format("option.done");
+			float doneW = font.measureString(Face.REGULAR, 14, done);
+			float btnW = doneW+24;
+			float btnX = width-(btnW+8);
+			float btnY = height-27-8;
+			float btnH = 27;
+			boolean hover = mouseX >= btnX && mouseX <= btnX+btnW &&
+					mouseY >= btnY && mouseY <= btnY+btnH;
+			glColor(ColorChoice.BUTTON);
+			drawRectWH(btnX, btnY, btnW, btnH);
+			if (hover) {
+				glColor(ColorChoice.BUTTONTEXT, 0.25f);
+				drawRectWH(btnX, btnY, btnW, btnH);
+			}
+			glColor(ColorChoice.BUTTONTEXT);
+			font.drawString(Face.REGULAR, btnX+(btnW-doneW)/2, btnY+18, 14, done);
+			
+			
+			if (ctrlEnterPressed || (mouseClicked && hover)) {
+				StringJoiner sj = new StringJoiner("\u001C");
+				for (String s : selectedFlavors) {
+					sj.add(s);
+				}
+				Puppet.reportChoice(name, sj.toString());
+				close();
+			}
 		}
 		
 		maxScroll = y-startY-height;
@@ -517,7 +551,7 @@ public class FlavorDialogWindow extends Window {
 		}
 	}
 	
-	private static final Set<String> blockElements = new HashSet<>(Arrays.asList("ul", "li", "h1", "h2", "h3", "br"));
+	private static final Set<String> breakElements = new HashSet<>(Arrays.asList("ul", "li", "h1", "h2", "h3", "br"));
 	
 	private void drawNode(NodeDrawState state, Node node) {
 		if (node instanceof Text) {
@@ -527,7 +561,7 @@ public class FlavorDialogWindow extends Window {
 			state.y = res[1];
 		} else {
 			String tagName = node.getNodeName().toLowerCase(Locale.ROOT);
-			if (blockElements.contains(tagName)) {
+			if (breakElements.contains(tagName)) {
 				if (state.x > state.baseX) {
 					state.x = state.baseX;
 					state.y += (int)(state.size*1.4f);
@@ -574,6 +608,11 @@ public class FlavorDialogWindow extends Window {
 					state.x = state.baseX;
 					break;
 				}
+				case "li": {
+					drawCircle(state.x-8, state.y-(state.size/3), 6);
+					drawChildren(state, node);
+					break;
+				}
 				case "b": case "strong": {
 					NodeDrawState nw = state.clone();
 					nw.face = approach(nw.face, Face.BOLD);
@@ -588,11 +627,6 @@ public class FlavorDialogWindow extends Window {
 					drawChildren(nw, node);
 					state.y = nw.y;
 					state.x = nw.x;
-					break;
-				}
-				case "li": {
-					drawCircle(state.x-8, state.y-(state.size/3), 6);
-					drawChildren(state, node);
 					break;
 				}
 				default: {
