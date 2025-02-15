@@ -34,6 +34,8 @@ public class Puppet {
 	private static final BlockingQueue<Runnable> mainThreadWorkQueue = new LinkedBlockingQueue<>();
 	private static final Thread mainThread = Thread.currentThread();
 	
+	public static volatile boolean exitOnDone = true;
+	
 	public static void main(String[] args) {
 		PuppetMode mode = SysProps.PUPPET_MODE;
 		boolean didOverride = false;
@@ -204,40 +206,44 @@ public class Puppet {
 						case "alert": {
 							String[] split = arg.split(":");
 							String title = split[0];
-							String body = split[1];
-							String messageTypeStr = split[2];
-							String optionTypeStr = split[3];
-							String def = split.length < 5 ? null : split[4];
-							if (messageTypeStr.startsWith("choice=")) {
-								String[] options = messageTypeStr.substring(7).split("\u001C");
-								for (int i = 0; i < options.length; i++) {
-									options[i] = Translate.format(options[i].replace('\u001B', ':'));
-								}
-								r = () -> del.openChoiceDialog(name, title, body, options, optionTypeStr);
+							if ("$$changeFlavorsOffer".equals(title)) {
+								r = () -> del.offerChangeFlavors(name);
 							} else {
-								AlertMessageType messageType = AlertMessageType.valueOf(messageTypeStr.toUpperCase(Locale.ROOT));
-								String[] options;
-								switch (optionTypeStr) {
-									case "yesno":
-										options = new String[]{"option.yes", "option.no"};
-										break;
-									case "yesnocancel":
-										options = new String[]{"option.yes", "option.no", "option.cancel"};
-										break;
-									case "okcancel":
-										options = new String[]{"option.ok", "option.cancel"};
-										break;
-									case "yesnotoallcancel":
-										options = new String[]{"option.yes_to_all", "option.yes", "option.no_to_all", "option.no", "option.cancel"};
-										break;
-									default:
-										Puppet.log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
-										// fallthru
-									case "ok":
-										options = new String[]{"option.ok"};
-										break;
+								String body = split[1];
+								String messageTypeStr = split[2];
+								String optionTypeStr = split[3];
+								String def = split.length < 5 ? null : split[4];
+								if (messageTypeStr.startsWith("choice=")) {
+									String[] options = messageTypeStr.substring(7).split("\u001C");
+									for (int i = 0; i < options.length; i++) {
+										options[i] = Translate.format(options[i].replace('\u001B', ':'));
+									}
+									r = () -> del.openChoiceDialog(name, title, body, options, optionTypeStr);
+								} else {
+									AlertMessageType messageType = AlertMessageType.valueOf(messageTypeStr.toUpperCase(Locale.ROOT));
+									String[] options;
+									switch (optionTypeStr) {
+										case "yesno":
+											options = new String[]{"option.yes", "option.no"};
+											break;
+										case "yesnocancel":
+											options = new String[]{"option.yes", "option.no", "option.cancel"};
+											break;
+										case "okcancel":
+											options = new String[]{"option.ok", "option.cancel"};
+											break;
+										case "yesnotoallcancel":
+											options = new String[]{"option.yes_to_all", "option.yes", "option.no_to_all", "option.no", "option.cancel"};
+											break;
+										default:
+											Puppet.log("WARN", "Unknown dialog option type "+optionTypeStr+", defaulting to ok");
+											// fallthru
+										case "ok":
+											options = new String[]{"option.ok"};
+											break;
+									}
+									r = () -> del.openMessageDialog(name, title, body, messageType, options, Translate.format(def));
 								}
-								r = () -> del.openMessageDialog(name, title, body, messageType, options, Translate.format(def));
 							}
 							break;
 						}
@@ -335,7 +341,7 @@ public class Puppet {
 	}
 
 	public static void reportDone() {
-		System.exit(0);
+		if (exitOnDone) System.exit(0);
 	}
 	
 	public static boolean isMainThread() {

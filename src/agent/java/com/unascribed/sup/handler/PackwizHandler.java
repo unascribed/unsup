@@ -80,8 +80,14 @@ public class PackwizHandler extends AbstractFormatHandler {
 				}
 			}
 		}
+		boolean changeFlavors = SysProps.PACKWIZ_CHANGE_FLAVORS;
 		boolean actualUpdate = hasIndexUpdate || hasComponentUpdate;
-		if (SysProps.PACKWIZ_CHANGE_FLAVORS || actualUpdate) {
+		if (!actualUpdate && Agent.config.getBoolean("offer_change_flavors", false)) {
+			if (PuppetHandler.openAlert("$$changeFlavorsOffer", "", AlertMessageType.NONE, AlertOptionType.YES_NO, AlertOption.NO) == AlertOption.YES) {
+				changeFlavors = true;
+			}
+		}
+		if (changeFlavors || actualUpdate) {
 			if (ourVersion == null) {
 				ourVersion = new Version("null", 0);
 			}
@@ -183,7 +189,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 											name = id;
 											description = "";
 										}
-										if (!SysProps.PACKWIZ_CHANGE_FLAVORS && Iterables.contains(ourFlavors, id)) {
+										if (!changeFlavors && Iterables.contains(ourFlavors, id)) {
 											// a choice has already been made for this flavor
 											continue flavors;
 										}
@@ -191,7 +197,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 										c.id = id;
 										c.name = name;
 										c.description = description;
-										c.def = SysProps.PACKWIZ_CHANGE_FLAVORS ? Iterables.contains(ourFlavors, id) : id.equals(defChoice);
+										c.def = changeFlavors ? Iterables.contains(ourFlavors, id) : id.equals(defChoice);
 										if (c.def) {
 											grp.defChoice = c.id;
 											grp.defChoiceName = c.name;
@@ -270,7 +276,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				if (file.getBoolean("metafile", false)) {
 					String name = path.substring(path.lastIndexOf('/')+1, path.endsWith(".pw.toml") ? path.length()-8 : path.length());
 					String metafileDoublet = (func+":"+hash);
-					if (metafileDoublet.equals(metafileState.getString(path)) && !SysProps.PACKWIZ_CHANGE_FLAVORS) {
+					if (metafileDoublet.equals(metafileState.getString(path)) && !changeFlavors) {
 						toDelete.remove(String.valueOf(metafileFiles.get(path)));
 						continue;
 					}
@@ -340,7 +346,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 					String defChoice = Agent.config.get("flavors."+mf.name);
 					synth.defChoice = defChoice;
 					synth.defChoiceName = defChoice;
-					boolean defOn = SysProps.PACKWIZ_CHANGE_FLAVORS ? Iterables.contains(ourFlavors, mf.name+"_on") : option.getBoolean("default", false);
+					boolean defOn = changeFlavors ? Iterables.contains(ourFlavors, mf.name+"_on") : option.getBoolean("default", false);
 					FlavorGroup.FlavorChoice on = new FlavorGroup.FlavorChoice();
 					on.id = mf.name+"_on";
 					on.name = "On";
@@ -360,7 +366,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 			pwstate.put("syntheticFlavorGroups", syntheticGroupsJson);
 			final JsonArray fourFlavors = ourFlavors;
 			for (Map.Entry<String, FlavorGroup> en : syntheticGroups.entrySet()) {
-				if (SysProps.PACKWIZ_CHANGE_FLAVORS || !en.getValue().choices.stream().anyMatch(c -> Iterables.contains(fourFlavors, c.id))) {
+				if (changeFlavors || !en.getValue().choices.stream().anyMatch(c -> Iterables.contains(fourFlavors, c.id))) {
 					unpickedGroups.add(en.getValue());
 				}
 				FlavorGroup grp = en.getValue();
@@ -381,7 +387,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 			}
 
 			PuppetHandler.updateSubtitle("subtitle.waiting_for_flavors");
-			if (SysProps.PACKWIZ_CHANGE_FLAVORS) {
+			if (changeFlavors) {
 				ourFlavors.clear();
 			}
 			ourFlavors = handleFlavorSelection(ourFlavors, unpickedGroups, newState);

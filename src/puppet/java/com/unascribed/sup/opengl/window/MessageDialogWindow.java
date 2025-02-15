@@ -40,15 +40,11 @@ public class MessageDialogWindow extends Window {
 	
 	private boolean needsRedraw = true;
 	
-	private double mouseX, mouseY;
-	private boolean mouseClicked = false;
 	private boolean enterPressed = false;
 	
 	private boolean clickCursorActive = false;
 	private boolean toAll = false;
 	private boolean conflictDialog = false;
-	
-	private long clickCursor;
 	
 	private static final Pattern LEADIN_PATTERN = Pattern.compile("dialog.conflict.leadin.([^¤.]+)");
 	
@@ -89,8 +85,6 @@ public class MessageDialogWindow extends Window {
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
 		super.create(parent, title, width, height, dpiScale);
 		
-		clickCursor = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
-		
 		glfwSetKeyCallback(handle, (window, key, scancode, action, mods) -> {
 			if (action == GLFW_RELEASE) return;
 			if (key == GLFW_KEY_TAB) {
@@ -108,22 +102,6 @@ public class MessageDialogWindow extends Window {
 			} else if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE || key == GLFW_KEY_KP_ENTER) {
 				synchronized (this) {
 					enterPressed = true;
-					needsRedraw = true;
-				}
-			}
-		});
-		glfwSetCursorPosCallback(handle, (window, xpos, ypos) -> {
-			synchronized (this) {
-				mouseX = xpos/dpiScale;
-				mouseY = ypos/dpiScale;
-				needsRedraw = true;
-			}
-		});
-		glfwSetMouseButtonCallback(handle, (window, button, action, mods) -> {
-			if (action == GLFW_RELEASE) return;
-			if (button == GLFW_MOUSE_BUTTON_LEFT) {
-				synchronized (this) {
-					mouseClicked = true;
 					needsRedraw = true;
 				}
 			}
@@ -166,8 +144,16 @@ public class MessageDialogWindow extends Window {
 	}
 
 	@Override
-	protected void setupGL() {
-		
+	protected void setupGL() {}
+	
+	@Override
+	protected synchronized void onMouseMove(double x, double y) {
+		needsRedraw = true;
+	}
+	
+	@Override
+	protected synchronized void onMouseClick() {
+		needsRedraw = true;
 	}
 	
 	@Override
@@ -260,7 +246,7 @@ public class MessageDialogWindow extends Window {
 			
 			float x2Mouse = x2;
 			
-			int hoverInset = 6;
+			int highlightInset = 6;
 			
 			boolean isToAll = optionsRaw[i].equals("option.to_all");
 			
@@ -323,7 +309,7 @@ public class MessageDialogWindow extends Window {
 					glColor(isToAll ? ColorChoice.DIALOG : ColorChoice.BUTTONTEXT, 0.5f);
 					buildRectXYII(x1, y1+20,
 							x2Mouse, y1+22,
-							hoverInset, 0);
+							highlightInset, 0);
 				}
 				
 				if (enterPressed && !isToAll) {
@@ -373,8 +359,7 @@ public class MessageDialogWindow extends Window {
 		
 		needsRedraw = false;
 		needsFullRedraw = false;
-		if (mouseClicked) mouseClicked = false;
-		if (enterPressed) enterPressed = false;
+		enterPressed = false;
 	}
 
 	private String getReport(int i) {

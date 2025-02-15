@@ -169,10 +169,16 @@ public class Agent {
 			
 			PuppetHandler.tellPuppet(":build");
 			PuppetHandler.tellPuppet(":subtitle="+config.get("subtitle", ""));
-			// we don't want to flash a window on the screen if things aren't going slow, so we tell
-			// the puppet to wait before actually making the window visible, and assign an id to our
-			// order so we can belay it later if we finished before the timer expired
-			PuppetHandler.tellPuppet("[openTimeout]1250:visible=true");
+			String delay;
+			if (config.getBoolean("offer_change_flavors", false)) {
+				delay = "";
+			} else {
+				// we don't want to flash a window on the screen if things aren't going slow, so we tell
+				// the puppet to wait before actually making the window visible, and assign an id to our
+				// order so we can belay it later if we finished before the timer expired
+				delay = "1250";
+			}
+			PuppetHandler.tellPuppet("[openTimeout]"+delay+":visible=true");
 			
 			checkForUpdate(fmt, src, SysProps.DISABLE_RECONCILIATION, false);
 

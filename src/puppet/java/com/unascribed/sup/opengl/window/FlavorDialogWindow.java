@@ -50,8 +50,6 @@ public class FlavorDialogWindow extends Window {
 	private boolean needsLeftRedraw = true;
 	private boolean needsRightRedraw = true;
 	
-	private double mouseX, mouseY;
-	private boolean mouseClicked = false;
 	private boolean enterPressed = false;
 	private boolean ctrlEnterPressed = false;
 	private boolean leftPressed = false;
@@ -66,8 +64,6 @@ public class FlavorDialogWindow extends Window {
 	private float maxScroll = 480;
 	
 	private long lastTick = System.nanoTime();
-	
-	private long clickCursor;
 	
 	public FlavorDialogWindow(String name, List<FlavorGroup> flavors) {
 		this.name = name;
@@ -95,8 +91,6 @@ public class FlavorDialogWindow extends Window {
 		glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_TRUE);
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE);
 		super.create(parent, title, width, height, dpiScale);
-		
-		clickCursor = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
 		
 		glfwSetKeyCallback(handle, (window, key, scancode, action, mods) -> {
 			if (action == GLFW_RELEASE) return;
@@ -140,24 +134,6 @@ public class FlavorDialogWindow extends Window {
 				}
 			}
 		});
-		glfwSetCursorPosCallback(handle, (window, xpos, ypos) -> {
-			synchronized (this) {
-				mouseX = xpos/dpiScale;
-				mouseY = ypos/dpiScale;
-				needsFullRedraw = true;
-				preferKeyboard = false;
-			}
-		});
-		glfwSetMouseButtonCallback(handle, (window, button, action, mods) -> {
-			if (action == GLFW_RELEASE) return;
-			if (button == GLFW_MOUSE_BUTTON_LEFT) {
-				synchronized (this) {
-					mouseClicked = true;
-					needsFullRedraw = true;
-					preferKeyboard = false;
-				}
-			}
-		});
 		glfwSetScrollCallback(handle, (window, xoffset, yoffset) -> {
 			synchronized (this) {
 				scrollVel -= yoffset*6;
@@ -186,6 +162,20 @@ public class FlavorDialogWindow extends Window {
 	
 	public void create(Window parent, double dpiScale) {
 		create(parent, Translate.format("dialog.flavors.title"), 600, 400, dpiScale);
+	}
+	
+	@Override
+	protected synchronized void onMouseMove(double x, double y) {
+		needsFullRedraw = true;
+		preferKeyboard = false;
+	}
+	
+	@Override
+	protected synchronized void onMouseClick() {
+		synchronized (this) {
+			needsFullRedraw = true;
+			preferKeyboard = false;
+		}
 	}
 
 	@Override
@@ -528,7 +518,6 @@ public class FlavorDialogWindow extends Window {
 		needsLeftRedraw = false;
 		needsRightRedraw = false;
 		
-		mouseClicked = false;
 		enterPressed = false;
 		leftPressed = false;
 		rightPressed = false;

@@ -192,6 +192,11 @@ public class SwingPuppet {
 			}
 
 			@Override
+			public void offerChangeFlavors(String name) {
+				Puppet.reportChoice(name, "option.no");
+			}
+			
+			@Override
 			public void openChoiceDialog(String name, String title, String body, String[] options, String def) {
 				invokeLater(() -> {
 					SwingPuppet.openChoiceDialog(name, title, body, def, options);

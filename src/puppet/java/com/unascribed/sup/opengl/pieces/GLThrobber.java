@@ -10,6 +10,10 @@ public class GLThrobber {
 
 	private final ThrobberAnim anim = new ThrobberAnim();
 	
+	public boolean isDone() {
+		return anim.animateDone;
+	}
+	
 	public void render(int dia, float x, float y) {
 		if (anim.update()) {
 			glColor(ColorChoice.PROGRESS);

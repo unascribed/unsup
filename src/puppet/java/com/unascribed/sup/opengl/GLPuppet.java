@@ -6,6 +6,7 @@ import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.Puppet;
 import com.unascribed.sup.PuppetDelegate;
 import com.unascribed.sup.SysProps;
+import com.unascribed.sup.Translate;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.WindowIcons;
 import com.unascribed.sup.data.FlavorGroup;
@@ -28,6 +29,9 @@ public class GLPuppet {
 	private static MainWindow mainWindow;
 	
 	public static boolean scaleOverridden = false;
+	
+	private static boolean built = false;
+	private static final Object buildLatch = new Object();
 	
 	public static PuppetDelegate start() {
 		// just a transliteration of https://wiki.archlinux.org/title/HiDPI plus some unsup-specific extras
@@ -97,44 +101,80 @@ public class GLPuppet {
 			public void build() {
 				Puppet.runOnMainThread(() -> {
 					mainWindow.create(null, "unsup v"+Util.VERSION, 480, 80, dpiScale);
+					synchronized (buildLatch) {
+						built = true;
+						buildLatch.notifyAll();
+					}
 				});
 			}
 			
 			@Override
 			public void setVisible(boolean visible) {
-				mainWindow.setVisible(visible);
+				synchronized (buildLatch) {
+					while (!built) {
+						try {
+							buildLatch.wait();
+						} catch (InterruptedException e) {
+						}
+					}
+					mainWindow.setVisible(visible);
+				}
 			}
 			
 			@Override
 			public void setTitle(String title) {
-				mainWindow.title = title;
-				mainWindow.needsFullRedraw = true;
+				synchronized (mainWindow) {
+					mainWindow.title = title;
+					mainWindow.needsFullRedraw = true;
+				}
 			}
 			
 			@Override
 			public void setSubtitle(String subtitle) {
-				mainWindow.subtitle = subtitle;
-				mainWindow.needsFullRedraw = true;
+				synchronized (mainWindow) {
+					mainWindow.subtitle = subtitle;
+					mainWindow.needsFullRedraw = true;
+				}
 			}
 			
 			@Override
 			public void setProgressIndeterminate() {
-				mainWindow.prog = -1;
+				synchronized (mainWindow) {
+					mainWindow.prog = -1;
+				}
 			}
 			
 			@Override
 			public void setProgressDeterminate() {
-				mainWindow.prog = 0;
+				synchronized (mainWindow) {
+					mainWindow.prog = 0;
+				}
 			}
 			
 			@Override
 			public void setProgress(int permil) {
-				mainWindow.prog = permil/1000f;
+				synchronized (mainWindow) {
+					mainWindow.prog = permil/1000f;
+				}
 			}
 			
 			@Override
 			public void setDone() {
-				mainWindow.throbber.animateDone();
+				synchronized (mainWindow) {
+					mainWindow.throbber.animateDone();
+				}
+			}
+			
+			@Override
+			public void offerChangeFlavors(String name) {
+				Puppet.exitOnDone = false;
+				synchronized (mainWindow) {
+					mainWindow.offerChangeFlavorsName = name;
+					mainWindow.offerChangeFlavors = System.nanoTime();
+					setTitle(Translate.format("title.done"));
+					setSubtitle(Translate.format("subtitle.waiting_for_flavors"));
+					setDone();
+				}
 			}
 			
 			@Override

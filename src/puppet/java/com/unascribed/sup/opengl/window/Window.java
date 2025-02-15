@@ -24,6 +24,9 @@ public abstract class Window {
 	protected int fbWidth, fbHeight;
 	protected double dpiScaleX, dpiScaleY;
 	
+	protected double mouseX, mouseY;
+	protected boolean mouseClicked;
+	
 	protected final FontManager font = new FontManager();
 	protected int scratchTex;
 	
@@ -37,6 +40,7 @@ public abstract class Window {
 	private Thread renderThread;
 	
 	protected boolean updateDpiScaleByFramebuffer = true;
+	protected long clickCursor;
 	
 	public void create(Window parent, String title, int width, int height, double dpiScale) {
 		if (!Puppet.isMainThread()) throw new IllegalStateException("Must be on main thread");
@@ -65,6 +69,8 @@ public abstract class Window {
 		if (handle == 0) {
 			throw new RuntimeException("Failed to create GLFW window: "+GLPuppet.getGLFWErrorDescription());
 		};
+		
+		clickCursor = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
 		
 		glfwSetWindowRefreshCallback(handle, window -> {
 			synchronized (this) {
@@ -101,6 +107,24 @@ public abstract class Window {
 		glfwSetWindowSizeCallback(handle, (window, newWidth, newHeight) -> {
 			synchronized (this) {
 				needsFullRedraw = true;
+			}
+		});
+
+		glfwSetCursorPosCallback(handle, (window, xpos, ypos) -> {
+			synchronized (this) {
+				mouseX = xpos/dpiScale;
+				mouseY = ypos/dpiScale;
+				onMouseMove(mouseX, mouseY);
+			}
+		});
+		
+		glfwSetMouseButtonCallback(handle, (window, button, action, mods) -> {
+			if (action == GLFW_RELEASE) return;
+			if (button == GLFW_MOUSE_BUTTON_LEFT) {
+				synchronized (this) {
+					mouseClicked = true;
+					onMouseClick();
+				}
 			}
 		});
 		
@@ -173,6 +197,9 @@ public abstract class Window {
 	}
 	
 	protected abstract void setupGL();
+	
+	protected abstract void onMouseMove(double x, double y);
+	protected abstract void onMouseClick();
 	
 	protected synchronized boolean needsRerender() {
 		return true;
@@ -261,6 +288,8 @@ public abstract class Window {
 				glColor3f(1, 1, 1);
 		
 				renderInner();
+				
+				mouseClicked = false;
 				rendered = true;
 			} else {
 				rendered = false;
