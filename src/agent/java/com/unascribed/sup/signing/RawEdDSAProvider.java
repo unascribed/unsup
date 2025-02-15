@@ -9,21 +9,25 @@ import net.i2p.crypto.eddsa.EdDSAPublicKey;
 
 public class RawEdDSAProvider implements SigProvider {
 
-	private final EdDSAEngine engine;
+	private final ThreadLocal<EdDSAEngine> engine;
 	
 	public RawEdDSAProvider(EdDSAPublicKey key) throws InvalidKeyException {
-		this.engine = new EdDSAEngine();
-		engine.initVerify(key);
-		try {
-			engine.setParameter(EdDSAEngine.ONE_SHOT_MODE);
-		} catch (InvalidAlgorithmParameterException e) {
-			throw new AssertionError(e);
-		}
+		new EdDSAEngine().initVerify(key);
+		this.engine = ThreadLocal.withInitial(() -> {
+			EdDSAEngine n = new EdDSAEngine();
+			try {
+				n.initVerify(key);
+				n.setParameter(EdDSAEngine.ONE_SHOT_MODE);
+			} catch (InvalidAlgorithmParameterException | InvalidKeyException e) {
+				throw new AssertionError(e);
+			}
+			return n;
+		});
 	}
 
 	@Override
 	public boolean verify(byte[] data, byte[] signature) throws SignatureException {
-		return engine.verifyOneShot(data, signature);
+		return engine.get().verifyOneShot(data, signature);
 	}
 	
 }

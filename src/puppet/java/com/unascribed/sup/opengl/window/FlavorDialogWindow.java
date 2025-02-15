@@ -320,12 +320,7 @@ public class FlavorDialogWindow extends Window {
 						if (i == highlighted) {
 							if (focused) {
 								glColor(ColorChoice.DIALOG, 0.75f);
-								glBegin(GL_QUADS);
-									glVertex2f(x-3, y+12);
-									glVertex2f(leftArea-6, y+12);
-									glVertex2f(leftArea-6, y+14);
-									glVertex2f(x-3, y+14);
-								glEnd();
+								drawRectXY(x-3, y+12, leftArea-6, y+14);
 							}
 							if (leftPressed || rightPressed || enterPressed) {
 								int dir = leftPressed ? -1 : 1;
@@ -383,10 +378,7 @@ public class FlavorDialogWindow extends Window {
 									} while (w > btnW);
 									glBegin(GL_QUADS);
 										glColor(sel ? ColorChoice.BUTTON : ColorChoice.DIALOG);
-										glVertex2f(x1, y1);
-										glVertex2f(x2, y1);
-										glVertex2f(x2, y2);
-										glVertex2f(x1, y2);
+										buildRectXY(x1, y1, x2, y2);
 										
 										if (!sel || hover) {
 											int inset = 2;
@@ -396,10 +388,7 @@ public class FlavorDialogWindow extends Window {
 											} else {
 												glColor(ColorChoice.BACKGROUND, hover ? 0.75f : 1);
 											}
-											glVertex2f(x1+inset, y1+inset);
-											glVertex2f(x2-inset, y1+inset);
-											glVertex2f(x2-inset, y2-inset);
-											glVertex2f(x1+inset, y2-inset);
+											buildRectXYI(x1, y1, x2, y2, inset);
 										}
 									glEnd();
 									glColor(sel ? ColorChoice.BUTTONTEXT : ColorChoice.DIALOG);
@@ -417,12 +406,7 @@ public class FlavorDialogWindow extends Window {
 
 		if (nrr) {
 			glColor(ColorChoice.BACKGROUND);
-			glBegin(GL_QUADS);
-				glVertex2f(width-rightArea, 0);
-				glVertex2f(width, 0);
-				glVertex2f(width, height);
-				glVertex2f(width-rightArea, height);
-			glEnd();
+			drawRectXY(width-rightArea, 0, width, height);
 		}
 		
 		maxScroll = y-startY-height;

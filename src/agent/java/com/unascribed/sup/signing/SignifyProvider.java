@@ -32,7 +32,7 @@ public class SignifyProvider implements SigProvider {
 		}
 		long keyId = toLong(signature, expectedFormat.length);
 		if (keyId != this.keyId) {
-			throw new SignatureException("Manifest is signed with the wrong key (expected "+Bases.longToHex(this.keyId)+" but got "+Bases.longToHex(this.keyId)+")");
+			throw new SignatureException("Data is signed with the wrong key (expected "+Bases.longToHex(this.keyId)+" but got "+Bases.longToHex(this.keyId)+")");
 		}
 		signature = Arrays.copyOfRange(signature, expectedFormat.length+8, signature.length);
 		return inner.verify(data, signature);

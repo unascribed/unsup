@@ -22,6 +22,10 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
@@ -177,9 +181,14 @@ public class PuppetHandler {
 								ourArch = "x86";
 							}
 						}
+						File fcacheDir = cacheDir;
+						String fourOs = ourOs;
+						String fourArch = ourArch;
 						File tmp = new File(".unsup-tmp/natives");
 						tmp.mkdirs();
 						Log.debug("Retrieving assets for "+ourOs+"-"+ourArch+"...");
+						ExecutorService svc = Executors.newFixedThreadPool(6);
+						List<Future<File>> futures = new ArrayList<>();
 						try {
 							for (String s : lwjgls) {
 								URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s+"-"+lwjglVersion+".jar.br");
@@ -192,9 +201,10 @@ public class PuppetHandler {
 									}
 									cp.add(out.getAbsolutePath());
 								}
-								String module = s.replace("lwjgl-", "");
-								File natives = obtainAsset(tmp, cacheDir, "natives/"+lwjglVersion+"/"+ourOs+"/"+ourArch+"/"+module);
-								cp.add(natives.getAbsolutePath());
+								futures.add(svc.submit(() -> {
+									String module = s.replace("lwjgl-", "");
+									return obtainAsset(tmp, fcacheDir, "natives/"+lwjglVersion+"/"+fourOs+"/"+fourArch+"/"+module);
+								}));
 							}
 							boolean needCjk = false;
 							for (String s : Agent.config.keySet()) {
@@ -213,10 +223,17 @@ public class PuppetHandler {
 							}
 							if (needCjk) {
 								Log.debug("Retrieving CJK support...");
-								File cjk = obtainAsset(tmp, cacheDir, "CJKSupport");
-								cp.add(cjk.getAbsolutePath());
+								futures.add(svc.submit(() -> {
+									return obtainAsset(tmp, fcacheDir, "CJKSupport");
+								}));
 							}
-						} catch (IOException e) {
+							svc.shutdown();
+							List<String> addnCp = new ArrayList<>();
+							for (Future<File> f : futures) {
+								addnCp.add(f.get().getAbsolutePath());
+							}
+							cp.addAll(addnCp);
+						} catch (ExecutionException | IOException e) {
 							Log.error("Failed to load assets for OpenGL puppet, falling back to Swing puppet (use -Dunsup.puppetMode=swing to enforce this behavior)", e);
 							args.add("-Dunsup.puppetMode=swing");
 						}
@@ -333,7 +350,7 @@ public class PuppetHandler {
 	private static File obtainAsset(File tmp, File cacheDir, String url) throws IOException {
 		final int M = 1024*1024;
 		
-		String fname = url.replace("/", "-")+".jar";
+		String fname = url.replace("/", "-");
 		File out = new File(tmp, fname+".jar");
 		File cacheFile = new File(cacheDir, fname+".jar.br");
 		File cacheFileSig = new File(cacheDir, fname+".sig");
@@ -352,8 +369,8 @@ public class PuppetHandler {
 			}
 		}
 		if (needsDownload) {
-			Log.debug("Downloading "+fname+" from unsup.y2k.my...");
-			String dlBase = "https://unsup.y2k.my/assets/v1/"+url;
+			Log.debug("Downloading "+fname+" from unsup.y2k.diy...");
+			String dlBase = "https://unsup.y2k.diy/assets/v1/"+url;
 			URI dl = URI.create(dlBase+".jar.br");
 			URI sig = URI.create(dlBase+".sig");
 			byte[] sigData = RequestHelper.downloadToMemory(sig, 512);

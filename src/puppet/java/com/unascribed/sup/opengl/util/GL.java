@@ -4,10 +4,11 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.lwjgl.opengl.GL12;
+import org.lwjgl.opengl.GL13;
 
 import com.unascribed.sup.ColorChoice;
 
-public class GL extends GL12 {
+public class GL extends GL13 {
 	
 	public static class State {
 		private int circleList;

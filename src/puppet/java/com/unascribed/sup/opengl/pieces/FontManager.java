@@ -27,6 +27,8 @@ public class FontManager {
 	private long ftLibrary;
 	private FT_Bitmap scratchBitmap;
 	
+	private Map<CacheKey, CachedTexture> cachedTextures = new HashMap<>();
+	
 	public enum Face {
 		REGULAR("FiraSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc"),
 		BOLD("FiraSans-Bold.ttf.br", "NotoSansCJK-Bold.ttc"),
@@ -73,41 +75,68 @@ public class FontManager {
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);
 		for (int i = 0; i < str.length(); i++) {
-			FT_Face ftFace = chooseFace(f, str.charAt(i), ftSize);
-			if (ftFace == null) continue;
-			if (FT_Bitmap_Convert(ftLibrary, ftFace.glyph().bitmap(), scratchBitmap, 4) != 0) continue;
-			int w = scratchBitmap.width();
-			int h = scratchBitmap.rows();
-			int minV = 0;
-			int maxV = 1;
-			if (scratchBitmap.pitch() < 0) {
-				minV = 1;
-				maxV = 0;
+			char chr = str.charAt(i);
+			CacheKey key = new CacheKey(f, ftSize, chr);
+			CachedTexture ct = cachedTextures.get(key);
+			if (ct == null) {
+				ct = new CachedTexture();
+				FT_Face ftFace = chooseFace(f, chr, ftSize);
+				if (ftFace == null) continue;
+				if (FT_Bitmap_Convert(ftLibrary, ftFace.glyph().bitmap(), scratchBitmap, 4) != 0) continue;
+				ct.x = ftFace.glyph().bitmap_left();
+				ct.y = ftFace.glyph().bitmap_top();
+				ct.width = scratchBitmap.width();
+				ct.height = scratchBitmap.rows();
+				if (scratchBitmap.pitch() < 0) {
+					ct.flip = true;
+				}
+				if (ct.width != 0 && ct.height != 0) {
+					ct.name = glGenTextures();
+					glBindTexture(GL_TEXTURE_2D, ct.name);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_BORDER);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+					glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+					glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA8, ct.width, ct.height, 0, GL_ALPHA, GL_UNSIGNED_BYTE, scratchBitmap.buffer(ct.width*ct.height));
+				}
+				ct.advanceX = ftFace.glyph().advance().x();
+				ct.advanceY = ftFace.glyph().advance().y();
+				
+				cachedTextures.put(key, ct);
 			}
-			if (w != 0 && h != 0) {
+			if (ct.name != 0) {
+				int minV = 0;
+				int maxV = 1;
+				
+				if (ct.flip) {
+					maxV = 0;
+					minV = 1;
+				}
+				
 				// only align x and not y to avoid "serial killer letters" effect often seen in e.g. Qt6
-				double xo = alignToScreenPixel(x+ftFace.glyph().bitmap_left()/dpiScale);
-				double yo = y-(ftFace.glyph().bitmap_top()/dpiScale);
-				glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA8, w, h, 0, GL_ALPHA, GL_UNSIGNED_BYTE, scratchBitmap.buffer(w*h));
-				glEnable(GL_TEXTURE_2D);
+				double xo = alignToScreenPixel(x+ct.x/dpiScale);
+				double yo = y-(ct.y/dpiScale);
+	
+				glBindTexture(GL_TEXTURE_2D, ct.name);
 				glBegin(GL_QUADS);
 					glTexCoord2i(0, minV);
 					glVertex2d(xo, yo);
 					glTexCoord2i(1, minV);
-					glVertex2d(xo+(w/dpiScale), yo);
+					glVertex2d(xo+(ct.width/dpiScale), yo);
 					glTexCoord2i(1, maxV);
-					glVertex2d(xo+(w/dpiScale), yo+(h/dpiScale));
+					glVertex2d(xo+(ct.width/dpiScale), yo+(ct.height/dpiScale));
 					glTexCoord2i(0, maxV);
-					glVertex2d(xo, yo+(h/dpiScale));
+					glVertex2d(xo, yo+(ct.height/dpiScale));
 				glEnd();
-				glDisable(GL_TEXTURE_2D);
 			}
 			
-			float glyphW = alignToScreenPixel(ftFace.glyph().advance().x()/64f/dpiScale);
+			float glyphW = alignToScreenPixel(ct.advanceX/64f/dpiScale);
 			totalW += glyphW;
 			x += glyphW;
-			y += ftFace.glyph().advance().y()/64f/dpiScale;
+			y += ct.advanceY/64f/dpiScale;
 		}
+		glDisable(GL_TEXTURE_2D);
 		if (dpiScale != 1) {
 			glPopMatrix();
 		}
@@ -178,6 +207,49 @@ public class FontManager {
 		} finally {
 			memFree(ftFacePtr);
 		}
+	}
+	
+	private static class CacheKey {
+		public final Face face;
+		public final float size;
+		public final char chr;
+		public CacheKey(Face face, float size, char chr) {
+			this.face = face;
+			this.size = size;
+			this.chr = chr;
+		}
+		@Override
+		public int hashCode() {
+			final int prime = 31;
+			int result = 1;
+			result = prime * result + chr;
+			result = prime * result + ((face == null) ? 0 : face.hashCode());
+			result = prime * result + Float.floatToIntBits(size);
+			return result;
+		}
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			CacheKey other = (CacheKey) obj;
+			if (chr != other.chr)
+				return false;
+			if (face != other.face)
+				return false;
+			if (Float.floatToIntBits(size) != Float.floatToIntBits(other.size))
+				return false;
+			return true;
+		}
+	}
+	
+	private static class CachedTexture {
+		public int name, width, height, x, y;
+		public float advanceX, advanceY;
+		public boolean flip;
 	}
 	
 }

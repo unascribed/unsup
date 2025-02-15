@@ -11,8 +11,6 @@ import com.unascribed.sup.opengl.GLPuppet;
 import com.unascribed.sup.opengl.pieces.FontManager;
 import com.unascribed.sup.opengl.pieces.OpenGLDebug;
 
-import static org.lwjgl.opengl.GL13.GL_CLAMP_TO_BORDER;
-
 import static com.unascribed.sup.WindowIcons.*;
 import static com.unascribed.sup.opengl.util.GL.*;
 import static org.lwjgl.glfw.GLFW.*;
