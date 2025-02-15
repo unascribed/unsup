@@ -59,6 +59,25 @@ public class FontManager {
 		buf.put(memAlloc(1));
 	}
 	
+	public float[] drawWrapped(Face f, float baseX, float x, float y, float size, float maxWidth, String str) {
+		String[] words = str.split(" ");
+		float spaceWidth = measureString(f, size, " ");
+		for (String word : words) {
+			float w = measureString(f, size, word);
+			if (x+w >= baseX+maxWidth) {
+				x = baseX;
+				y += alignToScreenPixel(size*1.2f);
+			}
+			drawString(f, x, y, size, word);
+			x += w;
+			x += spaceWidth;
+		}
+		if (!str.endsWith(" ")) {
+			x -= spaceWidth;
+		}
+		return new float[] { x, y };
+	}
+	
 	public float drawString(Face f, float x, float y, float size, String str) {
 		if (dpiScale != 1) {
 			glPushMatrix();

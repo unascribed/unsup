@@ -344,6 +344,7 @@ public class MessageDialogWindow extends Window {
 		}
 		this.toAll = toAll;
 		if (hovered == -1 && clickCursorActive) {
+			clickCursorActive = false;
 			Puppet.runOnMainThread(() -> {
 				if (!run) return;
 				glfwSetCursor(handle, NULL);
