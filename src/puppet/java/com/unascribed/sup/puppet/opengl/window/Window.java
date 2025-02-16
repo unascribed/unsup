@@ -79,7 +79,7 @@ public abstract class Window {
 			}
 		});
 		
-		if (!GLPuppet.scaleOverridden) {
+		if (glfwGetPlatform() != GLFW_PLATFORM_COCOA && !GLPuppet.scaleOverridden) {
 			glfwSetWindowContentScaleCallback(handle, (window, xscale, yscale) -> {
 				double dsx, dsy;
 				synchronized (this) {
@@ -164,7 +164,7 @@ public abstract class Window {
 			glfwSetWindowPos(handle, x[0]+(w[0]-physW)/2, y[0]+(h[0]-physH)/2);
 		}
 		
-		if (!GLPuppet.scaleOverridden) {
+		if (glfwGetPlatform() != GLFW_PLATFORM_COCOA && !GLPuppet.scaleOverridden) {
 			float[] xs = new float[1];
 			float[] ys = new float[1];
 			glfwGetWindowContentScale(handle, xs, ys);

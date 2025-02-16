@@ -10,6 +10,7 @@ import java.util.HashSet;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.brotli.dec.BrotliInputStream;
 import org.lwjgl.PointerBuffer;
@@ -63,8 +64,10 @@ public class FontManager {
 		buf.put(memAlloc(1));
 	}
 	
+	private static final Pattern WHITESPACE = Pattern.compile(" +");
+	
 	public float[] drawWrapped(Face f, float baseX, float x, float y, float size, float maxWidth, String str) {
-		String[] words = str.split(" ");
+		String[] words = WHITESPACE.matcher(str).replaceAll(" ").split(" ");
 		float spaceWidth = measureString(f, size, " ");
 		for (String word : words) {
 			float w = measureString(f, size, word);
