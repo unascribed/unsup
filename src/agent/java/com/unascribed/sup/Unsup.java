@@ -1,9 +1,10 @@
 package com.unascribed.sup;
 
+import com.unascribed.sup.agent.Agent;
+
 /**
  * Post-load API for accessing unsup data from within the launched program.
  */
-@PublicInAgent
 public class Unsup {
 
 	/**
@@ -21,6 +22,6 @@ public class Unsup {
 	 */
 	public static final boolean UPDATED = Agent.updated;
 
-	static void poke() {}
+	public static void poke() {}
 	
 }

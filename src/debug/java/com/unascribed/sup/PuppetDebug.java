@@ -3,8 +3,13 @@ package com.unascribed.sup;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import com.unascribed.sup.opengl.GLPuppet;
-import com.unascribed.sup.pieces.QDIni;
+
+import com.unascribed.sup.agent.pieces.QDIni;
+import com.unascribed.sup.puppet.ColorChoice;
+import com.unascribed.sup.puppet.Puppet;
+import com.unascribed.sup.puppet.PuppetDelegate;
+import com.unascribed.sup.puppet.Translate;
+import com.unascribed.sup.puppet.opengl.GLPuppet;
 
 public class PuppetDebug {
 

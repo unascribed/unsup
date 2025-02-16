@@ -43,6 +43,10 @@ base {
 
 sourceCompatibility = targetCompatibility = 8
 
+compileJava {
+	options.release = 8
+}
+
 repositories { 
 	mavenCentral()
 	maven { url 'https://repo.sleeping.town' }
@@ -89,6 +93,7 @@ dependencies {
 	shadeCis 'com.moandjiezana.toml:toml4j:0.7.2'
 	shadeCis 'org.brotli:dec:0.1.2'
 	shade 'com.unascribed:flexver-java:1.1.1'
+	shade 'me.saharnooby:qoi-java:1.2.1'
 	
 	lwjgl(it, '3.3.6', 'glfw', 'opengl', 'freetype')
 }
@@ -104,9 +109,19 @@ shadowJar {
 	archiveClassifier = 'fat'
 	destinationDirectory.set(file('build/tmp'))
 	configurations = [project.configurations.shade]
-	enableRelocation = true
-	relocationPrefix = "com.unascribed.sup.lib"
-	relocate 'me.saharnooby.qoi', 'com.unascribed.sup.lib.me.saharnooby.qoi'
+	
+	def pfx = 'com.unascribed.sup.lib.'
+	
+	relocate 'com.grack.nanojson', pfx+'nanojson'
+	relocate 'com.moandjiezana.toml', pfx+'toml'
+	relocate 'com.unascribed.flexver', pfx+'flexver'
+	relocate 'me.saharnooby.qoi', pfx+'qoi'
+	relocate 'net.i2p.crypto.eddsa', pfx+'eddsa'
+	relocate 'kotlin', pfx+'kotlin'
+	relocate 'okhttp3', pfx+'okhttp3'
+	relocate 'okio', pfx+'okio'
+	relocate 'org.brotli.dec', pfx+'brotli'
+	
 	from sourceSets.puppet.output
 	from sourceSets.agent.output
 	
@@ -134,17 +149,14 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 	libraryjars pgLibJars
 	outjars 'build/tmp/proguard.jar'
 	
-	// releasing open source programs as obfuscated jars is bad praxis
-	// (yes, pg's optimization is a form of obfuscation! let the JIT handle that)
-	dontoptimize
 	dontobfuscate
+	dontoptimize
 	
-	keep 'class com.unascribed.sup.Agent { *; }'
-	keep 'class com.unascribed.sup.Puppet { *; }'
-	keep 'class com.unascribed.sup.GLPuppet { *; }'
-	keep 'class com.unascribed.sup.SwingPuppet { *; }'
+	keep(allowshrinking: true, 'class * { *; }')
+	
+	keep 'class com.unascribed.sup.agent.Agent { *; }'
+	keep 'class com.unascribed.sup.puppet.Puppet { *; }'
 	keep 'class com.unascribed.sup.Unsup { *; }'
-	keep 'class com.unascribed.sup.PublicInAgent { *; }'
 	
 	keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
 
@@ -152,80 +164,26 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 	dontwarn 'org.jetbrains.annotations.**'
 	dontwarn 'org.lwjgl.**'
 	dontwarn 'javax.annotation.**'
-	dontwarn 'com.unascribed.sup.opengl.util.GL'
+	dontwarn 'com.unascribed.sup.puppet.opengl.util.GL'
 	
 	keepattributes '*'
 	
 	verbose
 }
 
-// merge everything into one package so it can be package-private
-task proguardAgain(type: proguard.gradle.ProGuardTask) {
-	doFirst {
-		def pat = java.util.regex.Pattern.compile('^(com/unascribed/sup/([^/]+)/(.*))\\.class$')
-		new File('build/tmp/mapping.map').withWriter {
-			ZipFile zf = new ZipFile("build/tmp/proguard.jar");
-			for (ZipEntry ze : Collections.list(zf.entries())) {
-				def m = pat.matcher(ze.getName())
-				if (m.matches()) {
-					def inName = m.group(1).replace('/', '.')
-					def outName = inName.replace('.', '_').replace("com_unascribed_sup_"+m.group(2)+"_", 'com.unascribed.sup.$'+m.group(2)+'$$')
-					it.write("${inName} -> ${outName}:\n")
-				}
-			}
-		}
-	}
-
-	dependsOn proguard
-	injars 'build/tmp/proguard.jar'
-	libraryjars pgLibJars
-	outjars 'build/tmp/proguard2.jar'
-	
-	dontoptimize
-	
-	// prevent our classes from being renamed
-	keep 'class com.unascribed.sup.* { *; }'
-	
-	// prevent members from being renamed
-	keepclassmembers(allowshrinking:true, allowoptimization:true, 'class * { *; }')
-	keepclassmembers 'enum * { public static **[] values(); public static ** valueOf(java.lang.String); }'
-
-	dontwarn 'com.unascribed.sup.lib.**'
-	dontwarn 'org.jetbrains.annotations.**'
-	dontwarn 'org.lwjgl.**'
-	dontwarn 'javax.annotation.**'
-	dontwarn 'com.unascribed.sup.opengl.util.GL'
-	
-	flattenpackagehierarchy 'com.unascribed.sup'
-	
-	keepattributes '*'
-	
-	applymapping 'build/tmp/mapping.map'
-	
-}
-
 task brotliDepJars {}
 
 task proguardJar(type: Jar) {
-	dependsOn proguardAgain
+	dependsOn proguard
 	dependsOn brotliDepJars
-	from(zipTree('build/tmp/proguard2.jar'))
-	
-	eachFile {
-		if (it.path.equals('com/unascribed/sup/lib/okhttp3/internal/publicsuffix/publicsuffixes.gz')) {
-			it.path = 'com/unascribed/sup/publicsuffixes.gz'
-		}
-		if (it.path.equals('com/unascribed/sup/lib/okhttp3/internal/publicsuffix/NOTICE')) {
-			it.path = 'com/unascribed/sup/publicsuffixes_notice.txt'
-		}
-	}
+	from(zipTree('build/tmp/proguard.jar'))
 	
 	from(fileTree('build/tmp/depjars')) {
 		into 'com/unascribed/sup/jars'
 	}
 	
-	exclude 'com/unascribed/sup/$lib$$okhttp3_internal_platform_android*'
-	exclude 'com/unascribed/sup/$lib$$okhttp3_internal_platform_Android*'
+	exclude 'com/unascribed/sup/lib/okhttp3/internal/platform/android/**'
+	exclude 'com/unascribed/sup/lib/okhttp3/internal/platform/Android*'
 	
 	exclude 'META-INF/**'
 	exclude '**/*.kotlin_metadata'
@@ -233,8 +191,8 @@ task proguardJar(type: Jar) {
 	exclude '**/*.ttc'
 	manifest {
 		attributes (
-			'Main-Class': 'com.unascribed.sup.Agent',
-			'Premain-Class': 'com.unascribed.sup.Agent'
+			'Main-Class': 'com.unascribed.sup.agent.Agent',
+			'Premain-Class': 'com.unascribed.sup.agent.Agent'
 		)
 	}
 }
@@ -258,64 +216,7 @@ project.configurations.include.resolve().each { file ->
 	brotliDepJars.dependsOn bt
 }
 
-task amendClassPrivacy {
-	dependsOn proguardJar
-	// create vars now for configuration cache parallelism
-	def proguardJarOut = proguardJar.archivePath
-	def ver = project.version
-	doFirst {
-		File tmp = new File("build/tmp/amended.jar");
-		ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(tmp));
-		ZipFile zf = new ZipFile(proguardJarOut);
-		for (ZipEntry ze : Collections.list(zf.entries())) {
-			if (ze.getName().equals("com/unascribed/sup/PublicInAgent.class")) continue;
-			ZipEntry copy = new ZipEntry(ze.getName());
-			copy.setMethod(ze.getMethod());
-			zos.putNextEntry(copy);
-			if (ze.getName().endsWith(".class") && ze.getName().startsWith("com/unascribed/sup/") && ze.getName().lastIndexOf('/') == 18) {
-				ClassReader cr = new ClassReader(zf.getInputStream(ze));
-				ClassNode clazz = new ClassNode();
-				cr.accept(clazz, 0);
-				boolean amend = true;
-				if (clazz.invisibleAnnotations != null) {
-					Iterator<AnnotationNode> iter = clazz.invisibleAnnotations.iterator();
-					while (iter.hasNext()) {
-						if (iter.next().desc.equals("Lcom/unascribed/sup/PublicInAgent;")) {
-							amend = false;
-							iter.remove();
-							break;
-						}
-					}
-				}
-				if (amend) {
-					clazz.access &= ~Opcodes.ACC_PUBLIC;
-					clazz.access &= ~Opcodes.ACC_PROTECTED;
-				}
-				if (clazz.name == 'com/unascribed/sup/Util') {
-					clazz.methods.each {
-						if (it.name == '<clinit>') {
-							it.instructions.each {
-								if (it instanceof LdcInsnNode && it.cst instanceof String && it.cst == '${version}') {
-									it.cst = ver;
-								}
-							}
-						}
-					}
-				}
-				ClassWriter cw = new ClassWriter(0);
-				clazz.accept(cw);
-				zos.write(cw.toByteArray());
-			} else {
-				zf.getInputStream(ze).transferTo(zos);
-			}
-		}
-		zf.close();
-		zos.close();
-		tmp.renameTo(proguardJarOut);
-	}
-}
-
-build.dependsOn amendClassPrivacy
+build.dependsOn proguardJar
 
 def sigFile = file('build/libs/unsup-'+version+'.jar.sig')
 
