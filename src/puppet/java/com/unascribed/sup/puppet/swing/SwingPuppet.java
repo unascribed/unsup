@@ -115,10 +115,10 @@ public class SwingPuppet {
 		logos.add(logo);
 		logos.add(logoLowres);
 		
-		font = loadFont("NotoSans-Regular.ttf.br", Font.PLAIN);
-		fontBold = loadFont("NotoSans-Bold.ttf.br", Font.BOLD);
-		fontItalic = loadFont("NotoSans-Italic.ttf.br", Font.ITALIC);
-		fontBoldItalic = loadFont("NotoSans-BoldItalic.ttf.br", Font.BOLD|Font.ITALIC);
+		font = loadFont("FiraGO-Regular.ttf.br", Font.PLAIN);
+		fontBold = loadFont("FiraGO-Bold.ttf.br", Font.BOLD);
+		fontItalic = loadFont("FiraGO-Italic.ttf.br", Font.ITALIC);
+		fontBoldItalic = loadFont("FiraGO-BoldItalic.ttf.br", Font.BOLD|Font.ITALIC);
 		
 		return new PuppetDelegate() {
 			
@@ -180,15 +180,22 @@ public class SwingPuppet {
 			@Override
 			public void setTitle(String str) {
 				invokeLater(() -> {
-					title.setText("<html><nobr>"+str+"</nobr></html>");
+					title.setText("<html><nobr>"+Translate.format(str)+"</nobr></html>");
 				});
 			}
 			
 			@Override
 			public void setSubtitle(String str) {
 				invokeLater(() -> {
-					subtitle.setText("<html><nobr>"+str+"</nobr></html>");
+					subtitle.setText("<html><nobr>"+Translate.format(str)+"</nobr></html>");
 				});
+			}
+			
+			@Override
+			public void setDownloading(String[] files) {
+				StringJoiner joiner = new StringJoiner(", ");
+				for (String s : files) joiner.add(s);
+				setSubtitle(Translate.format("subtitle.downloading", joiner));
 			}
 
 			@Override

@@ -6,13 +6,14 @@ import com.unascribed.sup.AlertMessageType;
 import com.unascribed.sup.SysProps;
 import com.unascribed.sup.Util;
 import com.unascribed.sup.data.FlavorGroup;
+import com.unascribed.sup.pieces.Latch;
 import com.unascribed.sup.puppet.Puppet;
 import com.unascribed.sup.puppet.PuppetDelegate;
 import com.unascribed.sup.puppet.Translate;
 import com.unascribed.sup.puppet.WindowIcons;
 import com.unascribed.sup.puppet.opengl.util.QDPNG;
 import com.unascribed.sup.puppet.opengl.window.FlavorDialogWindow;
-import com.unascribed.sup.puppet.opengl.window.MainWindow;
+import com.unascribed.sup.puppet.opengl.window.ProgressWindow;
 import com.unascribed.sup.puppet.opengl.window.MessageDialogWindow;
 
 import java.io.File;
@@ -27,12 +28,11 @@ import static org.lwjgl.glfw.GLFW.*;
 
 public class GLPuppet {
 	
-	private static MainWindow mainWindow;
+	private static ProgressWindow mainWindow;
 	
 	public static boolean scaleOverridden = false;
 	
-	private static boolean built = false;
-	private static final Object buildLatch = new Object();
+	private static final Latch buildLatch = new Latch();
 	
 	public static PuppetDelegate start() {
 		// just a transliteration of https://wiki.archlinux.org/title/HiDPI plus some unsup-specific extras
@@ -70,7 +70,7 @@ public class GLPuppet {
 			Puppet.log("WARN", "GLFW error: "+memASCII(description));
 		});
 		
-		mainWindow = new MainWindow();
+		mainWindow = new ProgressWindow();
 		
 		if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
 			try {
@@ -102,30 +102,20 @@ public class GLPuppet {
 			public void build() {
 				Puppet.runOnMainThread(() -> {
 					mainWindow.create(null, "unsup v"+Util.VERSION, 480, 80, dpiScale);
-					synchronized (buildLatch) {
-						built = true;
-						buildLatch.notifyAll();
-					}
+					buildLatch.release();
 				});
 			}
 			
 			@Override
 			public void setVisible(boolean visible) {
-				synchronized (buildLatch) {
-					while (!built) {
-						try {
-							buildLatch.wait();
-						} catch (InterruptedException e) {
-						}
-					}
-					mainWindow.setVisible(visible);
-				}
+				buildLatch.awaitUninterruptibly();
+				mainWindow.setVisible(visible);
 			}
 			
 			@Override
 			public void setTitle(String title) {
 				synchronized (mainWindow) {
-					mainWindow.title = title;
+					mainWindow.title = Translate.format(title);
 					mainWindow.needsFullRedraw = true;
 				}
 			}
@@ -133,7 +123,16 @@ public class GLPuppet {
 			@Override
 			public void setSubtitle(String subtitle) {
 				synchronized (mainWindow) {
-					mainWindow.subtitle = subtitle;
+					mainWindow.downloading = null;
+					mainWindow.subtitle = Translate.format(subtitle);
+					mainWindow.needsFullRedraw = true;
+				}
+			}
+			
+			@Override
+			public void setDownloading(String[] files) {
+				synchronized (mainWindow) {
+					mainWindow.downloading = files;
 					mainWindow.needsFullRedraw = true;
 				}
 			}

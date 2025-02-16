@@ -448,6 +448,9 @@ public class PuppetHandler {
 				puppet.destroyForcibly();
 				puppet = null;
 				puppetOut = null;
+				for (Latch l : alertWaiters.values()) {
+					l.release();
+				}
 			}
 		}
 	}
@@ -461,6 +464,12 @@ public class PuppetHandler {
 
 	public static void updateSubtitle(String subtitle) {
 		tellPuppet(":subtitle="+subtitle);
+	}
+
+	public static void updateSubtitleDownloading(String... files) {
+		StringJoiner joiner = new StringJoiner("\u001C");
+		for (String s : files) joiner.add(s);
+		tellPuppet(":downloading="+joiner);
 	}
 
 	public static void updateProgress(int prog) {
@@ -478,6 +487,7 @@ public class PuppetHandler {
 		} else {
 			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
 			Latch latch = new Latch();
+			alertResults.put(name, def.name().toLowerCase(Locale.ROOT));
 			alertWaiters.put(name, latch);
 			tellPuppet("["+name+"]:alert="+title+":"+body+":"+messageType.name().toLowerCase(Locale.ROOT)+":"+optionType.name().toLowerCase(Locale.ROOT).replace("_", "")+":"+def.name().toLowerCase(Locale.ROOT).replace("_", ""));
 			latch.awaitUninterruptibly();
@@ -491,6 +501,7 @@ public class PuppetHandler {
 		} else {
 			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
 			Latch latch = new Latch();
+			alertResults.put(name, def);
 			alertWaiters.put(name, latch);
 			StringJoiner joiner = new StringJoiner("\u001C");
 			choices.forEach(c -> joiner.add(c.replace(':', '\u001B')));
@@ -506,7 +517,7 @@ public class PuppetHandler {
 		} else {
 			String name = Long.toString(ThreadLocalRandom.current().nextLong()&Long.MAX_VALUE, 36);
 			Latch latch = new Latch();
-			alertWaiters.put(name, latch);
+			StringJoiner defaultJoiner = new StringJoiner("\u001C");
 			StringJoiner groupJoiner = new StringJoiner("\u001D");
 			for (FlavorGroup group : groups) {
 				StringJoiner joiner = new StringJoiner("\u001C");
@@ -515,9 +526,12 @@ public class PuppetHandler {
 				joiner.add(group.description);
 				for (FlavorGroup.FlavorChoice choice : group.choices) {
 					joiner.add(choice.id).add(choice.name).add(choice.description).add(Boolean.toString(choice.def));
+					if (choice.def) defaultJoiner.add(choice.id);
 				}
 				groupJoiner.add(joiner.toString());
 			}
+			alertResults.put(name, defaultJoiner.toString());
+			alertWaiters.put(name, latch);
 			tellPuppet("["+name+"]:pickFlavor="+groupJoiner.toString().replace(':', '\u001B'));
 			latch.awaitUninterruptibly();
 			return Arrays.asList(alertResults.remove(name).split("\u001C"));

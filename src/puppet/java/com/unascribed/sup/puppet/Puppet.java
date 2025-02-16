@@ -39,6 +39,7 @@ public class Puppet {
 	public static volatile boolean exitOnDone = true;
 	
 	public static void main(String[] args) {
+		Thread.currentThread().setName("Main");
 		PuppetMode mode = SysProps.PUPPET_MODE;
 		boolean didOverride = false;
 		PuppetDelegate delTmp = null;
@@ -198,11 +199,15 @@ public class Puppet {
 							break;
 						}
 						case "title": {
-							r = () -> del.setTitle(Translate.format(arg));
+							r = () -> del.setTitle(arg);
 							break;
 						}
 						case "subtitle": {
-							r = () -> del.setSubtitle(Translate.format(arg));
+							r = () -> del.setSubtitle(arg);
+							break;
+						}
+						case "downloading": {
+							r = () -> del.setDownloading(arg.split("\u001C"));
 							break;
 						}
 						case "alert": {
@@ -303,7 +308,7 @@ public class Puppet {
 			} finally {
 				System.exit(0);
 			}
-		}, "Reader thread").start();
+		}, "Reader").start();
 		
 		startMainThreadRunner();
 	}
@@ -318,7 +323,7 @@ public class Puppet {
 	}
 
 	public static void log(String flavor, String msg) {
-		System.err.println(flavor+"|"+msg);
+		System.err.println(flavor+"|("+Thread.currentThread().getName()+")"+msg);
 	}
 
 	public static void log(String flavor, String msg, Throwable t) {

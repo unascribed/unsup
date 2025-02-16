@@ -10,9 +10,12 @@ import com.unascribed.sup.puppet.opengl.pieces.FontManager.Face;
 import static com.unascribed.sup.puppet.opengl.util.GL.*;
 import static org.lwjgl.glfw.GLFW.*;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.StringJoiner;
 import java.util.concurrent.TimeUnit;
 
-public class MainWindow extends Window {
+public class ProgressWindow extends Window {
 
 	private static final long OFFER_DELAY = TimeUnit.SECONDS.toNanos(10);
 	private static final float OFFER_DELAYf = OFFER_DELAY;
@@ -24,6 +27,7 @@ public class MainWindow extends Window {
 	
 	public String title = Translate.format("title.default");
 	public String subtitle = "";
+	public String[] downloading;
 	public float prog = 0.5f;
 	
 	public boolean closeRequested = false;
@@ -116,6 +120,31 @@ public class MainWindow extends Window {
 			glPopMatrix();
 			glPushMatrix();
 				glColor(ColorChoice.SUBTITLE);
+				String subtitle = this.subtitle;
+				if (downloading != null) {
+					List<String> downloadingTmp = new ArrayList<>();
+					for (String s : downloading) downloadingTmp.add(s);
+					int elided = 0;
+					do {
+						if (downloadingTmp.isEmpty()) {
+							subtitle = Translate.format("subtitle.downloading_indeterminate");
+							break;
+						} else if (downloadingTmp.size() == 1 && elided == 0) {
+							subtitle = Translate.format("subtitle.downloading", downloadingTmp.get(0));
+							break;
+						} else {
+							StringJoiner sj = new StringJoiner(", ");
+							downloadingTmp.forEach(sj::add);
+							if (elided == 0) {
+								subtitle = Translate.format("subtitle.downloading", sj);
+							} else {
+								subtitle = Translate.format("subtitle.downloading.elided", sj, elided);
+							}
+							elided++;
+							downloadingTmp.remove(downloadingTmp.size()-1);
+						}
+					} while (font.measureString(Face.REGULAR, 14, subtitle) > width-64);
+				}
 				font.drawString(Face.REGULAR, 64, 52, 14, subtitle);
 			glPopMatrix();
 			needsFullRedraw = false;

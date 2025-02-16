@@ -82,8 +82,6 @@ public class FlavorDialogWindow extends Window {
 				selectedFlavors.add(grp.choices.get(0).id);
 			}
 		}
-		
-		updateDpiScaleByFramebuffer = false;
 	}
 	
 	@Override
@@ -146,8 +144,8 @@ public class FlavorDialogWindow extends Window {
 		});
 		glfwSetWindowSizeCallback(handle, (window, newWidth, newHeight) -> {
 			synchronized (this) {
-				this.width = (int) (newWidth/dpiScaleX);
-				this.height = (int) (newHeight/dpiScaleY);
+				this.width = (int) (newWidth/dpiScale);
+				this.height = (int) (newHeight/dpiScale);
 				needsLeftRedraw = true;
 				needsRightRedraw = true;
 			}

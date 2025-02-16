@@ -2,7 +2,10 @@ package com.unascribed.sup.puppet.opengl.window;
 
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.lwjgl.glfw.GLFWImage;
 import org.lwjgl.opengl.GL;
@@ -19,6 +22,8 @@ import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.system.MemoryUtil.*;
 
 public abstract class Window {
+	
+	private static final Map<Class<? extends Window>, AtomicInteger> threadNumbers = new HashMap<>();
 	
 	protected long handle;
 	protected int width, height;
@@ -58,8 +63,11 @@ public abstract class Window {
 		glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 		glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
+		glfwWindowHint(GLFW_ALPHA_BITS, GLFW_DONT_CARE);
+		glfwWindowHint(GLFW_DEPTH_BITS, GLFW_DONT_CARE);
 		glfwWindowHint(GLFW_SAMPLES, 16);
-		glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GLFW_TRUE);
+		glfwWindowHint(GLFW_SCALE_FRAMEBUFFER, GLFW_TRUE);
+		glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 		glfwWindowHintString(GLFW_WAYLAND_APP_ID, "com.unascribed.sup");
 		glfwWindowHintString(GLFW_X11_CLASS_NAME, "com.unascribed.sup");
 		glfwWindowHintString(GLFW_X11_INSTANCE_NAME, getClass().getSimpleName());
@@ -79,21 +87,11 @@ public abstract class Window {
 			}
 		});
 		
-		if (glfwGetPlatform() != GLFW_PLATFORM_COCOA && !GLPuppet.scaleOverridden) {
+		if (!GLPuppet.scaleOverridden) {
 			glfwSetWindowContentScaleCallback(handle, (window, xscale, yscale) -> {
-				double dsx, dsy;
 				synchronized (this) {
-					dsx = dpiScaleX = xscale*dpiScale;
-					dsy = dpiScaleY = yscale*dpiScale;
 					needsFullRedraw = true;
 				}
-				Puppet.runOnMainThread(() -> {
-					if (!run) return;
-					glfwSetWindowSize(handle, (int)(width*dsx), (int)(height*dsy));
-					synchronized (this) {
-						needsFullRedraw = true;
-					}
-				});
 			});
 		}
 		
@@ -131,24 +129,26 @@ public abstract class Window {
 		
 		glfwMakeContextCurrent(handle);
 		if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
-			ByteBuffer lowresPx = memAlloc(lowres.getPixelData().length);
-			ByteBuffer highresPx = memAlloc(highres.getPixelData().length);
-			lowresPx.put(lowres.getPixelData());
-			highresPx.put(highres.getPixelData());
-			((Buffer)lowresPx).flip();
-			((Buffer)highresPx).flip();
-			
-			GLFWImage.Buffer buffer = GLFWImage.malloc(2);
-			buffer.get(0)
-				.width(lowres.getWidth()).height(lowres.getHeight())
-				.pixels(lowresPx);
-			buffer.get(1)
-				.width(highres.getWidth()).height(highres.getHeight())
-				.pixels(highresPx);
-			glfwSetWindowIcon(handle, buffer);
-			memFree(buffer);
-			memFree(lowresPx);
-			memFree(highresPx);
+			if (glfwGetPlatform() != GLFW_PLATFORM_COCOA) {
+				ByteBuffer lowresPx = memAlloc(lowres.getPixelData().length);
+				ByteBuffer highresPx = memAlloc(highres.getPixelData().length);
+				lowresPx.put(lowres.getPixelData());
+				highresPx.put(highres.getPixelData());
+				((Buffer)lowresPx).flip();
+				((Buffer)highresPx).flip();
+				
+				GLFWImage.Buffer buffer = GLFWImage.malloc(2);
+				buffer.get(0)
+					.width(lowres.getWidth()).height(lowres.getHeight())
+					.pixels(lowresPx);
+				buffer.get(1)
+					.width(highres.getWidth()).height(highres.getHeight())
+					.pixels(highresPx);
+				glfwSetWindowIcon(handle, buffer);
+				memFree(buffer);
+				memFree(lowresPx);
+				memFree(highresPx);
+			}
 			
 			int[] x = new int[1];
 			int[] y = new int[1];
@@ -164,7 +164,7 @@ public abstract class Window {
 			glfwSetWindowPos(handle, x[0]+(w[0]-physW)/2, y[0]+(h[0]-physH)/2);
 		}
 		
-		if (glfwGetPlatform() != GLFW_PLATFORM_COCOA && !GLPuppet.scaleOverridden) {
+		if (!GLPuppet.scaleOverridden) {
 			float[] xs = new float[1];
 			float[] ys = new float[1];
 			glfwGetWindowContentScale(handle, xs, ys);
@@ -172,8 +172,6 @@ public abstract class Window {
 			if (xs[0] != 1 || ys[0] != 1) {
 				dpiScaleX = dpiScale*xs[0];
 				dpiScaleY = dpiScale*ys[0];
-				
-				glfwSetWindowSize(handle, (int)(width*dpiScaleX), (int)(height*dpiScaleY));
 			}
 		}
 		
@@ -244,7 +242,7 @@ public abstract class Window {
 				Puppet.runOnMainThread(() -> {
 					glfwDestroyWindow(handle);
 				});
-			}, getClass().getSimpleName()+" GL thread");
+			}, getClass().getSimpleName().replace("Window", "")+"#"+threadNumbers.computeIfAbsent(getClass(), k -> new AtomicInteger(1)).getAndIncrement());
 			renderThread.start();
 		}
 	}

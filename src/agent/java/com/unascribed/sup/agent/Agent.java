@@ -635,19 +635,13 @@ public class Agent {
 			if (files.size() == 0) {
 				PuppetHandler.updateSubtitle("subtitle.downloading_indeterminate");
 			} else if (files.size() == 1) {
-				PuppetHandler.updateSubtitle("subtitle.downloading¤"+files.iterator().next());
+				PuppetHandler.updateSubtitleDownloading(files.iterator().next());
 			} else {
-				StringBuilder sb = new StringBuilder();
-				boolean first = true;
+				List<String> dl = new ArrayList<>();
 				for (String s : files) {
-					if (first) {
-						first = false;
-					} else {
-						sb.append(", ");
-					}
-					sb.append(s.substring(s.lastIndexOf('/')+1));
+					dl.add(s.substring(s.lastIndexOf('/')+1));
 				}
-				PuppetHandler.updateSubtitle("subtitle.downloading¤"+sb);
+				PuppetHandler.updateSubtitleDownloading(dl.toArray(new String[0]));
 			}
 		};
 		for (Map.Entry<String, ? extends FilePlan> en : plan.files.entrySet()) {

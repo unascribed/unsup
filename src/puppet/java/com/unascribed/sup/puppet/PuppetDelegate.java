@@ -24,5 +24,7 @@ public interface PuppetDelegate {
 	void openChoiceDialog(String name, String title, String body, String[] options, String def);
 	void openMessageDialog(String name, String title, String body, AlertMessageType messageType, String[] options, String def);
 	void openFlavorDialog(String name, List<FlavorGroup> groups);
+
+	void setDownloading(String[] files);
 	
 }

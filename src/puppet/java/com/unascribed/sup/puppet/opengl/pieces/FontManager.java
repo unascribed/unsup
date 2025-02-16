@@ -35,10 +35,10 @@ public class FontManager {
 	private Map<CacheKey, CachedTexture> cachedTextures = new HashMap<>();
 	
 	public enum Face {
-		REGULAR("NotoSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc"),
-		BOLD("NotoSans-Bold.ttf.br", "NotoSansCJK-Bold.ttc"),
-		ITALIC("NotoSans-Italic.ttf.br", "NotoSansCJK-Regular.ttc"),
-		BOLDITALIC("NotoSans-BoldItalic.ttf.br", "NotoSansCJK-Bold.ttc"),
+		REGULAR("FiraGO-Regular.ttf.br", "NotoSansCJK-Regular.ttc"),
+		BOLD("FiraGO-Bold.ttf.br", "NotoSansCJK-Bold.ttc"),
+		ITALIC("FiraGO-Italic.ttf.br", "NotoSansCJK-Regular.ttc"),
+		BOLDITALIC("FiraGO-BoldItalic.ttf.br", "NotoSansCJK-Bold.ttc"),
 		;
 		public final String[] filenames;
 
@@ -237,6 +237,7 @@ public class FontManager {
 				Puppet.log("WARN", "Failed to load font "+name+": "+FT_Error_String(error));
 				return null;
 			}
+			Puppet.log("DEBUG", "Loaded font "+name+" successfully");
 			return FT_Face.create(ftFacePtr.get(0));
 		} finally {
 			memFree(ftFacePtr);
