@@ -68,11 +68,11 @@ unsup has a minimal and elegant GUI that works everywhere (yes, including
 macOS) and can have all of its colors customized to make it fit in with your
 branding. It ships with a dark theme with minty accents.
 
-<img width="492" height="115" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/bootstrapping.png"/><br/>
-<img width="588" height="164" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/conflict.png"/><br/>
-<img width="353" height="131" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/update.png"/><br/>
-<img width="612" height="435" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/flavors.png"/><br/>
-<img width="492" height="115" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/done.png"/><br/>
+<img width="492" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/bootstrapping.png"/><br/>
+<img width="588" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/conflict.png"/><br/>
+<img width="353" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/update.png"/><br/>
+<img width="612" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/flavors.png"/><br/>
+<img width="492" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/done.png"/><br/>
 
 ## License
 unsup is released under the LGPLv3.

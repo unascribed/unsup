@@ -485,7 +485,7 @@ public class FlavorDialogWindow extends Window {
 			}
 			
 			String done = Translate.format("option.done");
-			float doneW = font.measureString(Face.REGULAR, 14, done);
+			float doneW = font.measureString(Face.REGULAR, 12, done);
 			float btnW = doneW+24;
 			float btnX = width-(btnW+8);
 			float btnY = height-27-8;
@@ -499,7 +499,7 @@ public class FlavorDialogWindow extends Window {
 				drawRectWH(btnX, btnY, btnW, btnH);
 			}
 			glColor(ColorChoice.BUTTONTEXT);
-			font.drawString(Face.REGULAR, btnX+(btnW-doneW)/2, btnY+18, 14, done);
+			font.drawString(Face.REGULAR, btnX+(btnW-doneW)/2, btnY+18, 12, done);
 			
 			
 			if (ctrlEnterPressed || (mouseClicked && hover)) {

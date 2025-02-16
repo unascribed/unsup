@@ -136,7 +136,7 @@ public class MainWindow extends Window {
 
 			
 			String text = Translate.format("option.change_flavors");
-			float textW = font.measureString(Face.REGULAR, 14, text);
+			float textW = font.measureString(Face.REGULAR, 12, text);
 			float btnW = textW+24;
 			float btnX = width-(btnW+8);
 			float btnY = 8;
@@ -156,7 +156,7 @@ public class MainWindow extends Window {
 				drawRectWH(btnX, btnY, btnW, btnH);
 			}
 			glColor(ColorChoice.BUTTONTEXT);
-			font.drawString(Face.REGULAR, btnX+(btnW-textW)/2, btnY+18, 14, text);
+			font.drawString(Face.REGULAR, btnX+(btnW-textW)/2, btnY+18, 12, text);
 			
 			
 			if (enterPressed || (mouseClicked && hover)) {

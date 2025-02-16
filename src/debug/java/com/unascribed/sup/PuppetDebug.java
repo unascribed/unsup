@@ -36,18 +36,14 @@ public class PuppetDebug {
 			Thread.sleep(1000);
 		} catch (InterruptedException e) {
 		}
-		Puppet.exitOnDone = false;
-		del.setTitle("All done");
-		del.setProgressIndeterminate();
-		del.setDone();
-//		del.setTitle("Bootstrapping…");
-//		del.setSubtitle("Downloading mods/yttr-8.20.737.jar, config/emi.css");
-//		del.setProgressDeterminate();
-//		del.setProgress(200);
-//		del.openMessageDialog("xx", "dialog.update.title", "dialog.update.named¤1.0.3¤1.2.1", AlertMessageType.QUESTION, new String[] {"option.yes", "option.no"}, "option.yes");
-//		del.openMessageDialog("xx", "dialog.conflict.title",
-//				"dialog.conflict.leadin.local_changed_remote_deleted¤config/waila/waila.json¤dialog.conflict.body¤dialog.conflict.aside_trailer",
-//				AlertMessageType.QUESTION, new String[] {"option.yes_to_all", "option.yes", "option.no_to_all", "option.no", "option.cancel"}, "option.yes");
+		del.setTitle("Bootstrapping…");
+		del.setSubtitle("Downloading mods/yttr-8.20.737.jar, config/emi.css");
+		del.setProgressDeterminate();
+		del.setProgress(200);
+		del.openMessageDialog("xx", "dialog.update.title", "dialog.update.named¤1.0.3¤1.2.1", AlertMessageType.QUESTION, new String[] {"option.yes", "option.no"}, "option.yes");
+		del.openMessageDialog("xx", "dialog.conflict.title",
+				"dialog.conflict.leadin.local_changed_remote_deleted¤config/waila/waila.json¤dialog.conflict.body¤dialog.conflict.aside_trailer",
+				AlertMessageType.QUESTION, new String[] {"option.yes_to_all", "option.yes", "option.no_to_all", "option.no", "option.cancel"}, "option.yes");
 //		for (AlertMessageType amt : AlertMessageType.values()) {
 //			del.openMessageDialog("xx", "Test dialog",
 //					"This is a test dialog!!!!!!",
