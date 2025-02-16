@@ -6,7 +6,10 @@ import java.io.InputStream;
 import java.nio.Buffer;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 import org.brotli.dec.BrotliInputStream;
 import org.lwjgl.PointerBuffer;
@@ -31,10 +34,10 @@ public class FontManager {
 	private Map<CacheKey, CachedTexture> cachedTextures = new HashMap<>();
 	
 	public enum Face {
-		REGULAR("FiraSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc"),
-		BOLD("FiraSans-Bold.ttf.br", "NotoSansCJK-Bold.ttc"),
-		ITALIC("FiraSans-Italic.ttf.br", "NotoSansCJK-Regular.ttc"),
-		BOLDITALIC("FiraSans-BoldItalic.ttf.br", "NotoSansCJK-Bold.ttc"),
+		REGULAR("NotoSans-Regular.ttf.br", "NotoSansCJK-Regular.ttc"),
+		BOLD("NotoSans-Bold.ttf.br", "NotoSansCJK-Bold.ttc"),
+		ITALIC("NotoSans-Italic.ttf.br", "NotoSansCJK-Regular.ttc"),
+		BOLDITALIC("NotoSans-BoldItalic.ttf.br", "NotoSansCJK-Bold.ttc"),
 		;
 		public final String[] filenames;
 
@@ -94,13 +97,12 @@ public class FontManager {
 		glEnable(GL_TEXTURE_2D);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glEnable(GL_BLEND);
-		for (int i = 0; i < str.length(); i++) {
-			char chr = str.charAt(i);
-			CacheKey key = new CacheKey(f, ftSize, chr);
+		for (int cp : str.codePoints().toArray()) {
+			CacheKey key = new CacheKey(f, ftSize, cp);
 			CachedTexture ct = cachedTextures.get(key);
 			if (ct == null) {
 				ct = new CachedTexture();
-				FT_Face ftFace = chooseFace(f, chr, ftSize);
+				FT_Face ftFace = chooseFace(f, cp, ftSize);
 				if (ftFace == null) continue;
 				if (FT_Bitmap_Convert(ftLibrary, ftFace.glyph().bitmap(), scratchBitmap, 4) != 0) continue;
 				ct.x = ftFace.glyph().bitmap_left();
@@ -172,27 +174,36 @@ public class FontManager {
 		size = alignToScreenPixel(size);
 		int ftSize = (int)(size*64);
 		float w = 0;
-		for (int i = 0; i < str.length(); i++) {
-			FT_Face ftFace = chooseFace(f, str.charAt(i), ftSize);
+		for (int cp : str.codePoints().toArray()) {
+			FT_Face ftFace = chooseFace(f, cp, ftSize);
 			if (ftFace == null) continue;
 			w += ftFace.glyph().advance().x()/64f;
 		}
 		return w;
 	}
 	
-	private FT_Face chooseFace(Face f, char ch, int ftSize) {
+	private final Set<Integer> missingGlyphs = new HashSet<>();
+	
+	private FT_Face chooseFace(Face f, int cp, int ftSize) {
 		FT_Face ftFace = null;
-		for (int j = 0; j < f.filenames.length; j++) {
-			FT_Face ftFaceTmp = ftFaces.computeIfAbsent(f.filenames[j], this::loadFont);
-			FT_Set_Char_Size(ftFaceTmp, 0, ftSize, 72, 72);
-			if (FT_Get_Char_Index(ftFaceTmp, ch) != 0) {
-				if (FT_Load_Char(ftFaceTmp, ch, FT_LOAD_RENDER) == 0) {
-					ftFace = ftFaceTmp;
-					break;
+		boolean missing = missingGlyphs.contains(cp);
+		if (!missing) {
+			for (int j = 0; j < f.filenames.length; j++) {
+				FT_Face ftFaceTmp = ftFaces.computeIfAbsent(f.filenames[j], this::loadFont);
+				FT_Set_Char_Size(ftFaceTmp, 0, ftSize, 72, 72);
+				if (FT_Get_Char_Index(ftFaceTmp, cp) != 0) {
+					if (FT_Load_Char(ftFaceTmp, cp, FT_LOAD_RENDER) == 0) {
+						ftFace = ftFaceTmp;
+						break;
+					}
 				}
 			}
 		}
 		if (ftFace == null) {
+			if (!missing) {
+				Puppet.log("WARN", "Can't find a glyph for "+new String(new int[] {cp}, 0, 1)+" (U+"+Integer.toHexString(cp).toUpperCase(Locale.ROOT)+")");
+				missingGlyphs.add(cp);
+			}
 			ftFace = ftFaces.computeIfAbsent(f.filenames[0], this::loadFont);
 			if (FT_Load_Char(ftFace, '\uFFFD', FT_LOAD_RENDER) != 0) {
 				return null;
@@ -232,17 +243,17 @@ public class FontManager {
 	private static class CacheKey {
 		public final Face face;
 		public final float size;
-		public final char chr;
-		public CacheKey(Face face, float size, char chr) {
+		public final int codepoint;
+		public CacheKey(Face face, float size, int codepoint) {
 			this.face = face;
 			this.size = size;
-			this.chr = chr;
+			this.codepoint = codepoint;
 		}
 		@Override
 		public int hashCode() {
 			final int prime = 31;
 			int result = 1;
-			result = prime * result + chr;
+			result = prime * result + codepoint;
 			result = prime * result + ((face == null) ? 0 : face.hashCode());
 			result = prime * result + Float.floatToIntBits(size);
 			return result;
@@ -256,7 +267,7 @@ public class FontManager {
 			if (getClass() != obj.getClass())
 				return false;
 			CacheKey other = (CacheKey) obj;
-			if (chr != other.chr)
+			if (codepoint != other.codepoint)
 				return false;
 			if (face != other.face)
 				return false;

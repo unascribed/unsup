@@ -38,7 +38,7 @@ import org.objectweb.asm.tree.LdcInsnNode;
 base {
 	group = 'com.unascribed'
 	archivesName = 'unsup'
-	version = '1.1-pre1.1'+(project.hasProperty("unsup.ci") ? '-SNAPSHOT' : '')
+	version = '1.1'+(project.hasProperty("unsup.ci") ? '-SNAPSHOT' : '-pre2')
 }
 
 sourceCompatibility = targetCompatibility = 8

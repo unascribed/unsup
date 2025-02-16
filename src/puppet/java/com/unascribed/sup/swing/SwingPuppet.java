@@ -96,7 +96,7 @@ public class SwingPuppet {
 	private static JThrobber throbber;
 	private static Image logo, logoLowres;
 	private static List<Image> logos;
-	private static Font firaSans, firaSansBold, firaSansItalic, firaSansBoldItalic;
+	private static Font font, fontBold, fontItalic, fontBoldItalic;
 	
 	public static PuppetDelegate start() {
 		SwingHelper.fixSwing();
@@ -115,10 +115,10 @@ public class SwingPuppet {
 		logos.add(logo);
 		logos.add(logoLowres);
 		
-		firaSans = loadFont("FiraSans-Regular.ttf.br", Font.PLAIN);
-		firaSansBold = loadFont("FiraSans-Bold.ttf.br", Font.BOLD);
-		firaSansItalic = loadFont("FiraSans-Italic.ttf.br", Font.ITALIC);
-		firaSansBoldItalic = loadFont("FiraSans-BoldItalic.ttf.br", Font.BOLD|Font.ITALIC);
+		font = loadFont("NotoSans-Regular.ttf.br", Font.PLAIN);
+		fontBold = loadFont("NotoSans-Bold.ttf.br", Font.BOLD);
+		fontItalic = loadFont("NotoSans-Italic.ttf.br", Font.ITALIC);
+		fontBoldItalic = loadFont("NotoSans-BoldItalic.ttf.br", Font.BOLD|Font.ITALIC);
 		
 		return new PuppetDelegate() {
 			
@@ -330,12 +330,12 @@ public class SwingPuppet {
 		inner.setBorder(new EmptyBorder(8, 0, 0, 0));
 		title = new JLabel("<html>"+Translate.format("title.default")+"</html>");
 		title.setForeground(getColor(ColorChoice.TITLE));
-		title.setFont(firaSansBold.deriveFont(24f));
+		title.setFont(fontBold.deriveFont(24f));
 		title.setAlignmentX(0);
 		inner.add(title);
 		subtitle = new JLabel("");
 		subtitle.setForeground(getColor(ColorChoice.SUBTITLE));
-		subtitle.setFont(firaSans.deriveFont(14f));
+		subtitle.setFont(font.deriveFont(14f));
 		subtitle.setPreferredSize(new Dimension(448, 18));
 		subtitle.setMaximumSize(new Dimension(448, 18));
 		subtitle.setAlignmentX(0);
@@ -390,7 +390,7 @@ public class SwingPuppet {
 					((JLabel)jc).setIcon(null);
 				}
 				if (jc.getFont() != null) {
-					jc.setFont(firaSans.deriveFont(14f));
+					jc.setFont(font.deriveFont(14f));
 				}
 				if (jc instanceof JButton) {
 					jc.setBackground(getColor(ColorChoice.BUTTON));
@@ -514,7 +514,7 @@ public class SwingPuppet {
 				Box box = Box.createVerticalBox();
 				JLabel title = new JLabel(grp.name);
 				title.setBorder(new EmptyBorder(8,8,8,8));
-				title.setFont(firaSansBold.deriveFont(18f));
+				title.setFont(fontBold.deriveFont(18f));
 				title.setMinimumSize(new Dimension(0, 24));
 				title.setForeground(getColor(ColorChoice.DIALOG));
 				String titleDescHtml = "<h1>"+grp.name+"</h1>"+grp.description;
@@ -537,7 +537,7 @@ public class SwingPuppet {
 				for (FlavorChoice c : grp.choices) {
 					JToggleButton btn = new JToggleButton(c.name);
 					btn.setUI(new BasicButtonUI());
-					btn.setFont(firaSans.deriveFont(14f));
+					btn.setFont(font.deriveFont(14f));
 					btn.setSelected(c.def);
 					if (c.def) selectedAny = true;
 					btn.setMinimumSize(new Dimension(0, 32));
@@ -548,13 +548,13 @@ public class SwingPuppet {
 							btn.setBorder(new EmptyBorder(2,2,2,2));
 							btn.setBackground(getColor(ColorChoice.BUTTON));
 							btn.setForeground(getColor(ColorChoice.BUTTONTEXT));
-							btn.setFont(firaSansBold.deriveFont(14f));
+							btn.setFont(fontBold.deriveFont(14f));
 							results.add(c.id);
 						} else {
 							btn.setBorder(new LineBorder(getColor(ColorChoice.DIALOG), 2));
 							btn.setBackground(getColor(ColorChoice.BACKGROUND));
 							btn.setForeground(getColor(ColorChoice.DIALOG));
-							btn.setFont(firaSans.deriveFont(14f));
+							btn.setFont(font.deriveFont(14f));
 							results.remove(c.id);
 						}
 					};
@@ -642,7 +642,7 @@ public class SwingPuppet {
 					}
 				});
 				cb.setIconTextGap(8);
-				cb.setFont(firaSans.deriveFont(18f));
+				cb.setFont(font.deriveFont(18f));
 				cb.setMinimumSize(new Dimension(0, 24));
 				cb.setForeground(getColor(ColorChoice.DIALOG));
 				cb.setBackground(getColor(ColorChoice.BACKGROUND));

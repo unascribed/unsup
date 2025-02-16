@@ -30,6 +30,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -50,6 +51,8 @@ import com.unascribed.sup.pieces.ExceptableRunnable;
 import com.unascribed.sup.pieces.MemoryCookieJar;
 import com.unascribed.sup.pieces.QDIni;
 import com.unascribed.sup.pieces.QDIni.QDIniException;
+import com.unascribed.sup.pieces.pseudolocale.AccentedEnglish;
+import com.unascribed.sup.pieces.pseudolocale.PigLatin;
 import com.unascribed.sup.signing.SigProvider;
 import com.unascribed.sup.util.RequestHelper;
 import com.unascribed.sup.util.RequestHelper.DownloadedFile;
@@ -256,6 +259,21 @@ public class Agent {
 				config = mergePreset(config, "lang/"+lang, false);
 			}
 			config = mergePreset(config, "lang/en-US", true);
+			Function<String, String> pseudolocale = null;
+			if ("en-PIG".equals(lang)) {
+				pseudolocale = PigLatin::toPigLatin;
+			} else if ("en-XA".equals(lang)) {
+				pseudolocale = AccentedEnglish::toEnXA;
+			}
+			if (pseudolocale != null) {
+				StringBuilder sb = new StringBuilder();
+				for (String k : config.keySet()) {
+					if (k.startsWith("strings.")) {
+						sb.append(k).append("=").append(pseudolocale.apply(config.get(k))).append("\n");
+					}
+				}
+				config = config.merge(QDIni.load("<pseudolocale>", sb.toString()));
+			}
 			config = mergePreset(config, "__global__", true);
 			if (config.containsKey("preset")) {
 				config = mergePreset(config, config.get("preset"), true);
