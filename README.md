@@ -68,16 +68,15 @@ unsup has a minimal and elegant GUI that works everywhere (yes, including
 macOS) and can have all of its colors customized to make it fit in with your
 branding. It ships with a dark theme with minty accents.
 
-![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/bootstrapping.png)
+<img width="492" height="115" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/bootstrapping.png"/>
 
-![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/conflict.png)
+<img width="588" height="164" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/conflict.png"/>
 
-![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/update.png)
+<img width="353" height="131" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/update.png"/>
 
-![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/flavors.png)
+<img width="612" height="435" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/flavors.png"/>
 
-![](https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/done.png)
+<img width="492" height="115" src="https://git.sleeping.town/unascribed/unsup/raw/branch/trunk/img/done.png"/>
 
 ## License
-The unsup agent is released under the LGPLv3. The unsup creator is released
-under the GPLv3.
+unsup is released under the LGPLv3.

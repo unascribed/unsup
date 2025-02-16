@@ -13,6 +13,7 @@ public interface Icon {
 	Icon QUESTION = QuestionIcon::draw;
 	Icon INFO = InfoIcon::draw;
 	Icon ERROR = ErrorIcon::draw;
+	Icon UPDATE = UpdateIcon::draw;
 	
 	void draw(int bg, int fg);
 	default void draw(ColorChoice bg, ColorChoice fg) {

@@ -46,6 +46,7 @@ public class MessageDialogWindow extends Window {
 	private boolean clickCursorActive = false;
 	private boolean toAll = false;
 	private boolean conflictDialog = false;
+	private boolean updateDialog = false;
 	
 	private static final Pattern LEADIN_PATTERN = Pattern.compile("dialog.conflict.leadin.([^¤.]+)");
 	
@@ -72,6 +73,9 @@ public class MessageDialogWindow extends Window {
 					break;
 				}
 			}
+		}
+		if ("dialog.update.title".equals(title)) {
+			updateDialog = true;
 		}
 		this.optionsRaw = options;
 		this.bodyLines = Translate.format(body).split("\n");
@@ -159,7 +163,6 @@ public class MessageDialogWindow extends Window {
 	
 	@Override
 	protected synchronized boolean needsRerender() {
-		needsFullRedraw = true;
 		return needsRedraw || needsFullRedraw;
 	}
 
@@ -175,7 +178,10 @@ public class MessageDialogWindow extends Window {
 					glScalef(1.75f, 1.75f, 1);
 					Icon i = Icon.ERROR;
 					ColorChoice color = ColorChoice.PROGRESS;
-					if (conflictDialog) {
+					if (updateDialog) {
+						i = Icon.UPDATE;
+						color = ColorChoice.QUESTION;
+					} else if (conflictDialog) {
 						i = Icon.FRAGILE;
 						color = ColorChoice.SUBTITLE;
 					} else {
