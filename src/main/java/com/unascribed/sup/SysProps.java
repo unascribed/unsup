@@ -16,6 +16,10 @@ public class SysProps {
 	 * Assume yes to all overwrite/reconciliation queries.
 	 */
 	public static final boolean DISABLE_RECONCILIATION = Boolean.getBoolean("unsup.disableReconciliation");
+	/**
+	 * Pretend use_envs is set to false.
+	 */
+	public static final boolean IGNORE_ENVS = Boolean.getBoolean("unsup.ignoreEnvs");
 	
 	/**
 	 * Override the language rather than using the one detected by Java.

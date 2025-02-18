@@ -164,7 +164,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 								Toml group = (Toml)en.getValue();
 								String groupId = en.getKey();
 								String side = group.getString("side");
-								if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
+								if (side != null && Agent.useEnvs && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
 									Log.info("Skipping flavor group "+groupId+" as it's not eligible for env "+Agent.detectedEnv);
 									continue;
 								}

@@ -85,6 +85,7 @@ public class Agent {
 	public static List<ExceptableRunnable> cleanup = new ArrayList<>();
 	public static QDIni config;
 	
+	public static boolean useEnvs = false;
 	public static String detectedEnv;
 	public static Set<String> validEnvs;
 	
@@ -121,7 +122,8 @@ public class Agent {
 				// by returning but not exiting, we yield control to the program whose launch we hijacked, if any
 				return;
 			}
-			if (config.getBoolean("use_envs", false)) {
+			if (!SysProps.IGNORE_ENVS && config.getBoolean("use_envs", false)) {
+				useEnvs = true;
 				detectEnv(config.get("force_env", arg));
 			}
 			

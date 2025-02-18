@@ -61,7 +61,7 @@ public class NativeHandler extends AbstractFormatHandler {
 				if (ele instanceof JsonObject) {
 					JsonObject obj = (JsonObject)ele;
 					JsonArray envs = obj.getArray("envs");
-					if (envs != null && !Iterables.contains(envs, Agent.detectedEnv)) {
+					if (envs != null && Agent.useEnvs && !Iterables.contains(envs, Agent.detectedEnv)) {
 						continue;
 					}
 					String id = obj.getString("id");
