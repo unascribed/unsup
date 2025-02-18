@@ -107,6 +107,7 @@ public class FontManager {
 				ct = new CachedTexture();
 				FT_Face ftFace = chooseFace(f, cp, ftSize);
 				if (ftFace == null) continue;
+				if (ftFace.glyph().bitmap().address() == NULL) continue;
 				if (FT_Bitmap_Convert(ftLibrary, ftFace.glyph().bitmap(), scratchBitmap, 4) != 0) continue;
 				ct.x = ftFace.glyph().bitmap_left();
 				ct.y = ftFace.glyph().bitmap_top();
