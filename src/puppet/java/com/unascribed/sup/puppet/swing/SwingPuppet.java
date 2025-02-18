@@ -437,7 +437,7 @@ public class SwingPuppet {
 		String[] formatted = Translate.format(options);
 		JOptionPane pane = new JOptionPane("<html><center>"+body+"</center></html>", messageType, JOptionPane.DEFAULT_OPTION, null, formatted);
 		configureOptionPane(pane);
-		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, Translate.format(title));
 		configureOptionDialog(pane, dialog);
 		dialog.setVisible(true);
 		if (name != null) {
@@ -473,7 +473,7 @@ public class SwingPuppet {
 		pane.setSelectionValues(formatted);
 		pane.setInitialSelectionValue(Translate.format(def));
 		configureOptionPane(pane);
-		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, title);
+		JDialog dialog = pane.createDialog(frame != null && frame.isVisible() ? frame : null, Translate.format(title));
 		configureOptionDialog(pane, dialog);
 		dialog.setVisible(true);
 		if (name != null) {

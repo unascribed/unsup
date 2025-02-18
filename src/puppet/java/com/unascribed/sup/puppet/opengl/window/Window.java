@@ -62,7 +62,6 @@ public abstract class Window {
 		glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_FALSE);
 		glfwWindowHint(GLFW_DECORATED, GLFW_TRUE);
 		glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-		glfwWindowHint(GLFW_FLOATING, GLFW_TRUE);
 		glfwWindowHint(GLFW_ALPHA_BITS, GLFW_DONT_CARE);
 		glfwWindowHint(GLFW_DEPTH_BITS, GLFW_DONT_CARE);
 		glfwWindowHint(GLFW_SAMPLES, 16);

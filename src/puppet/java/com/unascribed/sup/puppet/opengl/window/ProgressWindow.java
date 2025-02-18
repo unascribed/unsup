@@ -42,6 +42,7 @@ public class ProgressWindow extends Window {
 	public void create(Window parent, String title, int width, int height, double dpiScale) {
 		glfwWindowHint(GLFW_FOCUS_ON_SHOW, GLFW_FALSE);
 		glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+		glfwWindowHint(GLFW_FLOATING, GLFW_FALSE);
 		super.create(parent, title, width, height, dpiScale);
 
 		glfwSetKeyCallback(handle, (window, key, scancode, action, mods) -> {
