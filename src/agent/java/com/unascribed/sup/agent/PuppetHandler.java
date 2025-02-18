@@ -51,6 +51,8 @@ public class PuppetHandler {
 	private static Map<String, String> alertResults = new HashMap<>();
 	private static Map<String, Latch> alertWaiters = new HashMap<>();
 	
+	private static final int crashId = ThreadLocalRandom.current().nextInt();
+	
 	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
 	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
 
@@ -116,6 +118,8 @@ public class PuppetHandler {
 				try {
 					List<String> args = new ArrayList<>();
 					args.add(java);
+					args.add("-XX:+IgnoreUnrecognizedVMOptions");
+					args.add("-XX:+UnlockDiagnosticVMOptions");
 					if (System.getProperty("os.name").contains("OS X") && SysProps.PUPPET_MODE != PuppetMode.SWING) {
 						args.add("-XstartOnFirstThread");
 					}
@@ -250,6 +254,10 @@ public class PuppetHandler {
 					StringJoiner cpJ = new StringJoiner(File.pathSeparator);
 					cp.forEach(cpJ::add);
 					args.add(cpJ.toString());
+					File errorFile = new File("puppet-native-crash-"+crashId+".log");
+					args.add("-XX:ErrorFile="+errorFile.getAbsolutePath());
+					args.add("-XX:+ErrorLogSecondaryErrorDetails");
+					args.add("-XX:+ExtensiveErrorReports");
 					args.add("com.unascribed.sup.puppet.Puppet");
 					
 					StringJoiner printJ = new StringJoiner("' '", "'", "'");
@@ -444,6 +452,10 @@ public class PuppetHandler {
 				if (!Agent.awaitingExit) {
 					e.printStackTrace();
 					Log.warn("IO error while talking to puppet. Killing and continuing without GUI.");
+					File errorFile = new File("puppet-native-crash-"+crashId+".log");
+					if (errorFile.exists()) {
+						Log.warn("It looks like the Puppet crashed in native code. Please report this issue, including the full unsup.log and "+errorFile.getName());
+					}
 				}
 				puppet.destroyForcibly();
 				puppet = null;
