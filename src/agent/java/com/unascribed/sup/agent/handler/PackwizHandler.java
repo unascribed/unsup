@@ -323,7 +323,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 				String side = metafile.getString("side");
 				String metafileDoublet = (func+":"+hash);
 				metafileState.put(path, metafileDoublet);
-				if (side != null && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
+				if (side != null && Agent.useEnvs && !side.equals("both") && !side.equals(Agent.detectedEnv)) {
 					Log.info("Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 					continue;
 				}
