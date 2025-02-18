@@ -246,7 +246,7 @@ public class PuppetHandler {
 							args.add("-Dunsup.puppetMode=swing");
 						}
 					}
-					if ("${version}".equals(Util.VERSION)) {
+					if ("dev".equals(Util.VERSION)) {
 						for (String s : System.getProperty("java.class.path").split(File.pathSeparator)) {
 							cp.add(s);
 						}

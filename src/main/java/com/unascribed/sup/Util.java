@@ -8,11 +8,7 @@ import java.net.URISyntaxException;
 
 public class Util {
 
-	public static final String VERSION = noinline("${version}");
-	
-	private static String noinline(String s) {
-		return s;
-	}
+	public static final String VERSION = Util.class.getPackage().getImplementationVersion() == null ? "dev" : Util.class.getPackage().getImplementationVersion();
 
 	/**
 	 * Convert a string path into a URI, to perform proper escaping/etc.

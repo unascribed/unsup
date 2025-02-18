@@ -193,11 +193,13 @@ public class FontManager {
 		if (!missing) {
 			for (int j = 0; j < f.filenames.length; j++) {
 				FT_Face ftFaceTmp = ftFaces.computeIfAbsent(f.filenames[j], this::loadFont);
-				FT_Set_Char_Size(ftFaceTmp, 0, ftSize, 72, 72);
-				if (FT_Get_Char_Index(ftFaceTmp, cp) != 0) {
-					if (FT_Load_Char(ftFaceTmp, cp, FT_LOAD_RENDER) == 0) {
-						ftFace = ftFaceTmp;
-						break;
+				if (ftFaceTmp != null) {
+					FT_Set_Char_Size(ftFaceTmp, 0, ftSize, 72, 72);
+					if (FT_Get_Char_Index(ftFaceTmp, cp) != 0) {
+						if (FT_Load_Char(ftFaceTmp, cp, FT_LOAD_RENDER) == 0) {
+							ftFace = ftFaceTmp;
+							break;
+						}
 					}
 				}
 			}
@@ -220,6 +222,7 @@ public class FontManager {
 		try {
 			ByteArrayOutputStream baos = new ByteArrayOutputStream();
 			try (InputStream in = GLPuppet.class.getClassLoader().getResourceAsStream("com/unascribed/sup/assets/fonts/"+name)) {
+				if (in == null) return null;
 				InputStream win = in;
 				if (name.endsWith(".br")) {
 					win = new BrotliInputStream(in);

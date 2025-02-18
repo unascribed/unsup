@@ -189,10 +189,19 @@ task proguardJar(type: Jar) {
 	exclude '**/*.kotlin_metadata'
 	exclude '**/*.kotlin_builtins'
 	exclude '**/*.ttc'
+	
+	def ver = project.version
+	if (ver.endsWith("-SNAPSHOT")) {
+		ver = ver+" ("+new java.text.SimpleDateFormat("YYYY-MM-dd HH:mm").format(new java.util.Date())+")"
+	}
+	
 	manifest {
 		attributes (
 			'Main-Class': 'com.unascribed.sup.agent.Agent',
-			'Premain-Class': 'com.unascribed.sup.agent.Agent'
+			'Premain-Class': 'com.unascribed.sup.agent.Agent',
+			
+			'Implementation-Title': 'unsup',
+			'Implementation-Version': ver
 		)
 	}
 }
