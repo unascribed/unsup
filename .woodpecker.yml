@@ -16,8 +16,8 @@ steps:
 - name: release
   image: linuxserver/yq:3.4.3
   environment:
-    GITEA_KEY:
-      from_secret: gitea_key
+    FORGEJO_KEY:
+      from_secret: forgejo_key
   commands:
   - ./update-snapshot-release.sh
 
