@@ -262,12 +262,12 @@ public class Puppet {
 								FlavorGroup grp = new FlavorGroup();
 								grp.id = fields[0];
 								grp.name = fields[1];
-								grp.description = fields[2];
+								grp.description = Translate.format(fields[2]);
 								for (int i = 3; i < fields.length; i += 4) {
 									FlavorChoice c = new FlavorChoice();
 									c.id = fields[i];
 									c.name = fields[i+1];
-									c.description = fields[i+2];
+									c.description = Translate.format(fields[i+2]);
 									c.def = Boolean.parseBoolean(fields[i+3]);
 									grp.choices.add(c);
 								}

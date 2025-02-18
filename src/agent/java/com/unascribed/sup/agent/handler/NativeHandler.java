@@ -68,7 +68,7 @@ public class NativeHandler extends AbstractFormatHandler {
 					if (id == null)
 						throw new IOException("A flavor group is missing an ID");
 					String name = obj.getString("name", id);
-					String description = obj.getString("description", "No description");
+					String description = obj.getString("description", "flavor.default_description");
 					String defChoice = Agent.config.get("flavors."+id);
 					JsonArray choices = obj.getArray("choices");
 					FlavorGroup grp = new FlavorGroup();
@@ -121,7 +121,7 @@ public class NativeHandler extends AbstractFormatHandler {
 						if (id == null)
 							throw new IOException("A flavor group is missing an ID");
 						String name = obj.getString("name", id);
-						String description = "No description";
+						String description = "flavor.default_description";
 						int firstOParen = name.indexOf('(');
 						int lastCParen = name.lastIndexOf(')');
 						if (firstOParen != -1 && lastCParen > firstOParen) {

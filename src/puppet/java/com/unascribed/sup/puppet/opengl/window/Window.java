@@ -71,8 +71,8 @@ public abstract class Window {
 		glfwWindowHintString(GLFW_X11_CLASS_NAME, "com.unascribed.sup");
 		glfwWindowHintString(GLFW_X11_INSTANCE_NAME, getClass().getSimpleName());
 		
-		int physW = (int)(width*dpiScaleX);
-		int physH = (int)(height*dpiScaleY);
+		int physW = (int)(width*dpiScale);
+		int physH = (int)(height*dpiScale);
 		handle = glfwCreateWindow(physW, physH, title, NULL, NULL);
 		if (handle == 0) {
 			throw new RuntimeException("Failed to create GLFW window: "+GLPuppet.getGLFWErrorDescription());

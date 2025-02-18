@@ -169,7 +169,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 									continue;
 								}
 								String groupName = group.getString("name", groupId);
-								String groupDescription = group.getString("description", "No description");
+								String groupDescription = group.getString("description", "flavor.default_description");
 								String defChoice = Agent.config.get("flavors."+groupId);
 								FlavorGroup grp = new FlavorGroup();
 								grp.id = groupId;
@@ -342,7 +342,7 @@ public class PackwizHandler extends AbstractFormatHandler {
 					FlavorGroup synth = new FlavorGroup();
 					synth.id = mf.name;
 					synth.name = metafile.getString("name");
-					synth.description = option.getString("description", "No description");
+					synth.description = option.getString("description", "flavor.default_description");
 					String defChoice = Agent.config.get("flavors."+mf.name);
 					synth.defChoice = defChoice;
 					synth.defChoiceName = defChoice;
