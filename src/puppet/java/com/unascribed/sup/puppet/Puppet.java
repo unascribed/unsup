@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ScheduledExecutorService;
@@ -30,7 +31,8 @@ import com.unascribed.sup.puppet.swing.SwingPuppet;
 
 public class Puppet {
 	
-	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor();
+	public static final ScheduledExecutorService sched = Executors.newSingleThreadScheduledExecutor(r -> new Thread(r, "Scheduler"));
+	public static final ExecutorService slow = Executors.newCachedThreadPool(r -> new Thread(r, "Slow Lane"));
 	private static final int[] colors = ColorChoice.createLookup();
 	
 	private static final BlockingQueue<Runnable> mainThreadWorkQueue = new LinkedBlockingQueue<>();

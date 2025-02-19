@@ -8,6 +8,7 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import com.unascribed.sup.agent.pieces.QDIni;
 import com.unascribed.sup.data.FlavorGroup;
@@ -37,12 +38,8 @@ public class PuppetDebug {
 		}
 		
 		PuppetDelegate del = GLPuppet.start();
+		Puppet.sched.execute(() -> {
 		del.build();
-		del.setVisible(true);
-		try {
-			Thread.sleep(1000);
-		} catch (InterruptedException e) {
-		}
 		del.setTitle("Bootstrapping…");
 		del.setSubtitle("Downloading mods/yttr-8.20.737.jar, config/emi.css");
 		del.setProgressDeterminate();
@@ -64,6 +61,10 @@ public class PuppetDebug {
 		} catch (ClassNotFoundException e) {
 		} catch (IOException e) {
 		}
+		});
+		Puppet.sched.schedule(() -> {
+		del.setVisible(true);
+		}, 1, TimeUnit.SECONDS);
 		Puppet.startMainThreadRunner();
 	}
 

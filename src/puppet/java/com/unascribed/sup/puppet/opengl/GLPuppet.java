@@ -33,6 +33,7 @@ public class GLPuppet {
 	public static boolean scaleOverridden = false;
 	
 	private static final Latch buildLatch = new Latch();
+	private static final Latch mainVisibleLatch = new Latch();
 	
 	public static PuppetDelegate start() {
 		// just a transliteration of https://wiki.archlinux.org/title/HiDPI plus some unsup-specific extras
@@ -108,8 +109,15 @@ public class GLPuppet {
 			
 			@Override
 			public void setVisible(boolean visible) {
-				buildLatch.awaitUninterruptibly();
-				mainWindow.setVisible(visible);
+				Puppet.slow.execute(() -> {
+					buildLatch.awaitUninterruptibly();
+					mainWindow.setVisible(visible);
+					if (visible) {
+						Puppet.runOnMainThread(() -> {
+							mainVisibleLatch.release();
+						});
+					}
+				});
 			}
 			
 			@Override
@@ -179,19 +187,25 @@ public class GLPuppet {
 			
 			@Override
 			public void openMessageDialog(String name, String title, String body, AlertMessageType messageType, String[] options, String def) {
-				MessageDialogWindow diag = new MessageDialogWindow(name, title, body, messageType, options, def);
-				Puppet.runOnMainThread(() -> {
-					diag.create(mainWindow, dpiScale);
-					diag.setVisible(true);
+				Puppet.slow.execute(() -> {
+					mainVisibleLatch.awaitUninterruptibly();
+					MessageDialogWindow diag = new MessageDialogWindow(name, title, body, messageType, options, def);
+					Puppet.runOnMainThread(() -> {
+						diag.create(mainWindow, dpiScale);
+						diag.setVisible(true);
+					});
 				});
 			}
 			
 			@Override
 			public void openFlavorDialog(String name, List<FlavorGroup> groups) {
-				FlavorDialogWindow diag = new FlavorDialogWindow(name, groups);
-				Puppet.runOnMainThread(() -> {
-					diag.create(mainWindow, dpiScale);
-					diag.setVisible(true);
+				Puppet.slow.execute(() -> {
+					mainVisibleLatch.awaitUninterruptibly();
+					FlavorDialogWindow diag = new FlavorDialogWindow(name, groups);
+					Puppet.runOnMainThread(() -> {
+						diag.create(mainWindow, dpiScale);
+						diag.setVisible(true);
+					});
 				});
 			}
 			

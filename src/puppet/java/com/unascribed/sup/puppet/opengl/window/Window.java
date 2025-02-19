@@ -25,6 +25,8 @@ public abstract class Window {
 	
 	private static final Map<Class<? extends Window>, AtomicInteger> threadNumbers = new HashMap<>();
 	
+	protected Window parent;
+	
 	protected long handle;
 	protected int width, height;
 	protected int fbWidth, fbHeight;
@@ -50,6 +52,9 @@ public abstract class Window {
 	
 	public void create(Window parent, String title, int width, int height, double dpiScale) {
 		if (!Puppet.isMainThread()) throw new IllegalStateException("Must be on main thread");
+		
+		this.parent = parent;
+		
 		this.width = width;
 		this.height = height;
 		
@@ -76,7 +81,7 @@ public abstract class Window {
 		handle = glfwCreateWindow(physW, physH, title, NULL, NULL);
 		if (handle == 0) {
 			throw new RuntimeException("Failed to create GLFW window: "+GLPuppet.getGLFWErrorDescription());
-		};
+		}
 		
 		clickCursor = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
 		
