@@ -165,6 +165,7 @@ task proguard(type: proguard.gradle.ProGuardTask) {
 	dontwarn 'org.lwjgl.**'
 	dontwarn 'javax.annotation.**'
 	dontwarn 'com.unascribed.sup.puppet.opengl.util.GL'
+	dontwarn 'sun.misc.**'
 	
 	keepattributes '*'
 	
