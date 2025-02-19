@@ -156,95 +156,101 @@ public class PuppetHandler {
 							ourOs = "macos";
 							cacheDir = new File(new File(System.getProperty("user.home")), "Library/Caches/unsup");
 						}
-						if (xdg) {
-							String home = System.getenv("HOME");
-							if (home == null || home.trim().isEmpty()) {
-								home = System.getProperty("user.home");
-							}
-							String dir = System.getenv("XDG_DATA_HOME");
-							if (dir == null || dir.trim().isEmpty()) {
-								dir = home+"/.cache";
-							}
-							cacheDir = new File(dir+"/unsup");
-						}
-						String osArch = System.getProperty("os.arch");
-						boolean is64Bit = osArch.contains("64") || osArch.startsWith("armv8");
-						if (osArch.startsWith("arm") || osArch.startsWith("aarch")) {
-							if (is64Bit) {
-								ourArch = "arm64";
-							} else {
-								ourArch = "arm32";
-							}
-						} else if (osArch.startsWith("ppc")) {
-							if ("ppc64le".equals(osArch)) {
-								ourArch = "ppc64le";
-							}
-						} else if (osArch.startsWith("riscv")) {
-							if ("riscv64".equals(osArch)) {
-								ourArch = "riscv64";
-							}
-						} else {
-							if (is64Bit) {
-								ourArch = "amd64";
-							} else {
-								ourArch = "x86";
-							}
-						}
-						File fcacheDir = cacheDir;
-						String fourOs = ourOs;
-						String fourArch = ourArch;
-						File tmp = new File(".unsup-tmp/natives");
-						tmp.mkdirs();
-						Log.debug("Retrieving assets for "+ourOs+"-"+ourArch+"...");
-						ExecutorService svc = Executors.newFixedThreadPool(6);
-						List<Future<File>> futures = new ArrayList<>();
-						try {
-							for (String s : lwjgls) {
-								URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s+"-"+lwjglVersion+".jar.br");
-								File out = new File(tmp, s+"-"+lwjglVersion+".jar");
-								out.deleteOnExit();
-								if (url != null) {
-									try (FileOutputStream fos = new FileOutputStream(out);
-											InputStream is = new BrotliInputStream(url.openStream())) {
-										Util.copy(is, fos);
-									}
-									cp.add(out.getAbsolutePath());
-								}
-								futures.add(svc.submit(() -> {
-									String module = s.replace("lwjgl-", "");
-									return obtainAsset(tmp, fcacheDir, "natives/"+lwjglVersion+"/"+fourOs+"/"+fourArch+"/"+module);
-								}));
-							}
-							boolean needCjk = false;
-							for (String s : Agent.config.keySet()) {
-								if (s.startsWith("strings.")) {
-									String v = Agent.config.get(s);
-									if (v.codePoints().anyMatch(codepoint -> {
-										UnicodeScript sc = UnicodeScript.of(codepoint);
-										// I think this is all of them??
-										return sc == UnicodeScript.HANGUL || sc == UnicodeScript.HAN || sc == UnicodeScript.KATAKANA
-												|| sc == UnicodeScript.HIRAGANA || sc == UnicodeScript.BOPOMOFO;
-									})) {
-										needCjk = true;
-										break;
-									}
-								}
-							}
-							if (needCjk) {
-								Log.debug("Retrieving CJK support...");
-								futures.add(svc.submit(() -> {
-									return obtainAsset(tmp, fcacheDir, "CJKSupport");
-								}));
-							}
-							svc.shutdown();
-							List<String> addnCp = new ArrayList<>();
-							for (Future<File> f : futures) {
-								addnCp.add(f.get().getAbsolutePath());
-							}
-							cp.addAll(addnCp);
-						} catch (ExecutionException | IOException e) {
-							Log.error("Failed to load assets for OpenGL puppet, falling back to Swing puppet (use -Dunsup.puppetMode=swing to enforce this behavior)", e);
+						if ("macos".equals(ourOs) && SysProps.PUPPET_MODE == PuppetMode.AUTO) {
+							Log.warn("OpenGL puppet does not presently work on macOS: https://git.sleeping.town/unascribed/unsup/issues/22");
+							Log.warn("Forcing Swing puppet. Use -Dunsup.puppetMode=opengl to override");
 							args.add("-Dunsup.puppetMode=swing");
+						} else {
+							if (xdg) {
+								String home = System.getenv("HOME");
+								if (home == null || home.trim().isEmpty()) {
+									home = System.getProperty("user.home");
+								}
+								String dir = System.getenv("XDG_DATA_HOME");
+								if (dir == null || dir.trim().isEmpty()) {
+									dir = home+"/.cache";
+								}
+								cacheDir = new File(dir+"/unsup");
+							}
+							String osArch = System.getProperty("os.arch");
+							boolean is64Bit = osArch.contains("64") || osArch.startsWith("armv8");
+							if (osArch.startsWith("arm") || osArch.startsWith("aarch")) {
+								if (is64Bit) {
+									ourArch = "arm64";
+								} else {
+									ourArch = "arm32";
+								}
+							} else if (osArch.startsWith("ppc")) {
+								if ("ppc64le".equals(osArch)) {
+									ourArch = "ppc64le";
+								}
+							} else if (osArch.startsWith("riscv")) {
+								if ("riscv64".equals(osArch)) {
+									ourArch = "riscv64";
+								}
+							} else {
+								if (is64Bit) {
+									ourArch = "amd64";
+								} else {
+									ourArch = "x86";
+								}
+							}
+							File fcacheDir = cacheDir;
+							String fourOs = ourOs;
+							String fourArch = ourArch;
+							File tmp = new File(".unsup-tmp/natives");
+							tmp.mkdirs();
+							Log.debug("Retrieving assets for "+ourOs+"-"+ourArch+"...");
+							ExecutorService svc = Executors.newFixedThreadPool(6);
+							List<Future<File>> futures = new ArrayList<>();
+							try {
+								for (String s : lwjgls) {
+									URL url = PuppetHandler.class.getClassLoader().getResource("com/unascribed/sup/jars/"+s+"-"+lwjglVersion+".jar.br");
+									File out = new File(tmp, s+"-"+lwjglVersion+".jar");
+									out.deleteOnExit();
+									if (url != null) {
+										try (FileOutputStream fos = new FileOutputStream(out);
+												InputStream is = new BrotliInputStream(url.openStream())) {
+											Util.copy(is, fos);
+										}
+										cp.add(out.getAbsolutePath());
+									}
+									futures.add(svc.submit(() -> {
+										String module = s.replace("lwjgl-", "");
+										return obtainAsset(tmp, fcacheDir, "natives/"+lwjglVersion+"/"+fourOs+"/"+fourArch+"/"+module);
+									}));
+								}
+								boolean needCjk = false;
+								for (String s : Agent.config.keySet()) {
+									if (s.startsWith("strings.")) {
+										String v = Agent.config.get(s);
+										if (v.codePoints().anyMatch(codepoint -> {
+											UnicodeScript sc = UnicodeScript.of(codepoint);
+											// I think this is all of them??
+											return sc == UnicodeScript.HANGUL || sc == UnicodeScript.HAN || sc == UnicodeScript.KATAKANA
+													|| sc == UnicodeScript.HIRAGANA || sc == UnicodeScript.BOPOMOFO;
+										})) {
+											needCjk = true;
+											break;
+										}
+									}
+								}
+								if (needCjk) {
+									Log.debug("Retrieving CJK support...");
+									futures.add(svc.submit(() -> {
+										return obtainAsset(tmp, fcacheDir, "CJKSupport");
+									}));
+								}
+								svc.shutdown();
+								List<String> addnCp = new ArrayList<>();
+								for (Future<File> f : futures) {
+									addnCp.add(f.get().getAbsolutePath());
+								}
+								cp.addAll(addnCp);
+							} catch (ExecutionException | IOException e) {
+								Log.error("Failed to load assets for OpenGL puppet, falling back to Swing puppet (use -Dunsup.puppetMode=swing to enforce this behavior)", e);
+								args.add("-Dunsup.puppetMode=swing");
+							}
 						}
 					}
 					if ("DEV".equals(Util.VERSION)) {
