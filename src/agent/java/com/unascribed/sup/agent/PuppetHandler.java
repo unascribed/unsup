@@ -120,6 +120,7 @@ public class PuppetHandler {
 					args.add(java);
 					args.add("-XX:+IgnoreUnrecognizedVMOptions");
 					args.add("-XX:+UnlockDiagnosticVMOptions");
+					args.add("-Djbr.catch.SIGABRT=true");
 					if (System.getProperty("os.name").contains("OS X") && SysProps.PUPPET_MODE != PuppetMode.SWING) {
 						args.add("-XstartOnFirstThread");
 					}
