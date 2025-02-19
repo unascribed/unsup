@@ -29,7 +29,7 @@ auth="Authorization: token $FORGEJO_KEY"
 curl -s -X DELETE -H "$auth" https://git.sleeping.town/api/v1/repos/unascribed/unsup/releases/tags/SNAPSHOT >/dev/null
 curl -s -X DELETE -H "$auth" https://git.sleeping.town/api/v1/repos/unascribed/unsup/tags/SNAPSHOT >/dev/null
 
-lasttag=$(curl -s 'https://git.sleeping.town/api/v1/repos/unascribed/unsup/releases?draft=false&pre-release=true&page=1&limit=1' |jq '.[0].tag_name')
+lasttag=$(curl -s 'https://git.sleeping.town/api/v1/repos/unascribed/unsup/releases?draft=false&pre-release=true&page=1&limit=1' |jq -r '.[0].tag_name')
 
 resp=$(curl -s -X POST -H 'Content-Type: application/json' -H "$auth" https://git.sleeping.town/api/v1/repos/unascribed/unsup/releases --data-raw "
 {
