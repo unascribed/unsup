@@ -11,10 +11,10 @@ if [[ "$latest" =~ -SNAPSHOT$ ]]; then
 	"formatVersion": 1,
 	"name": "unsup",
 	"uid": "com.unascribed.unsup",
-	"version": "$latest",
+	"version": "$latest-$snap",
 	"+agents": [
 		{
-			"name": "com.unascribed:unsup:$latest",
+			"name": "com.unascribed:unsup:$latest-$snap",
 			"MMC-absoluteUrl": "$snapurl.jar"
 		}
 	]
