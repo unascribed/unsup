@@ -24,7 +24,6 @@ import com.unascribed.sup.agent.util.RequestHelper;
 import com.unascribed.sup.data.FlavorGroup;
 import com.unascribed.sup.data.Version;
 import com.unascribed.sup.data.FlavorGroup.FlavorChoice;
-import com.unascribed.sup.util.IntPredicates;
 import com.unascribed.sup.util.Iterables;
 
 public class NativeHandler extends AbstractFormatHandler {
@@ -38,7 +37,7 @@ public class NativeHandler extends AbstractFormatHandler {
 	public static CheckResult check(URI src, boolean autoaccept) throws IOException, JsonParserException, URISyntaxException {
 		Log.info("Loading unsup-format manifest from "+src);
 		JsonObject manifest = RequestHelper.loadJson(src, 32*K, src.resolve("manifest.sig"));
-		checkManifestFlavor(manifest, "root", IntPredicates.equals(1));
+		checkManifestFlavor(manifest, "root", it -> it == 1);
 		Version ourVersion = Version.fromJson(Agent.state.getObject("current_version"));
 		if (!manifest.containsKey("versions")) throw new IOException("Manifest is missing versions field");
 		Version theirVersion = Version.fromJson(manifest.getObject("versions").getObject("current"));
@@ -152,7 +151,7 @@ public class NativeHandler extends AbstractFormatHandler {
 				Log.info("Bootstrap manifest missing, will have to retrieve and collapse every update");
 			}
 			if (bootstrap != null) {
-				checkManifestFlavor(bootstrap, "bootstrap", IntPredicates.equals(1));
+				checkManifestFlavor(bootstrap, "bootstrap", it -> it == 1);
 				Version bootstrapVersion = Version.fromJson(bootstrap.getObject("version"));
 				if (bootstrapVersion == null) throw new IOException("Bootstrap manifest is missing version field");
 				if (bootstrapVersion.code < theirVersion.code) {
@@ -229,7 +228,7 @@ public class NativeHandler extends AbstractFormatHandler {
 				int code = ourVersion.code+(i+1);
 				JsonObject ver = RequestHelper.loadJson(src.resolve(Util.uriOfPath("versions/"+code+".json")), 2*M,
 						src.resolve(Util.uriOfPath("versions/"+code+".sig")));
-				checkManifestFlavor(ver, "update", IntPredicates.equals(1));
+				checkManifestFlavor(ver, "update", it -> it == 1);
 				HashFunction func = HashFunction.byName(ver.getString("hash_function", DEFAULT_HASH_FUNCTION));
 				for (Object o : ver.getArray("changes")) {
 					if (!(o instanceof JsonObject)) throw new IOException("Entry "+o+" in changes array is not an object");

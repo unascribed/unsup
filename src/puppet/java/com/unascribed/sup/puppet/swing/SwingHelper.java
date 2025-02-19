@@ -1,9 +1,8 @@
-package com.unascribed.sup.util;
+package com.unascribed.sup.puppet.swing;
 
 import javax.imageio.ImageIO;
 import javax.swing.JPopupMenu;
 
-// in main rather than puppet for use from the Creator
 public class SwingHelper {
 
 	public static void fixSwing() {

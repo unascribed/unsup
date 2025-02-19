@@ -75,7 +75,6 @@ import com.unascribed.sup.puppet.Puppet;
 import com.unascribed.sup.puppet.PuppetDelegate;
 import com.unascribed.sup.puppet.Translate;
 import com.unascribed.sup.puppet.WindowIcons;
-import com.unascribed.sup.util.SwingHelper;
 
 import me.saharnooby.qoi.QOIColorSpace;
 import me.saharnooby.qoi.QOIImage;
