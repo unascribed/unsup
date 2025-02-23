@@ -95,8 +95,7 @@ public class PuppetHandler {
 					bldr.environment().put("NO_AWT_MITSHM", "1");
 					p = bldr.start();
 				} catch (Throwable t) {
-					Log.warn("Failed to summon a puppet.");
-					t.printStackTrace();
+					Log.warn("Failed to summon a puppet.", t);
 					puppet = null;
 					break out;
 				}
@@ -126,13 +125,14 @@ public class PuppetHandler {
 			Log.debug("Waiting for the Puppet to come to life...");
 			BufferedReader br = new BufferedReader(new InputStreamReader(puppet.getInputStream(), StandardCharsets.UTF_8));
 			String firstLine = null;
+			Throwable t = null;
 			try {
 				firstLine = br.readLine();
 			} catch (IOException e) {
-				e.printStackTrace();
+				t = e;
 			}
 			if (firstLine == null) {
-				Log.warn("Puppet failed to come alive. Continuing without a GUI.");
+				Log.warn("Puppet failed to come alive. Continuing without a GUI.", t);
 				puppet.destroy();
 				puppet = null;
 			} else if (!"unsup puppet ready".equals(firstLine)) {
@@ -216,8 +216,7 @@ public class PuppetHandler {
 				puppetOut.flush();
 			} catch (IOException e) {
 				if (!Agent.awaitingExit) {
-					e.printStackTrace();
-					Log.warn("IO error while talking to puppet. Killing and continuing without GUI.");
+					Log.warn("IO error while talking to puppet. Killing and continuing without GUI.", e);
 				}
 				puppet.destroyForcibly();
 				puppet = null;

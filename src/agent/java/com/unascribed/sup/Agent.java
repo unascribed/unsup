@@ -78,6 +78,7 @@ public class Agent {
 	public static QDIni config;
 	
 	public static String detectedEnv;
+	public static boolean useEnvs;
 	public static Set<String> validEnvs;
 	
 	public static final SigProvider unsupSig = SigProvider.of("signify RWTSwM40VCzVER3YWt55m4Fvsg0sjZLEICikuU3cD91gR/2lii/jk67B");
@@ -114,6 +115,7 @@ public class Agent {
 				return;
 			}
 			if (config.getBoolean("use_envs", false)) {
+				useEnvs = true;
 				detectEnv(config.get("force_env", arg));
 			}
 			
@@ -350,7 +352,7 @@ public class Agent {
 		OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
 			.connectTimeout(30, TimeUnit.SECONDS)
 			.readTimeout(15, TimeUnit.SECONDS)
-			.callTimeout(120, TimeUnit.SECONDS)
+			.writeTimeout(15, TimeUnit.SECONDS)
 			.sslSocketFactory(certs.sslSocketFactory(), certs.trustManager())
 			.build();
 		switch (config.get("dns", "system")) {

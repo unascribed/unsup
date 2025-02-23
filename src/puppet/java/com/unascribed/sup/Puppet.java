@@ -391,8 +391,6 @@ public class Puppet {
 	private static void buildUi() {
 		frame = new JFrame("unsup v"+Util.VERSION);
 		frame.setIconImage(logo);
-		frame.setSize(512, 128);
-		frame.setLocationRelativeTo(null);
 		frame.setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
 		frame.setResizable(false);
 		frame.addWindowListener(new WindowAdapter() {
@@ -462,6 +460,11 @@ public class Puppet {
 		outer.add(inner);
 		
 		frame.setContentPane(outer);
+		
+		outer.setSize(480, 80);
+		outer.setPreferredSize(new Dimension(480, 80));
+		frame.pack();
+		frame.setLocationRelativeTo(null);
 	}
 
 	protected static void fix(Graphics2D g2d) {
@@ -567,8 +570,6 @@ public class Puppet {
 		dialog.setModal(true);
 		dialog.setBackground(colorBackground);
 		dialog.setForeground(colorDialog);
-		dialog.setSize(854, 480);
-		dialog.setLocationRelativeTo(frame);
 		String descPfx = "<style>body { font-family: Dialog; color: #"+Integer.toHexString(colorDialog.getRGB()|0xFF000000).substring(2)+"; }</style>";
 		String noDesc = "<font size=\"4\" face=\"Dialog\" color=\"#"+Integer.toHexString(colorSubtitle.getRGB()|0xFF000000).substring(2)+"\"><i>Hover an option to the left to see an explanation</i></font>";
 		JEditorPane desc = new JEditorPane("text/html", noDesc);
@@ -871,11 +872,14 @@ public class Puppet {
 		});
 		split.setDividerSize(4);
 		split.setSize(854, 480);
+		split.setPreferredSize(new Dimension(854, 480));
 		split.setDividerLocation(0.4);
 		split.setBackground(colorBackground);
 		split.setForeground(colorDialog);
 		split.setBorder(null);
 		dialog.setContentPane(split);
+		dialog.pack();
+		dialog.setLocationRelativeTo(frame);
 		dialog.setDefaultCloseOperation(JDialog.DO_NOTHING_ON_CLOSE);
 		boolean[] closed = {false};
 		dialog.addWindowListener(new WindowAdapter() {

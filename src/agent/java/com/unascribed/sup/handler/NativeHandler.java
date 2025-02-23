@@ -61,7 +61,7 @@ public class NativeHandler extends AbstractFormatHandler {
 				if (ele instanceof JsonObject) {
 					JsonObject obj = (JsonObject)ele;
 					JsonArray envs = obj.getArray("envs");
-					if (envs != null && !Iterables.contains(envs, Agent.detectedEnv)) {
+					if (envs != null && Agent.useEnvs && !Iterables.contains(envs, Agent.detectedEnv)) {
 						continue;
 					}
 					String id = obj.getString("id");
@@ -114,7 +114,7 @@ public class NativeHandler extends AbstractFormatHandler {
 					if (ele instanceof JsonObject) {
 						JsonObject obj = (JsonObject)ele;
 						JsonArray envs = obj.getArray("envs");
-						if (envs != null && !Iterables.contains(envs, Agent.detectedEnv)) {
+						if (envs != null && Agent.useEnvs && !Iterables.contains(envs, Agent.detectedEnv)) {
 							continue;
 						}
 						String id = obj.getString("id");
@@ -174,7 +174,7 @@ public class NativeHandler extends AbstractFormatHandler {
 					if (size == 0 && !hash.equals(func.emptyHash())) throw new IOException(path+" in files array is empty file, but hash isn't the empty hash ("+hash+" != "+func.emptyHash()+")");
 					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!Iterables.contains(envs, Agent.detectedEnv)) {
+					if (Agent.useEnvs && !Iterables.contains(envs, Agent.detectedEnv)) {
 						Log.info("Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
@@ -252,7 +252,7 @@ public class NativeHandler extends AbstractFormatHandler {
 					}
 					String urlStr = RequestHelper.checkSchemeMismatch(src, file.getString("url"));
 					JsonArray envs = file.getArray("envs");
-					if (!Iterables.contains(envs, Agent.detectedEnv)) {
+					if (Agent.useEnvs && !Iterables.contains(envs, Agent.detectedEnv)) {
 						Log.info("Skipping "+path+" as it's not eligible for env "+Agent.detectedEnv);
 						continue;
 					}
