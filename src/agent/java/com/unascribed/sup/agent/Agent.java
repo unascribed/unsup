@@ -389,7 +389,7 @@ public class Agent {
 		OkHttpClient bootstrapOkhttp = new OkHttpClient.Builder()
 			.connectTimeout(30, TimeUnit.SECONDS)
 			.readTimeout(15, TimeUnit.SECONDS)
-			.callTimeout(2, TimeUnit.HOURS)
+			.writeTimeout(15, TimeUnit.SECONDS)
 			.sslSocketFactory(certs.sslSocketFactory(), certs.trustManager())
 			.addInterceptor(BrotliInterceptor.INSTANCE)
 			.build();
