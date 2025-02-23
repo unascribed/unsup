@@ -58,10 +58,12 @@ public class Log {
 	}
 	
 	public synchronized static void log(String flavor, String tag, String msg, Throwable t) {
-		if (!("DEBUG".equals(flavor)) || SysProps.DEBUG) {
-			t.printStackTrace();
+		if (t != null) {
+			if (!("DEBUG".equals(flavor)) || SysProps.DEBUG) {
+				t.printStackTrace();
+			}
+			t.printStackTrace(fileStream);
 		}
-		t.printStackTrace(fileStream);
 		log(tag, flavor, msg);
 	}
 	

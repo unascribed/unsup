@@ -36,10 +36,6 @@ public class GLPuppet {
 	private static final Latch mainVisibleLatch = new Latch();
 	
 	public static PuppetDelegate start() {
-		try {
-			ABRTHandler.install();
-		} catch (Throwable t) {}
-		
 		// just a transliteration of https://wiki.archlinux.org/title/HiDPI plus some unsup-specific extras
 		OptionalDouble oDpiScale = scanScale("unsup.scale", "sun.java2d.uiScale", "glass.gtk.uiScale",
 				"UNSUP_SCALE", "QT_SCALE_FACTOR", "GDK_DPI_SCALE×GDK_SCALE", "ELM_SCALE");
