@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Forgejo Issues
+    url: https://git.sleeping.town/unascribed/unsup/issues/new
+    about: This repository is a MIRROR! Issues must be reported on Forgejo. You can log in with GitHub.
