@@ -9,7 +9,7 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -34,12 +34,12 @@ import java.util.Set;
  * </code></pre>
  *
  */
-// UNSUP: Modified to not depend on Gson
+// UNSUP: Modified to not depend on Gson and use a LinkedHashMap
 public class Toml {
   
 //  private static final Gson DEFAULT_GSON = new Gson();
 
-  private Map<String, Object> values = new HashMap<String, Object>();
+  private Map<String, Object> values = new LinkedHashMap<String, Object>();
   private final Toml defaults;
 
   /**
@@ -53,7 +53,7 @@ public class Toml {
    * @param defaults fallback values used when the requested key or table is not present in the TOML source that has been read.
    */
   public Toml(Toml defaults) {
-    this(defaults, new HashMap<String, Object>());
+    this(defaults, new LinkedHashMap<String, Object>());
   }
 
   /**
@@ -320,7 +320,7 @@ public class Toml {
 //  }
 
   public Map<String, Object> toMap() {
-    HashMap<String, Object> valuesCopy = new HashMap<String, Object>(values);
+    LinkedHashMap<String, Object> valuesCopy = new LinkedHashMap<String, Object>(values);
     
     if (defaults != null) {
       for (Map.Entry<String, Object> entry : defaults.values.entrySet()) {
@@ -391,7 +391,7 @@ public class Toml {
       return values.get(key);
     }
 
-    Object current = new HashMap<String, Object>(values);
+    Object current = new LinkedHashMap<String, Object>(values);
     
     Keys.Key[] keys = Keys.split(key);
     
