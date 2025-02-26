@@ -51,7 +51,7 @@ public class PuppetHandler {
 	private static Map<String, String> alertResults = new HashMap<>();
 	private static Map<String, Latch> alertWaiters = new HashMap<>();
 	
-	private static final int crashId = ThreadLocalRandom.current().nextInt();
+	private static final int crashId = ThreadLocalRandom.current().nextInt()&Integer.MAX_VALUE;
 	
 	public enum AlertOptionType { OK, OK_CANCEL, YES_NO, YES_NO_CANCEL, YES_NO_TO_ALL_CANCEL }
 	public enum AlertOption { CLOSED, OK, YES, NO, CANCEL, YESTOALL, NOTOALL }
@@ -117,13 +117,13 @@ public class PuppetHandler {
 				Process p;
 				try {
 					List<String> args = new ArrayList<>();
+					if (SysProps.PUPPET_WRAPPER_COMMAND != null) {
+						args.add(SysProps.PUPPET_WRAPPER_COMMAND);
+					}
 					args.add(java);
 					args.add("-XX:+IgnoreUnrecognizedVMOptions");
 					args.add("-XX:+UnlockDiagnosticVMOptions");
 					args.add("-Djbr.catch.SIGABRT=true");
-					if (System.getProperty("os.name").contains("OS X") && SysProps.PUPPET_MODE != PuppetMode.SWING) {
-						args.add("-XstartOnFirstThread");
-					}
 					for (String prop : copyableProps) {
 						String v = System.getProperty(prop);
 						if ("unsup.puppetMode".equals(prop) && v == null) {
@@ -133,7 +133,6 @@ public class PuppetHandler {
 							args.add("-D"+prop+"="+v);
 						}
 					}
-					args.add("-cp");
 					List<String> cp = new ArrayList<>();
 					cp.add(ourPath.getAbsolutePath());
 					if (SysProps.PUPPET_MODE != PuppetMode.SWING) {
@@ -171,6 +170,9 @@ public class PuppetHandler {
 									dir = home+"/.cache";
 								}
 								cacheDir = new File(dir+"/unsup");
+							}
+							if ("macos".equals(ourOs)) {
+								args.add("-XstartOnFirstThread");
 							}
 							String osArch = System.getProperty("os.arch");
 							boolean is64Bit = osArch.contains("64") || osArch.startsWith("armv8");
@@ -260,6 +262,7 @@ public class PuppetHandler {
 					}
 					StringJoiner cpJ = new StringJoiner(File.pathSeparator);
 					cp.forEach(cpJ::add);
+					args.add("-cp");
 					args.add(cpJ.toString());
 					File errorFile = new File("puppet-native-crash-"+crashId+".log");
 					args.add("-XX:ErrorFile="+errorFile.getAbsolutePath());

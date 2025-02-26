@@ -34,6 +34,11 @@ public class SysProps {
 	
 
 	/**
+	 * Wrap execution of the Puppet in this command.
+	 */
+	public static final String PUPPET_WRAPPER_COMMAND = System.getProperty("unsup.puppet.wrapperCommand");
+	
+	/**
 	 * Set which mode the Puppet will use, or auto to automatically choose one.
 	 */
 	public static final PuppetMode PUPPET_MODE = PuppetMode.valueOf(System.getProperty("unsup.puppetMode", "auto").toUpperCase(Locale.ROOT));
