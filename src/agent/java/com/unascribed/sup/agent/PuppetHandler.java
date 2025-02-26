@@ -85,6 +85,7 @@ public class PuppetHandler {
 			} catch (URISyntaxException e) {
 				Log.warn("Cannot summon Puppet: Failed to find our own JAR file or directory.");
 				puppet = null;
+				puppetCrashed();
 				break out;
 			}
 			File ourPath;
@@ -93,6 +94,7 @@ public class PuppetHandler {
 			} catch (IllegalArgumentException e) {
 				Log.warn("Cannot summon Puppet: Failed to find our own JAR file or directory.");
 				puppet = null;
+				puppetCrashed();
 				break out;
 			}
 			File javaBin = new File(System.getProperty("java.home")+File.separator+"bin");
@@ -113,6 +115,7 @@ public class PuppetHandler {
 			if (java == null) {
 				Log.warn("Cannot summon Puppet: Failed to find Java. Looked in "+javaBin+", but can't find a known executable.");
 				puppet = null;
+				puppetCrashed();
 			} else {
 				Process p;
 				try {
@@ -286,6 +289,7 @@ public class PuppetHandler {
 				} catch (Throwable t) {
 					Log.warn("Failed to summon a puppet.", t);
 					puppet = null;
+					puppetCrashed();
 					break out;
 				}
 				Log.debug("Dark spell successful. Puppet summoned.");
@@ -324,10 +328,12 @@ public class PuppetHandler {
 				Log.warn("Puppet failed to come alive. Continuing without a GUI.", t);
 				puppet.destroy();
 				puppet = null;
+				puppetCrashed();
 			} else if (!"unsup puppet ready".equals(firstLine)) {
 				Log.warn("Puppet sent unexpected hello line \""+firstLine+"\". (Expected \"unsup puppet ready\") Continuing without a GUI.");
 				puppet.destroy();
 				puppet = null;
+				puppetCrashed();
 			} else {
 				Log.debug("Puppet is alive! Continuing.");
 				puppetOut = new BufferedOutputStream(puppet.getOutputStream(), 512);
@@ -338,19 +344,7 @@ public class PuppetHandler {
 							if (line == null) return;
 							if (line.equals("closeRequested")) {
 								Log.info("User closed puppet window! Exiting...");
-								Agent.awaitingExit = true;
-								long start = System.nanoTime();
-								synchronized (Agent.dangerMutex) {
-									long diff = System.nanoTime()-start;
-									if (diff > TimeUnit.MILLISECONDS.toNanos(500)) {
-										Log.info("Uninterruptible operations finished, exiting!");
-									}
-									puppet.destroy();
-									if (!puppet.waitFor(1, TimeUnit.SECONDS)) {
-										puppet.destroyForcibly();
-									}
-									Agent.exit(Agent.EXIT_USER_REQUEST);
-								}
+								exit();
 							} else if (line.startsWith("alert:")) {
 								String[] split = line.split(":", 3);
 								String name = split[1];
@@ -371,6 +365,35 @@ public class PuppetHandler {
 				puppetThread.setDaemon(true);
 				puppetThread.start();
 			}
+		}
+	}
+
+	private static void puppetCrashed() {
+		if (SysProps.ABORT_ON_PUPPET_CRASH) {
+			Log.error("Puppet crashed! Exiting, as requested by -Dunsup.abortOnPuppetCrash=true!");
+			try {
+				exit();
+			} catch (InterruptedException e) {
+			}
+		}
+	}
+	
+	private static void exit() throws InterruptedException {
+		Agent.awaitingExit = true;
+		long start = System.nanoTime();
+		synchronized (Agent.dangerMutex) {
+			long diff = System.nanoTime()-start;
+			if (diff > TimeUnit.MILLISECONDS.toNanos(500)) {
+				Log.info("Uninterruptible operations finished, exiting!");
+			}
+			Process p = puppet;
+			if (p != null) {
+				p.destroy();
+				if (!p.waitFor(1, TimeUnit.SECONDS)) {
+					p.destroyForcibly();
+				}
+			}
+			Agent.exit(Agent.EXIT_USER_REQUEST);
 		}
 	}
 
@@ -465,6 +488,7 @@ public class PuppetHandler {
 					if (errorFile.exists()) {
 						Log.warn("It looks like the Puppet crashed in native code. Please report this issue, including the full unsup.log and "+errorFile.getName());
 					}
+					puppetCrashed();
 				}
 				puppet.destroyForcibly();
 				puppet = null;

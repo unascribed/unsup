@@ -20,6 +20,10 @@ public class SysProps {
 	 * Pretend use_envs is set to false.
 	 */
 	public static final boolean IGNORE_ENVS = Boolean.getBoolean("unsup.ignoreEnvs");
+	/**
+	 * Exit the Agent if the Puppet crashes.
+	 */
+	public static final boolean ABORT_ON_PUPPET_CRASH = Boolean.getBoolean("unsup.abortOnPuppetCrash");
 	
 	/**
 	 * Override the language rather than using the one detected by Java.
